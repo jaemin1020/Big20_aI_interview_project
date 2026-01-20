@@ -1,6 +1,7 @@
 ## 1. 프로젝트 폴더 구조
 
 big20_project_env_set/
+
 ├── .env                        # 공통 환경 변수 (API 키, DB 접속 정보)
 ├── docker-compose.yml          # 전체 서비스 오케스트레이션 (포트 및 네트워크 설정)
 │
