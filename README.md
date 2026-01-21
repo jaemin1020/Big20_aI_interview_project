@@ -96,13 +96,13 @@ Big20_aI_interview_project/
 
 | 서비스 | 분류 | 주요 라이브러리 및 버전 |
 | :--- | :--- | :--- |
-| **Backend-Core** | **Framework** | `FastAPI (0.109)`, `SQLModel (0.0.14)`, `Celery (5.3.6)` |
-| | **AI/ML** | `LangChain (0.1.20)`, `Transformers (4.39+)`, `PyTorch (2.2.1)` |
-| **AI-Worker** | **Inference** | `llama-cpp-python (0.2.56)`, `DeepFace (0.0.91)`, `TensorFlow (2.16.1)` |
-| | **Analysis** | `LangChain-Community (0.0.38)`, `OpenCV (4.9.0)` |
-| **Media-Server** | **Streaming** | `aiortc (1.14.0)`, `Deepgram SDK (5.3.1)`, `PyAV (14.0+)` |
-| | **Network** | `websockets (14.1)`, `aiohttp (3.11.11)` |
-| **Frontend** | **UI/UX** | `React (18.2)`, `Vite (5.0.8)`, `Axios (1.6.2)` |
+| **Backend-Core** | **Framework** | `FastAPI (>=0.109)`, `SQLModel (>=0.0.14)`, `Celery (>=5.3.6)` |
+| | **AI/ML** | `LangChain (>=0.1.0)`, `Transformers (>=4.39)`, `PyTorch (>=2.2.0)` |
+| **AI-Worker** | **Inference** | `llama-cpp-python (>=0.2.56)`, `DeepFace (>=0.0.91)`, `TensorFlow (>=2.16.0)` |
+| | **Analysis** | `LangChain-Community (>=0.0.1)`, `OpenCV (>=4.9.0)` |
+| **Media-Server** | **Streaming** | `aiortc (>=1.14.0)`, `Deepgram SDK (>=5.3.1)`, `PyAV (>=14.0)` |
+| | **Network** | `websockets (>=14.1)`, `aiohttp (>=3.11.11)` |
+| **Frontend** | **UI/UX** | `React (>=18.2)`, `Vite (>=5.0.8)`, `Axios (>=1.6.2)` |
 
 ---
 
@@ -111,24 +111,24 @@ Big20_aI_interview_project/
 <details>
 <summary>📂 <b>Backend-Core Dependencies</b> (클릭하여 펼치기)</summary>
 
-- **Web/API**: `fastapi==0.109.0`, `uvicorn[standard]==0.27.0`, `python-multipart==0.0.9`
-- **Database**: `sqlmodel==0.0.14`, `psycopg2-binary==2.9.9`
-- **AI Engine**: `langchain==0.1.20`, `langchain-huggingface==0.0.3`, `transformers>=4.39.0`, `torch==2.2.1`, `bitsandbytes==0.42.0`
-- **Task Queue**: `celery[redis]==5.3.6`, `redis==5.0.3`
-- **Security**: `python-jose[cryptography]==3.3.0`, `passlib[bcrypt]==1.7.4`, `bcrypt==4.0.1`
+- **Web/API**: `fastapi>=0.109.0`, `uvicorn[standard]>=0.27.0`, `python-multipart>=0.0.9`
+- **Database**: `sqlmodel>=0.0.14`, `psycopg2-binary>=2.9.9`
+- **AI Engine**: `langchain>=0.1.0`, `langchain-huggingface>=0.0.1`, `transformers>=4.39.0`, `torch>=2.2.0`, `bitsandbytes>=0.42.0`
+- **Task Queue**: `celery[redis]>=5.3.6`, `redis>=5.0.3`
+- **Security**: `python-jose[cryptography]>=3.3.0`, `passlib[bcrypt]>=1.7.4`, `bcrypt>=4.0.1`, `python-dotenv>=1.0.1`
 </details>
 
 <details>
 <summary>📂 <b>AI-Worker Dependencies</b> (클릭하여 펼치기)</summary>
 
-- **Inference**: `llama-cpp-python==0.2.56`, `deepface==0.0.91`, `tensorflow==2.16.1`
-- **Core**: `langchain==0.1.20`, `langchain-community==0.0.38`, `pydantic==1.10.13`
-- **Processing**: `opencv-python-headless==4.9.0.80`, `numpy<2.0.0`, `librosa==0.10.1`
-- **Infrastructure**: `celery[redis]==5.3.6`, `redis==5.0.3`, `sqlmodel==0.0.14`
+- **Inference**: `llama-cpp-python>=0.2.56` (Dockerfile build), `deepface>=0.0.91`, `tensorflow>=2.16.0`
+- **Core**: `langchain>=0.1.0`, `langchain-community>=0.0.1`, `pydantic>=1.10.13,<2.0.0`
+- **Processing**: `opencv-python-headless>=4.9.0.8`, `numpy>=1.23.0,<2.0.0`, `librosa>=0.10.1`
+- **Infrastructure**: `celery[redis]>=5.3.6`, `redis>=5.0.3`, `sqlmodel>=0.0.14`
 </details>
 
 <details>
-<summary>� <b>Media-Server Dependencies</b> (클릭하여 펼치기)</summary>
+<summary> <b>Media-Server Dependencies</b> (클릭하여 펼치기)</summary>
 
 - **Real-time**: `aiortc==1.14.0`, `deepgram-sdk>=5.3.1`, `websockets==14.1`
 - **Multimedia**: `av>=14.0.0`, `opencv-python-headless==4.9.0.80`, `pylibsrtp==0.10.0`
