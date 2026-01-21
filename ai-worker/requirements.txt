@@ -17,7 +17,14 @@ langchain-community==0.0.38
 langchain-core==0.1.52
 
 # LLM (CPU - GGUF Format)
-llama-cpp-python==0.2.56
+# llama-cpp-python==0.2.56  # Dockerfile에서 OpenBLAS와 함께 설치됨
+
+# LLM (GPU - HuggingFace Transformers for Question Generation)
+transformers==4.38.0
+torch==2.2.0
+langchain-huggingface==0.0.1
+bitsandbytes==0.42.0  # 4-bit quantization
+accelerate==0.27.0    # GPU memory optimization
 
 # Computer Vision & Emotion Detection
 deepface==0.0.91
