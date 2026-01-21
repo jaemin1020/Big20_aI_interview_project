@@ -3,13 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from celery import Celery
 import logging
+from typing import Dict, Any
 # from dotenv import load_dotenv
 
 # load_dotenv()
 
 from database import engine, init_db, get_session
 from models import InterviewSession, InterviewRecord, User, SessionCreate
-from chains.llama_gen import generator
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta, datetime
@@ -96,14 +96,18 @@ async def create_session(
     
     logger.info(f"Created session with ID: {new_session.id}")
     
-    # 질문 생성 로직
+    # 질문 생성 로직 (AI-Worker에 Celery 태스크로 위임)
     try:
-        logger.info(f"Generating AI questions for position: {new_session.position}")
-        generated_questions = generator.generate_questions(
-            position=new_session.position,
-            count=5,
+        logger.info(f"Requesting AI question generation for position: {new_session.position}")
+        task = celery_app.send_task(
+            "tasks.question_generator.generate_questions",
+            args=[new_session.position, 5]
         )
-        logger.info(f"Generated {len(generated_questions)} questions successfully")
+        
+        # 태스크 결과 대기 (최대 30초)
+        generated_questions = task.get(timeout=30)
+        logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
+        
     except Exception as e:
         logger.error(f"Question generation failed: {str(e)}, using fallback questions")
         generated_questions = [
