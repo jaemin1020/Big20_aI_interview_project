@@ -2,7 +2,7 @@
 services:
   # 1. Database: PostgreSQL + pgvector
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     container_name: interview_db
     restart: always
     environment:
