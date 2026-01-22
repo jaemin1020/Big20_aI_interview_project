@@ -40,3 +40,6 @@ numpy>=1.23.0,<2.0.0
 
 # Pydantic (v1 for compatibility)
 pydantic>=1.10.13,<2.0.0
+
+# Remote Kernel Connectivity
+ipykernel>=6.0.0
