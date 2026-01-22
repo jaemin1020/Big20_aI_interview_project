@@ -251,45 +251,46 @@ function App() {
       {step === 'auth' && (
         <div className="card">
           <h1>{authMode === 'login' ? '로그인' : '회원가입'}</h1>
-          <div className="input-group" style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
+          <p style={{ marginBottom: '24px' }}>서비스를 이용하려면 로그인해주세요.</p>
+          <div className="input-group">
             {authMode === 'register' && (
               <div>
-                <label style={{ display: 'block', marginBottom: '5px' }}>성함:</label>
+                <label>성함</label>
                 <input 
                   type="text" 
                   value={account.fullName}
                   onChange={(e) => setAccount({ ...account, fullName: e.target.value })}
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', color: '#333' }}
+                  placeholder="이름을 입력하세요"
                 />
               </div>
             )}
             <div>
-              <label style={{ display: 'block', marginBottom: '5px' }}>아이디:</label>
+              <label>아이디</label>
               <input 
                 type="text" 
                 value={account.username}
                 onChange={(e) => setAccount({ ...account, username: e.target.value })}
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', color: '#333' }}
+                placeholder="아이디를 입력하세요"
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '5px' }}>비밀번호:</label>
+              <label>비밀번호</label>
               <input 
                 type="password" 
                 value={account.password}
                 maxLength={24}
                 onChange={(e) => setAccount({ ...account, password: e.target.value })}
-                placeholder="최대 24자"
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', color: '#333' }}
+                placeholder="비밀번호 (최대 24자)"
               />
             </div>
-            {authError && <p style={{ color: '#ef4444', margin: 0 }}>{authError}</p>}
+            {authError && <p className="error-message">{authError}</p>}
           </div>
-          <button onClick={handleAuth} style={{ width: '100%', marginBottom: '10px' }}>
+          <button onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
             {authMode === 'login' ? '로그인' : '회원가입'}
           </button>
           <p 
-            style={{ cursor: 'pointer', color: '#3b82f6', fontSize: '0.9em' }} 
+            className="link-text"
+            style={{ textAlign: 'center' }} 
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
           >
             {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
@@ -299,36 +300,40 @@ function App() {
 
       {step === 'landing' && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1>AI Interview System</h1>
-            <button onClick={handleLogout} style={{ padding: '5px 10px', fontSize: '0.8em', backgroundColor: '#64748b' }}>로그아웃</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h1>면접 시스템</h1>
+            <button 
+              onClick={handleLogout} 
+              className="btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '0.85rem', margin: 0 }}
+            >
+              로그아웃
+            </button>
           </div>
-          <p>지원 정보를 입력하고 면접을 시작하세요.</p>
-          <div className="input-group" style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
+          <p style={{ marginBottom: '24px' }}>지원 정보를 입력하고 면접을 시작하세요.</p>
+          <div className="input-group">
             <div>
-              <label htmlFor="name" style={{ display: 'block', marginBottom: '5px' }}>이름:</label>
+              <label htmlFor="name">이름</label>
               <input 
                 id="name" 
                 type="text" 
                 placeholder="이름을 입력하세요" 
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', color: '#333' }}
               />
             </div>
             <div>
-              <label htmlFor="position" style={{ display: 'block', marginBottom: '5px' }}>지원 직무:</label>
+              <label htmlFor="position">지원 직무</label>
               <input 
                 id="position" 
                 type="text" 
-                placeholder="지원 직무 (예: Frontend 개발자)" 
+                placeholder="예: Frontend 개발자" 
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', color: '#333' }}
               />
             </div>
           </div>
-          <button onClick={() => startInterview(userName, position)}>
+          <button onClick={() => startInterview(userName, position)} style={{ width: '100%' }}>
             면접 시작하기
           </button>
         </div>
@@ -336,39 +341,33 @@ function App() {
 
       {step === 'interview' && (
         <div className="card">
-          <h2>실시간 면접 중</h2>
+          <h2>실시간 면접</h2>
           <video ref={videoRef} autoPlay playsInline muted />
           
           {questions.length > 0 && (
             <div className="question-box">
-              <h3>질문 {currentIdx + 1}:</h3>
-              <p>{questions[currentIdx].question_text}</p>
+              <h3>질문 {currentIdx + 1}</h3>
+              <p style={{ color: '#1a1a2e', fontSize: '1rem', lineHeight: '1.6' }}>
+                {questions[currentIdx].question_text}
+              </p>
               
               {/* 실시간 STT 전사 텍스트 표시 */}
-              <div style={{ 
-                marginTop: '15px', 
-                padding: '10px', 
-                background: 'rgba(16, 185, 129, 0.1)', 
-                borderRadius: '8px',
-                minHeight: '60px'
-              }}>
-                <h4 style={{ color: '#10b981', margin: '0 0 8px 0', fontSize: '0.9em' }}>
-                  🎤 {isRecording ? '녹음 중...' : '답변 준비'}
+              <div className="transcript-box">
+                <h4>
+                  {isRecording ? '🎤 녹음 중...' : '📝 답변 준비'}
                 </h4>
-                <p style={{ margin: 0, fontSize: '0.95em', lineHeight: '1.5' }}>
+                <p style={{ margin: 0, fontSize: '0.95rem', color: '#1a1a2e' }}>
                   {transcript || '답변을 시작하려면 "녹음 시작" 버튼을 눌러주세요.'}
                 </p>
               </div>
             </div>
           )}
           
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '15px' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '20px' }}>
             <button 
               onClick={toggleRecording}
-              style={{ 
-                backgroundColor: isRecording ? '#ef4444' : '#10b981',
-                minWidth: '120px'
-              }}
+              className={isRecording ? 'btn-stop' : 'btn-record'}
+              style={{ minWidth: '130px' }}
             >
               {isRecording ? '⏸ 녹음 중지' : '🎤 녹음 시작'}
             </button>
@@ -376,20 +375,17 @@ function App() {
             <button 
               onClick={nextQuestion}
               disabled={!transcript.trim() && isRecording}
-              style={{ 
-                opacity: (!transcript.trim() && isRecording) ? 0.5 : 1,
-                minWidth: '120px'
-              }}
+              style={{ minWidth: '130px' }}
             >
-              {currentIdx < questions.length - 1 ? "다음 질문 ➡️" : "면접 종료 ✓"}
+              {currentIdx < questions.length - 1 ? "다음 질문 →" : "면접 종료 ✓"}
             </button>
           </div>
         </div>
       )}
 
       {step === 'loading' && (
-        <div className="card">
-          <h2>AI가 답변을 평가 중입니다...</h2>
+        <div className="card" style={{ textAlign: 'center' }}>
+          <h2>답변을 분석 중입니다</h2>
           <div className="spinner"></div>
           <p>잠시만 기다려 주세요.</p>
         </div>
@@ -397,22 +393,24 @@ function App() {
 
       {step === 'result' && (
         <div className="card">
-          <h2>면접 결과 분석</h2>
+          <h2>면접 결과</h2>
           {results.map((r, i) => (
-            <div key={i} className="question-box" style={{ marginBottom: '20px' }}>
-              <strong>Q: {r.question}</strong>
-              <p>A: {r.answer}</p>
-              <div style={{ background: '#1e293b', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
-                <h4 style={{ color: '#3b82f6', margin: '0 0 10px 0' }}>AI 피드백:</h4>
-                <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.9em' }}>
+            <div key={i} className="result-item">
+              <strong style={{ color: '#1a1a2e' }}>Q: {r.question}</strong>
+              <p style={{ marginTop: '8px' }}>A: {r.answer}</p>
+              <div className="result-evaluation">
+                <h4 style={{ color: '#2563eb', margin: '0 0 12px 0', fontSize: '0.95rem' }}>피드백</h4>
+                <pre>
                   {JSON.stringify(r.evaluation, null, 2)}
                 </pre>
-                <h4 style={{ color: '#10b981', margin: '10px 0' }}>감정 분석:</h4>
-                <p>{r.emotion ? `주요 감정: ${r.emotion.dominant_emotion}` : "분석 대기 중..."}</p>
+                <h4 style={{ color: '#059669', margin: '16px 0 8px 0', fontSize: '0.95rem' }}>감정 분석</h4>
+                <p style={{ margin: 0 }}>{r.emotion ? `주요 감정: ${r.emotion.dominant_emotion}` : "분석 대기 중..."}</p>
               </div>
             </div>
           ))}
-          <button onClick={() => setStep('landing')}>처음으로</button>
+          <button onClick={() => setStep('landing')} style={{ width: '100%', marginTop: '16px' }}>
+            처음으로
+          </button>
         </div>
       )}
     </div>
