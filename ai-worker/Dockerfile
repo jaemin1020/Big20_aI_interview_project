@@ -43,6 +43,4 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # 7. Worker 실행 (Solar 모델 및 감정 분석 태스크 처리)
-# 7. 실행 스크립트 복사 및 실행 (Jupyter + Celery 병합)
-RUN chmod +x /app/start.sh
-CMD ["/app/start.sh"]
+CMD ["celery", "-A", "main.app", "worker", "--loglevel=info"]
