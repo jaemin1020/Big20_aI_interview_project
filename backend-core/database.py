@@ -4,6 +4,9 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy.exc import OperationalError
 
+from models import User, InterviewSession, InterviewRecord, SessionCreate
+
+
 # 로깅 설정 (프로젝트 원칙 적용)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 logger = logging.getLogger("Database")

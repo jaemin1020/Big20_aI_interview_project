@@ -1,30 +1,46 @@
 FROM python:3.10-slim
 
-# 1. DeepFace(OpenCV) 및 Llama-cpp 빌드를 위한 필수 라이브러리 수정
+# 1. 시스템 의존성 설치 (OpenCV, Llama-cpp, DeepFace 및 빌드를 위한 도구)
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
+    git \
+    pkg-config \
     ffmpeg \
     libsm6 \
     libxext6 \
     libgl1 \
     libglib2.0-0 \
     libopenblas-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2. 의존성 설치
-COPY requirements.txt .
+# 2. pip 환경 최적화
+# 최신 패키지 빌드 및 wheel 설치를 위해 pip, setuptools, wheel 최신화 필수
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# CPU 최적화 옵션과 함께 설치
-RUN CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS" pip install llama-cpp-python
+# 3. 핵심 의존성 선행 설치 (빌드 병목 및 의존성 충돌 방지)
+# numpy와 cython은 llama-cpp-python 및 deepface 빌드 시 사전에 필요할 수 있음
+RUN pip install --no-cache-dir "numpy>=1.23.0,<2.0.0" "Cython"
+
+# 4. llama-cpp-python 빌드 및 설치 (CPU 최적화: OpenBLAS 사용)
+# CMAKE_ARGS를 통해 CPU 연산 최적화를 강제합니다.
+# requirements.txt에 해당 패키지가 있어도 여기서 먼저 설치되면 캐시를 사용하게 됩니다.
+RUN CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS" \
+    pip install --no-cache-dir llama-cpp-python==0.2.56
+
+# 5. 나머지 Python 패키지 설치
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 6. 소스 코드 및 모델 경로 설정
 COPY . .
 
 # JSON 로그 및 모듈 경로 설정
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
+# 7. Worker 실행 (Solar 모델 및 감정 분석 태스크 처리)
 CMD ["celery", "-A", "main.app", "worker", "--loglevel=info"]
