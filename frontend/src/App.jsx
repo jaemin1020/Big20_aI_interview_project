@@ -6,7 +6,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login'); // login, register
   const [authError, setAuthError] = useState('');
-  
+
   // Auth 관련 입력 상태
   const [account, setAccount] = useState({ username: '', password: '', fullName: '' });
 
@@ -14,16 +14,16 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [results, setResults] = useState([]);
-  
+
   // STT 관련 상태
   const [transcript, setTranscript] = useState(''); // 현재 질문에 대한 답변 텍스트
   const [isRecording, setIsRecording] = useState(false); // 녹음 상태
   const [fullTranscript, setFullTranscript] = useState(''); // 전체 누적 텍스트
-  
+
   // 사용자 입력 상태
   const [userName, setUserName] = useState('');
   const [position, setPosition] = useState('');
-  
+
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null); // WebSocket 참조
@@ -101,7 +101,7 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === 'stt_result' && data.text) {
           // 실시간 STT 결과를 현재 transcript에 추가
           setTranscript(prev => prev + ' ' + data.text);
@@ -134,7 +134,7 @@ function App() {
       console.log('[WebRTC] Video and audio tracks added');
     } catch (err) {
       console.warn('[WebRTC] Camera access failed, trying audio-only mode:', err);
-      
+
       try {
         // 카메라 실패 시 오디오만 사용
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -182,11 +182,11 @@ function App() {
   const nextQuestion = async () => {
     // STT로 받아온 실제 텍스트를 제출
     const answerText = transcript.trim() || "답변 내용 없음 (음성 인식 실패 또는 무응답)";
-    
+
     try {
       await submitAnswer(questions[currentIdx].id, answerText);
       console.log(`[Submit] Question ${currentIdx + 1} answered:`, answerText);
-      
+
       // 다음 질문으로 이동 또는 종료
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(currentIdx + 1);
@@ -195,7 +195,7 @@ function App() {
       } else {
         // 면접 종료
         setStep('loading');
-        
+
         // WebSocket 및 WebRTC 연결 종료
         if (wsRef.current) {
           wsRef.current.close();
@@ -205,7 +205,7 @@ function App() {
           pcRef.current.close();
           pcRef.current = null;
         }
-        
+
         // AI 평가 완료 대기 후 결과 조회
         setTimeout(async () => {
           const res = await getResults(session.id);
@@ -256,8 +256,8 @@ function App() {
             {authMode === 'register' && (
               <div>
                 <label>성함</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={account.fullName}
                   onChange={(e) => setAccount({ ...account, fullName: e.target.value })}
                   placeholder="이름을 입력하세요"
@@ -266,8 +266,8 @@ function App() {
             )}
             <div>
               <label>아이디</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={account.username}
                 onChange={(e) => setAccount({ ...account, username: e.target.value })}
                 placeholder="아이디를 입력하세요"
@@ -275,8 +275,8 @@ function App() {
             </div>
             <div>
               <label>비밀번호</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={account.password}
                 maxLength={24}
                 onChange={(e) => setAccount({ ...account, password: e.target.value })}
@@ -288,9 +288,9 @@ function App() {
           <button onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
             {authMode === 'login' ? '로그인' : '회원가입'}
           </button>
-          <p 
+          <p
             className="link-text"
-            style={{ textAlign: 'center' }} 
+            style={{ textAlign: 'center' }}
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
           >
             {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
@@ -302,8 +302,8 @@ function App() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <h1>면접 시스템</h1>
-            <button 
-              onClick={handleLogout} 
+            <button
+              onClick={handleLogout}
               className="btn-secondary"
               style={{ padding: '8px 16px', fontSize: '0.85rem', margin: 0 }}
             >
@@ -314,20 +314,20 @@ function App() {
           <div className="input-group">
             <div>
               <label htmlFor="name">이름</label>
-              <input 
-                id="name" 
-                type="text" 
-                placeholder="이름을 입력하세요" 
+              <input
+                id="name"
+                type="text"
+                placeholder="이름을 입력하세요"
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
               />
             </div>
             <div>
               <label htmlFor="position">지원 직무</label>
-              <input 
-                id="position" 
-                type="text" 
-                placeholder="예: Frontend 개발자" 
+              <input
+                id="position"
+                type="text"
+                placeholder="예: Frontend 개발자"
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
               />
@@ -343,14 +343,14 @@ function App() {
         <div className="card">
           <h2>실시간 면접</h2>
           <video ref={videoRef} autoPlay playsInline muted />
-          
+
           {questions.length > 0 && (
             <div className="question-box">
               <h3>질문 {currentIdx + 1}</h3>
               <p style={{ color: '#1a1a2e', fontSize: '1rem', lineHeight: '1.6' }}>
                 {questions[currentIdx].question_text}
               </p>
-              
+
               {/* 실시간 STT 전사 텍스트 표시 */}
               <div className="transcript-box">
                 <h4>
@@ -362,17 +362,17 @@ function App() {
               </div>
             </div>
           )}
-          
+
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '20px' }}>
-            <button 
+            <button
               onClick={toggleRecording}
               className={isRecording ? 'btn-stop' : 'btn-record'}
               style={{ minWidth: '130px' }}
             >
               {isRecording ? '⏸ 녹음 중지' : '🎤 녹음 시작'}
             </button>
-            
-            <button 
+
+            <button
               onClick={nextQuestion}
               disabled={!transcript.trim() && isRecording}
               style={{ minWidth: '130px' }}
