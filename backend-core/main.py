@@ -2,196 +2,325 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from celery import Celery
+from datetime import datetime, timedelta
+from typing import List
 import logging
-from typing import Dict, Any
-# from dotenv import load_dotenv
+import os
 
-# load_dotenv()
+from database import init_db, get_session
+from models import (
+    User, UserCreate, UserLogin,
+    Interview, InterviewCreate, InterviewResponse, InterviewStatus,
+    Question, QuestionCategory, QuestionDifficulty,
+    Transcript, TranscriptCreate, Speaker,
+    EvaluationReport, EvaluationReportResponse
+)
+from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from chains.llama_gen import generator
 
-from database import engine, init_db, get_session
-from models import InterviewSession, InterviewRecord, User, SessionCreate
-from auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from fastapi.security import OAuth2PasswordRequestForm
-from datetime import timedelta, datetime
-
-# 1. 로깅 및 앱 초기화
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
 
-app = FastAPI(title="AI Interview Backend")
+app = FastAPI(title="AI Interview Backend v2.0")
 
-# DB 초기화
 @app.on_event("startup")
 def on_startup():
     init_db()
-    logger.info("Database initialized.")
+    logger.info("✅ Database initialized with new schema")
 
 # CORS 설정
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Celery 설정 (ai-worker 통신용)
+# Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
 
-# 3. API 엔드포인트
-
-@app.get("/")
-async def root():
-    return {"message": "AI Interview Backend API is running"}
+# ==================== Auth Endpoints ====================
 
 @app.post("/register")
-async def register(user: User, db: Session = Depends(get_session)):
-    # Check if user exists
-    statement = select(User).where(User.username == user.username)
-    db_user = db.exec(statement).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
+async def register(user_data: UserCreate, db: Session = Depends(get_session)):
+    # 중복 확인
+    stmt = select(User).where(
+        (User.username == user_data.username) | (User.email == user_data.email)
+    )
+    existing_user = db.exec(stmt).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username or email already exists")
     
-    user.hashed_password = get_password_hash(user.hashed_password)
-    db.add(user)
+    # 새 사용자 생성
+    new_user = User(
+        email=user_data.email,
+        username=user_data.username,
+        role=user_data.role,
+        password_hash=get_password_hash(user_data.password),
+        full_name=user_data.full_name
+    )
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
-    return {"username": user.username, "id": user.id}
+    db.refresh(new_user)
+    
+    logger.info(f"New user registered: {new_user.username} ({new_user.role})")
+    return {"id": new_user.id, "username": new_user.username, "email": new_user.email}
 
 @app.post("/token")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)):
-    statement = select(User).where(User.username == form_data.username)
-    user = db.exec(statement).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+async def login(form_data: UserLogin, db: Session = Depends(get_session)):
+    stmt = select(User).where(User.username == form_data.username)
+    user = db.exec(stmt).first()
+    
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Incorrect username or password"
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
+    
+    access_token = create_access_token(data={"sub": user.username})
+    logger.info(f"User logged in: {user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-@app.post("/sessions", response_model=InterviewSession)
-async def create_session(
-    session_data: SessionCreate, 
+# ==================== Interview Endpoints ====================
+
+@app.post("/interviews", response_model=InterviewResponse)
+async def create_interview(
+    interview_data: InterviewCreate,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    # SessionCreate 데이터를 바탕으로 InterviewSession 생성
-    new_session = InterviewSession(
-        user_id=current_user.id,
-        user_name=session_data.user_name,
-        position=session_data.position
+    """면접 세션 생성 및 질문 생성"""
+    
+    # 1. Interview 레코드 생성
+    new_interview = Interview(
+        candidate_id=current_user.id,
+        position=interview_data.position,
+        job_posting_id=interview_data.job_posting_id,
+        status=InterviewStatus.SCHEDULED,
+        scheduled_time=interview_data.scheduled_time,
+        start_time=datetime.utcnow()  # 즉시 시작
     )
-    db.add(new_session)
+    db.add(new_interview)
     db.commit()
-    db.refresh(new_session)
+    db.refresh(new_interview)
     
-    logger.info(f"Created session with ID: {new_session.id}")
+    logger.info(f"Interview created: ID={new_interview.id}, Position={new_interview.position}")
     
-    # 질문 생성 로직 (AI-Worker에 Celery 태스크로 위임)
+    # 2. AI 질문 생성
     try:
-        logger.info(f"Requesting AI question generation for position: {new_session.position}")
-        task = celery_app.send_task(
-            "tasks.question_generator.generate_questions",
-            args=[new_session.position, 5]
+        generated_texts = generator.generate_questions(
+            position=interview_data.position,
+            count=5
         )
         
-        # 태스크 결과 대기 (최대 30초)
-        generated_questions = task.get(timeout=30)
-        logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
+        # 3. Questions 테이블에 저장
+        for i, q_text in enumerate(generated_texts):
+            question = Question(
+                content=q_text,
+                category=QuestionCategory.TECHNICAL,  # 기본값
+                difficulty=QuestionDifficulty.MEDIUM,
+                rubric_json={
+                    "criteria": ["기술적 정확성", "논리적 구성", "전문성"],
+                    "weight": {"technical": 0.4, "communication": 0.3, "depth": 0.3}
+                },
+                position=interview_data.position
+            )
+            db.add(question)
+            db.commit()
+            db.refresh(question)
+            
+            # 4. AI 질문을 Transcript에 저장 (Speaker=AI)
+            transcript = Transcript(
+                interview_id=new_interview.id,
+                speaker=Speaker.AI,
+                text=q_text,
+                question_id=question.id,
+                order=i
+            )
+            db.add(transcript)
+        
+        db.commit()
+        logger.info(f"Generated {len(generated_texts)} questions for interview {new_interview.id}")
         
     except Exception as e:
-        logger.error(f"Question generation failed: {str(e)}, using fallback questions")
-        generated_questions = [
-            f"{new_session.position} 직무의 핵심 역량은 무엇인가요?",
-            "최근 진행한 프로젝트에 대해 설명해주세요.",
-            "기술적 문제를 해결한 경험을 공유해주세요."
-        ]
-    
-    # DB에 InterviewRecord 형태로 저장
-    for i, q_text in enumerate(generated_questions):
-        record = InterviewRecord(
-            session_id=new_session.id,
-            question_text=q_text,
-            order=i + 1
+        logger.error(f"Question generation failed: {e}")
+        # 폴백 질문 사용
+        fallback_question = Question(
+            content=f"{interview_data.position} 직무에 지원하게 된 동기는 무엇인가요?",
+            category=QuestionCategory.BEHAVIORAL,
+            difficulty=QuestionDifficulty.EASY,
+            rubric_json={"criteria": ["진정성", "열정"]},
+            position=interview_data.position
         )
-        db.add(record)
+        db.add(fallback_question)
+        db.commit()
     
+    # 면접 상태를 LIVE로 변경
+    new_interview.status = InterviewStatus.LIVE
+    db.add(new_interview)
     db.commit()
-    db.refresh(new_session)
-    return new_session
-
-@app.get("/sessions/{session_id}/questions", response_model=list[InterviewRecord])
-async def get_questions(
-    session_id: int, 
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    statement = select(InterviewRecord).where(InterviewRecord.session_id == session_id).order_by(InterviewRecord.order)
-    results = db.exec(statement).all()
-    return results
-
-@app.post("/answers")
-async def submit_answer(
-    # record_id와 answer_text만 받으면 됨
-    answer_data: Dict[str, Any], 
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    record_id = answer_data.get("record_id")
-    answer_text = answer_data.get("answer_text")
     
-    # 1. 기존 레코드 조회
-    record = db.get(InterviewRecord, record_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Interview record not found")
-        
-    # 2. 답변 내용 업데이트
-    record.answer_text = answer_text
-    record.answered_at = datetime.utcnow()
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    
-    # 3. ai-worker에 정밀 평가 요청 전달
-    celery_app.send_task(
-        "tasks.evaluator.analyze_answer",
-        args=[
-            record.id, 
-            record.question_text,
-            record.answer_text,
-            "기술적 정확성, 논리적 구성, 전문 용어 사용 적절성"
-        ]
+    return InterviewResponse(
+        id=new_interview.id,
+        candidate_id=new_interview.candidate_id,
+        position=new_interview.position,
+        status=new_interview.status,
+        start_time=new_interview.start_time,
+        end_time=new_interview.end_time,
+        overall_score=new_interview.overall_score
     )
-    
-    return {"status": "submitted", "record_id": record.id}
 
-@app.get("/sessions/{session_id}/results")
-async def get_session_results(
-    session_id: int, 
+@app.get("/interviews/{interview_id}/questions")
+async def get_interview_questions(
+    interview_id: int,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    statement = select(InterviewRecord).where(InterviewRecord.session_id == session_id).order_by(InterviewRecord.order)
-    results = db.exec(statement).all()
+    """면접의 질문 목록 조회 (Transcript에서 AI 발화만 필터링)"""
+    stmt = select(Transcript).where(
+        Transcript.interview_id == interview_id,
+        Transcript.speaker == Speaker.AI
+    ).order_by(Transcript.order)
+    
+    transcripts = db.exec(stmt).all()
     
     return [
         {
-            "question": r.question_text,
-            "answer": r.answer_text,
-            "evaluation": r.evaluation,
-            "emotion": r.emotion_summary
+            "id": t.question_id,
+            "content": t.text,
+            "order": t.order,
+            "timestamp": t.timestamp
         }
-        for r in results
+        for t in transcripts
     ]
+
+# ==================== Transcript Endpoints ====================
+
+@app.post("/transcripts")
+async def create_transcript(
+    transcript_data: TranscriptCreate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """실시간 대화 기록 저장 (STT 결과)"""
+    
+    transcript = Transcript(
+        interview_id=transcript_data.interview_id,
+        speaker=transcript_data.speaker,
+        text=transcript_data.text,
+        question_id=transcript_data.question_id
+    )
+    db.add(transcript)
+    db.commit()
+    db.refresh(transcript)
+    
+    logger.info(f"Transcript saved: Interview={transcript.interview_id}, Speaker={transcript.speaker}")
+    
+    # 사용자 답변인 경우 AI 평가 요청
+    if transcript.speaker == Speaker.USER:
+        # 해당 질문 조회
+        question = db.get(Question, transcript.question_id)
+        if question:
+            celery_app.send_task(
+                "tasks.evaluator.analyze_answer",
+                args=[
+                    transcript.id,
+                    question.content,
+                    transcript.text,
+                    question.rubric_json
+                ]
+            )
+            logger.info(f"Evaluation task sent for transcript {transcript.id}")
+    
+    return {"id": transcript.id, "status": "saved"}
+
+@app.get("/interviews/{interview_id}/transcripts")
+async def get_interview_transcripts(
+    interview_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """면접의 전체 대화 기록 조회"""
+    stmt = select(Transcript).where(
+        Transcript.interview_id == interview_id
+    ).order_by(Transcript.timestamp)
+    
+    transcripts = db.exec(stmt).all()
+    
+    return [
+        {
+            "id": t.id,
+            "speaker": t.speaker,
+            "text": t.text,
+            "timestamp": t.timestamp,
+            "sentiment_score": t.sentiment_score,
+            "emotion": t.emotion
+        }
+        for t in transcripts
+    ]
+
+# ==================== Evaluation Endpoints ====================
+
+@app.post("/interviews/{interview_id}/complete")
+async def complete_interview(
+    interview_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """면접 종료 및 최종 평가 리포트 생성"""
+    
+    interview = db.get(Interview, interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    # 면접 종료 처리
+    interview.status = InterviewStatus.COMPLETED
+    interview.end_time = datetime.utcnow()
+    db.add(interview)
+    db.commit()
+    
+    # 평가 리포트 생성 태스크 전달
+    celery_app.send_task(
+        "tasks.evaluator.generate_final_report",
+        args=[interview_id]
+    )
+    
+    logger.info(f"Interview {interview_id} completed. Report generation started.")
+    return {"status": "completed", "interview_id": interview_id}
+
+@app.get("/interviews/{interview_id}/report", response_model=EvaluationReportResponse)
+async def get_evaluation_report(
+    interview_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """평가 리포트 조회"""
+    stmt = select(EvaluationReport).where(
+        EvaluationReport.interview_id == interview_id
+    )
+    report = db.exec(stmt).first()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not yet available")
+    
+    return report
+
+# ==================== Health Check ====================
+
+@app.get("/")
+async def root():
+    return {
+        "service": "AI Interview Backend v2.0",
+        "status": "running",
+        "database": "PostgreSQL with pgvector",
+        "features": ["real-time STT", "emotion analysis", "AI evaluation"]
+    }
 
 if __name__ == "__main__":
     import uvicorn
