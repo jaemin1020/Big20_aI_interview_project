@@ -2,7 +2,7 @@
 services:
   # 1. Database: PostgreSQL + pgvector
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     container_name: interview_db
     restart: always
     environment:
@@ -52,13 +52,15 @@ services:
     networks:
       - interview_network
 
-  # 4. AI Worker: Celery (Question Generation + Emotion/Audio Analysis)
+  # 4. AI Worker: Celery (Question Generation + Emotion/Audio Analysis) + Jupyter
   ai-worker:
     build:
       context: ./ai-worker
       dockerfile: Dockerfile
     working_dir: /app
     container_name: interview_worker
+    ports:
+      - "8888:8888" # Jupyter용 포트 추가
     deploy:
       resources:
         limits:
@@ -81,6 +83,7 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
+      - ./notebooks:/app/notebooks # 주피터 노트북 데이터 보존용
     networks:
       - interview_network
 
@@ -118,6 +121,7 @@ services:
       - interview_network
 
 networks:
+
   interview_network:
     driver: bridge
 
