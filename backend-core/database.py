@@ -1,41 +1,61 @@
 import os
 import time
 import logging
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel, create_engine, Session, text
 from sqlalchemy.exc import OperationalError
 
-from models import User, InterviewSession, InterviewRecord, SessionCreate
+from models import User, Interview, Transcript, EvaluationReport, Question, JobPosting
 
-
-# 로깅 설정 (프로젝트 원칙 적용)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+# 로깅 설정
 logger = logging.getLogger("Database")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
-# 환경 변수에서 URL 로드
+# 환경 변수 설정
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
 
-# echo=True는 개발 단계에서 SQL 쿼리 로그를 볼 수 있어 유용합니다.
+# Connection Pool 설정 (프로덕션 성능 최적화)
+# - pool_size: 기본적으로 유지할 연결 수
+# - max_overflow: pool_size보다 더 많은 연결이 필요할 때 허용할 최대 추가 연결 수
+# - pool_recycle: 연결을 재활용할 시간(초) - DB 타임아웃 방지
+POOL_SIZE = int(os.getenv("DB_POOL_SIZE", 20))
+MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", 10))
+POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", 3600)) 
+
 engine = create_engine(
     DATABASE_URL, 
-    echo=True, 
-    pool_pre_ping=True # 연결이 끊겼는지 미리 확인하는 옵션
+    echo=DEBUG_MODE,  # True면 모든 SQL 쿼리가 로그에 남음 (개발용)
+    pool_pre_ping=True, # 쿼리 실행 전 연결 상태 확인 (Broken Pipe 방지)
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
+    pool_recycle=POOL_RECYCLE
 )
 
 def init_db():
-    """DB 연결 시도 및 테이블 생성 (재시도 로직 포함)"""
-    max_retries = 10
+    """DB 연결 시도 및 테이블 생성 (Robust Retry Logic)"""
+    max_retries = 30
+    retry_interval = 2
+    
     for i in range(max_retries):
         try:
-            logger.info(f"데이터베이스 연결 시도 중... ({i+1}/{max_retries})")
+            logger.info(f"🔄 데이터베이스 연결 시도 중... ({i+1}/{max_retries})")
+            
+            # 테이블 생성
             SQLModel.metadata.create_all(engine)
+            
+            # 연결 확인용 간단한 쿼리 실행
+            with Session(engine) as session:
+                session.exec(text("SELECT 1"))
+            
             logger.info("✅ 데이터베이스 테이블 생성 및 연결 성공")
             return
         except OperationalError as e:
             if i < max_retries - 1:
-                logger.warning(f"⚠️ DB 연결 실패, 3초 후 재시도합니다... 에러: {e}")
-                time.sleep(3)
+                logger.warning(f"⚠️ DB 연결 실패 (아직 준비되지 않음), {retry_interval}초 후 재시도합니다...")
+                time.sleep(retry_interval)
             else:
-                logger.error("❌ DB 연결 실패: 최대 재시도 횟수를 초과했습니다.")
+                logger.error(f"❌ DB 연결 실패: {str(e)}")
                 raise e
 
 def get_session():
