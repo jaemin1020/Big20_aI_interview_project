@@ -1,18 +1,39 @@
 import { useState, useRef, useEffect } from 'react';
-import { createSession, getQuestions, submitAnswer, getResults, login as apiLogin, register as apiRegister, logout as apiLogout, getCurrentUser } from './api/interview';
+import {
+  createInterview,
+  getInterviewQuestions,
+  createTranscript,
+  completeInterview,
+  getEvaluationReport,
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  getCurrentUser
+} from './api/interview';
 
 function App() {
-  const [step, setStep] = useState('auth'); // auth, landing, interview, loading, result
+  const [step, setStep] = useState('auth');
   const [user, setUser] = useState(null);
-  const [authMode, setAuthMode] = useState('login'); // login, register
+  const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
+<<<<<<< HEAD
 
   // Auth 관련 입력 상태
   const [account, setAccount] = useState({ username: '', password: '', fullName: '' });
+=======
 
-  const [session, setSession] = useState(null);
+  const [account, setAccount] = useState({
+    username: '',
+    password: '',
+    email: '',
+    fullName: ''
+  });
+>>>>>>> main
+
+  const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+<<<<<<< HEAD
   const [results, setResults] = useState([]);
 
   // STT 관련 상태
@@ -22,13 +43,19 @@ function App() {
 
   // 사용자 입력 상태
   const [userName, setUserName] = useState('');
+=======
+  const [report, setReport] = useState(null);
+
+  const [transcript, setTranscript] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+>>>>>>> main
   const [position, setPosition] = useState('');
 
   const videoRef = useRef(null);
   const pcRef = useRef(null);
-  const wsRef = useRef(null); // WebSocket 참조
+  const wsRef = useRef(null);
 
-  // 유저 정보 확인 로직 추가
+  // 자동 로그인 확인
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -36,7 +63,6 @@ function App() {
         .then(u => {
           setUser(u);
           setStep('landing');
-          setUserName(u.full_name || u.username);
         })
         .catch(() => {
           localStorage.removeItem('token');
@@ -52,10 +78,9 @@ function App() {
         await apiLogin(account.username, account.password);
         const u = await getCurrentUser();
         setUser(u);
-        setUserName(u.full_name || u.username);
         setStep('landing');
       } else {
-        await apiRegister(account.username, account.password, account.fullName);
+        await apiRegister(account.email, account.username, account.password, account.fullName);
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
@@ -70,42 +95,45 @@ function App() {
     setStep('auth');
   };
 
-  const startInterview = async (uName, uPos) => {
-    if (!uName.trim() || !uPos.trim()) {
-      alert("이름과 지원 직무를 입력해주세요.");
+  const startInterview = async () => {
+    if (!position.trim()) {
+      alert("지원 직무를 입력해주세요.");
       return;
     }
-    console.log(uName, uPos + ' 입력됨');
+
     try {
-      const sess = await createSession(uName, uPos);
-      setSession(sess);
-      const qs = await getQuestions(sess.id);
+      // 1. Interview 생성
+      const newInterview = await createInterview(position);
+      setInterview(newInterview);
+
+      // 2. 질문 조회
+      const qs = await getInterviewQuestions(newInterview.id);
       setQuestions(qs);
+
       setStep('interview');
-      // WebRTC 및 WebSocket 연결은 useEffect에서 step이 'interview'로 변경된 후 실행됩니다.
     } catch (err) {
       console.error("Interview start error:", err);
-      alert("면접 세션 생성에 실패했습니다. 백엔드 서버 상태를 확인해주세요.");
+      alert("면접 세션 생성 실패");
     }
   };
 
-  const setupWebSocket = (sessionId) => {
-    // WebSocket으로 media-server와 연결 (STT 결과 수신용)
-    const ws = new WebSocket(`ws://localhost:8080/ws/${sessionId}`);
+  const setupWebSocket = (interviewId) => {
+    const ws = new WebSocket(`ws://localhost:8080/ws/${interviewId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[WebSocket] Connected to media server for STT');
+      console.log('[WebSocket] Connected');
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+<<<<<<< HEAD
 
+=======
+>>>>>>> main
         if (data.type === 'stt_result' && data.text) {
-          // 실시간 STT 결과를 현재 transcript에 추가
           setTranscript(prev => prev + ' ' + data.text);
-          setFullTranscript(prev => prev + ' ' + data.text);
           console.log('[STT]:', data.text);
         }
       } catch (err) {
@@ -113,37 +141,34 @@ function App() {
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('[WebSocket] Error:', error);
-    };
-
-    ws.onclose = () => {
-      console.log('[WebSocket] Connection closed');
-    };
+    ws.onerror = (error) => console.error('[WebSocket] Error:', error);
+    ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
-  const setupWebRTC = async (sessionId) => {
+  const setupWebRTC = async (interviewId) => {
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
 
     try {
-      // 카메라와 마이크 권한 요청
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
       videoRef.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
-      console.log('[WebRTC] Video and audio tracks added');
     } catch (err) {
+<<<<<<< HEAD
       console.warn('[WebRTC] Camera access failed, trying audio-only mode:', err);
 
+=======
+      console.warn('[WebRTC] Camera failed, trying audio-only:', err);
+>>>>>>> main
       try {
-        // 카메라 실패 시 오디오만 사용
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
-        console.log('[WebRTC] Audio-only mode enabled (emotion analysis will be skipped)');
-        alert('카메라 접근이 거부되었습니다. 음성 인식만 사용하여 면접을 진행합니다.');
+        alert('카메라 접근 거부됨. 음성만 사용합니다.');
       } catch (audioErr) {
-        console.error('[WebRTC] Audio access also failed:', audioErr);
-        alert('마이크 접근이 거부되었습니다. 면접을 진행할 수 없습니다.');
+        alert('마이크 접근 실패');
         throw audioErr;
       }
     }
@@ -156,7 +181,7 @@ function App() {
       body: JSON.stringify({
         sdp: pc.localDescription.sdp,
         type: pc.localDescription.type,
-        session_id: sessionId
+        session_id: interviewId
       }),
       headers: { 'Content-Type': 'application/json' }
     });
@@ -165,17 +190,12 @@ function App() {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
   };
 
-  // 녹음 시작/중지
   const toggleRecording = () => {
     if (isRecording) {
-      // 녹음 중지
       setIsRecording(false);
-      console.log('[Recording] Stopped');
     } else {
-      // 녹음 시작 (새 질문 시작 시 기존 텍스트 초기화)
       setTranscript('');
       setIsRecording(true);
-      console.log('[Recording] Started');
     }
   };
 
@@ -190,8 +210,8 @@ function App() {
       // 다음 질문으로 이동 또는 종료
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(currentIdx + 1);
-        setTranscript(''); // 다음 질문을 위해 텍스트 초기화
-        setIsRecording(false); // 녹음 상태 리셋
+        setTranscript('');
+        setIsRecording(false);
       } else {
         // 면접 종료
         setStep('loading');
@@ -208,44 +228,43 @@ function App() {
 
         // AI 평가 완료 대기 후 결과 조회
         setTimeout(async () => {
-          const res = await getResults(session.id);
-          setResults(res);
-          setStep('result');
-        }, 8000); // AI 평가 처리 시간 (Solar 모델 추론 시간 고려)
+          try {
+            const finalReport = await getEvaluationReport(interview.id);
+            setReport(finalReport);
+            setStep('result');
+          } catch (err) {
+            alert('평가 리포트 생성 중입니다. 잠시 후 다시 확인해주세요.');
+            setStep('landing');
+          }
+        }, 10000);
       }
     } catch (err) {
       console.error('[Submit Error]:', err);
-      alert('답변 제출에 실패했습니다. 다시 시도해주세요.');
+      alert('답변 제출 실패');
     }
   };
 
-  // 면접 단계 진입 시 Media 설정
   useEffect(() => {
-    if (step === 'interview' && session && videoRef.current && !pcRef.current) {
+    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
       const initMedia = async () => {
         try {
-          await setupWebRTC(session.id);
-          setupWebSocket(session.id);
+          await setupWebRTC(interview.id);
+          setupWebSocket(interview.id);
         } catch (err) {
-          console.error("Media initialization error:", err);
-          alert("카메라 및 마이크 연결에 실패했습니다.");
+          console.error("Media init error:", err);
         }
       };
       initMedia();
     }
-  }, [step, session]);
+  }, [step, interview]);
 
-  // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
-      if (pcRef.current) {
-        pcRef.current.close();
-        pcRef.current = null;
-      }
+      if (pcRef.current) pcRef.current.close();
     };
   }, []);
-  // start of html
+
   return (
     <div className="container">
       {step === 'auth' && (
@@ -293,7 +312,7 @@ function App() {
             style={{ textAlign: 'center' }}
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
           >
-            {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
+            {authMode === 'login' ? '회원가입' : '로그인'}
           </p>
         </div>
       )}
@@ -387,11 +406,10 @@ function App() {
         <div className="card" style={{ textAlign: 'center' }}>
           <h2>답변을 분석 중입니다</h2>
           <div className="spinner"></div>
-          <p>잠시만 기다려 주세요.</p>
         </div>
       )}
 
-      {step === 'result' && (
+      {step === 'result' && report && (
         <div className="card">
           <h2>면접 결과</h2>
           {results.map((r, i) => (
