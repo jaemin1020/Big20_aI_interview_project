@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("Database")
 
 # 환경 변수에서 URL 로드
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:1234@db:5432/interview_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 
 # echo=True는 개발 단계에서 SQL 쿼리 로그를 볼 수 있어 유용합니다.
 engine = create_engine(
