@@ -10,7 +10,7 @@ python-multipart>=0.0.9
 
 # Database
 sqlmodel>=0.0.14
-psycopg2-binary>=2.9.9
+psycopg[binary]>=3.1.18
 
 # LangChain Ecosystem
 langchain>=0.1.0
@@ -34,3 +34,6 @@ python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 bcrypt>=4.0.1
 python-dotenv>=1.0.1
+
+# Remote Kernel Connectivity
+ipykernel>=6.0.0
