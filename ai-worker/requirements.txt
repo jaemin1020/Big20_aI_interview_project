@@ -9,7 +9,7 @@ redis>=5.0.3
 
 # Database
 sqlmodel>=0.0.14
-psycopg[binary]>=3.2.0
+psycopg2-binary>=2.9.9
 
 # LangChain Ecosystem
 langchain>=0.1.0

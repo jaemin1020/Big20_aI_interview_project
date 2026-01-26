@@ -16,39 +16,28 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
-<<<<<<< HEAD
 
   // Auth 관련 입력 상태
-  const [account, setAccount] = useState({ username: '', password: '', fullName: '' });
-=======
-
   const [account, setAccount] = useState({
     username: '',
     password: '',
     email: '',
     fullName: ''
   });
->>>>>>> main
 
   const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-<<<<<<< HEAD
-  const [results, setResults] = useState([]);
+
+  // 결과 관련 상태
+  const [report, setReport] = useState(null);
+  const [results, setResults] = useState([]); // For frontend display consistency if needed
 
   // STT 관련 상태
   const [transcript, setTranscript] = useState(''); // 현재 질문에 대한 답변 텍스트
   const [isRecording, setIsRecording] = useState(false); // 녹음 상태
   const [fullTranscript, setFullTranscript] = useState(''); // 전체 누적 텍스트
 
-  // 사용자 입력 상태
-  const [userName, setUserName] = useState('');
-=======
-  const [report, setReport] = useState(null);
-
-  const [transcript, setTranscript] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
->>>>>>> main
   const [position, setPosition] = useState('');
 
   const videoRef = useRef(null);
@@ -79,8 +68,9 @@ function App() {
         const u = await getCurrentUser();
         setUser(u);
         setStep('landing');
+        setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
-        await apiRegister(account.email, account.username, account.password, account.fullName);
+        await apiRegister(account.email, account.username, account.password, account.accountfullName);
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
@@ -128,10 +118,6 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         if (data.type === 'stt_result' && data.text) {
           setTranscript(prev => prev + ' ' + data.text);
           console.log('[STT]:', data.text);
@@ -157,12 +143,7 @@ function App() {
       videoRef.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
     } catch (err) {
-<<<<<<< HEAD
-      console.warn('[WebRTC] Camera access failed, trying audio-only mode:', err);
-
-=======
       console.warn('[WebRTC] Camera failed, trying audio-only:', err);
->>>>>>> main
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
@@ -199,15 +180,31 @@ function App() {
     }
   };
 
+  // 답변 제출 및 다음 질문 이동 로직
+  // 실제 API 호출이 누락되어 있어 추가합니다. (createTranscript 사용 추정)
+  const submitAnswer = async (questionId, answerText) => {
+    // 임시: createTranscript API를 사용하여 답변 저장 (실제 구현에 맞게 조정 필요)
+    // speaker='candidate'
+    await createTranscript(interview.id, 'candidate', answerText, questionId);
+  };
+
   const nextQuestion = async () => {
     // STT로 받아온 실제 텍스트를 제출
     const answerText = transcript.trim() || "답변 내용 없음 (음성 인식 실패 또는 무응답)";
 
     try {
+      // 1. 현재 질문에 대한 답변 제출
       await submitAnswer(questions[currentIdx].id, answerText);
       console.log(`[Submit] Question ${currentIdx + 1} answered:`, answerText);
 
-      // 다음 질문으로 이동 또는 종료
+      // 2. 화면 표시를 위한 결과 저장 (간이 저장)
+      setResults(prev => [...prev, {
+        question: questions[currentIdx].question_text,
+        answer: answerText,
+        evaluation: { status: "pending..." } // 실제 평가는 나중에 report로 받음
+      }]);
+
+      // 3. 다음 질문으로 이동 또는 종료
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(currentIdx + 1);
         setTranscript('');
@@ -226,11 +223,15 @@ function App() {
           pcRef.current = null;
         }
 
+        // 전체 면접 종료 처리
+        await completeInterview(interview.id);
+
         // AI 평가 완료 대기 후 결과 조회
         setTimeout(async () => {
           try {
             const finalReport = await getEvaluationReport(interview.id);
             setReport(finalReport);
+            // 만약 서버에서 results 구조를 다르게 준다면 여기서 setResults를 갱신해야 할 수도 있음
             setStep('result');
           } catch (err) {
             alert('평가 리포트 생성 중입니다. 잠시 후 다시 확인해주세요.');
@@ -283,6 +284,20 @@ function App() {
                 />
               </div>
             )}
+
+            {/* 회원가입 시 Email 입력 추가 */}
+            {authMode === 'register' && (
+              <div>
+                <label>이메일</label>
+                <input
+                  type="text"
+                  value={account.email}
+                  onChange={(e) => setAccount({ ...account, email: e.target.value })}
+                  placeholder="name@example.com"
+                />
+              </div>
+            )}
+
             <div>
               <label>아이디</label>
               <input
@@ -329,18 +344,11 @@ function App() {
               로그아웃
             </button>
           </div>
-          <p style={{ marginBottom: '24px' }}>지원 정보를 입력하고 면접을 시작하세요.</p>
+          <p style={{ marginBottom: '24px' }}>
+            {user ? `${user.full_name}님, 환영합니다!` : '환영합니다!'} <br />
+            지원 정보를 입력하고 면접을 시작하세요.
+          </p>
           <div className="input-group">
-            <div>
-              <label htmlFor="name">이름</label>
-              <input
-                id="name"
-                type="text"
-                placeholder="이름을 입력하세요"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-              />
-            </div>
             <div>
               <label htmlFor="position">지원 직무</label>
               <input
@@ -352,7 +360,7 @@ function App() {
               />
             </div>
           </div>
-          <button onClick={() => startInterview(userName, position)} style={{ width: '100%' }}>
+          <button onClick={startInterview} style={{ width: '100%' }}>
             면접 시작하기
           </button>
         </div>
@@ -412,17 +420,21 @@ function App() {
       {step === 'result' && report && (
         <div className="card">
           <h2>면접 결과</h2>
-          {results.map((r, i) => (
+          {/* report.results가 있다면 그것을 사용하고, 없다면 프론트 state인 results 사용 (구조에 따라 다름) */}
+          {(report.details || results).map((r, i) => (
             <div key={i} className="result-item">
-              <strong style={{ color: '#1a1a2e' }}>Q: {r.question}</strong>
-              <p style={{ marginTop: '8px' }}>A: {r.answer}</p>
+              <strong style={{ color: '#1a1a2e' }}>Q: {r.question_text || r.question}</strong>
+              <p style={{ marginTop: '8px' }}>A: {r.answer_text || r.answer}</p>
               <div className="result-evaluation">
                 <h4 style={{ color: '#2563eb', margin: '0 0 12px 0', fontSize: '0.95rem' }}>피드백</h4>
                 <pre>
-                  {JSON.stringify(r.evaluation, null, 2)}
+                  {/* JSON 파싱이 필요할 수 있음 */}
+                  {typeof r.evaluation === 'string' ? r.evaluation : JSON.stringify(r.evaluation, null, 2)}
                 </pre>
                 <h4 style={{ color: '#059669', margin: '16px 0 8px 0', fontSize: '0.95rem' }}>감정 분석</h4>
-                <p style={{ margin: 0 }}>{r.emotion ? `주요 감정: ${r.emotion.dominant_emotion}` : "분석 대기 중..."}</p>
+                <p style={{ margin: 0 }}>
+                  {r.emotion_data ? `주요 감정: ${r.emotion_data.dominant_emotion}` : "분석 대기 중..."}
+                </p>
               </div>
             </div>
           ))}
