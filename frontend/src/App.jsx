@@ -16,39 +16,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
-<<<<<<< HEAD
 
-  // Auth 관련 입력 상태
-  const [account, setAccount] = useState({ username: '', password: '', fullName: '' });
-=======
-
-  const [account, setAccount] = useState({
-    username: '',
-    password: '',
-    email: '',
-    fullName: ''
-  });
->>>>>>> main
-
+  const [account, setAccount] = useState({});
   const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-<<<<<<< HEAD
-  const [results, setResults] = useState([]);
-
-  // STT 관련 상태
-  const [transcript, setTranscript] = useState(''); // 현재 질문에 대한 답변 텍스트
-  const [isRecording, setIsRecording] = useState(false); // 녹음 상태
-  const [fullTranscript, setFullTranscript] = useState(''); // 전체 누적 텍스트
-
-  // 사용자 입력 상태
-  const [userName, setUserName] = useState('');
-=======
   const [report, setReport] = useState(null);
 
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
->>>>>>> main
   const [position, setPosition] = useState('');
 
   const videoRef = useRef(null);
@@ -128,10 +104,6 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         if (data.type === 'stt_result' && data.text) {
           setTranscript(prev => prev + ' ' + data.text);
           console.log('[STT]:', data.text);
@@ -157,12 +129,7 @@ function App() {
       videoRef.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
     } catch (err) {
-<<<<<<< HEAD
-      console.warn('[WebRTC] Camera access failed, trying audio-only mode:', err);
-
-=======
       console.warn('[WebRTC] Camera failed, trying audio-only:', err);
->>>>>>> main
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
