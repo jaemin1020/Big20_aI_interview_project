@@ -1,6 +1,6 @@
 # ==========================================
 # Backend-Core Requirements
-# Purpose: FastAPI + GPU Llama-3.2-3B + DB
+# Purpose: FastAPI + DB + Celery Client (No Heavy LLM)
 # ==========================================
 
 # Web Framework
@@ -10,20 +10,7 @@ python-multipart>=0.0.9
 
 # Database
 sqlmodel>=0.0.14
-psycopg[binary]>=3.1.18
-
-# LangChain Ecosystem
-langchain>=0.1.0
-langchain-huggingface>=0.0.1
-langchain-core>=0.1.0
-
-# LLM & Quantization (GPU - 4-bit)
-transformers>=4.39.0
-torch>=2.2.0
-accelerate>=0.27.0
-bitsandbytes>=0.42.0
-sentencepiece>=0.2.0
-protobuf>=4.25.0
+psycopg[binary]>=3.2.0
 
 # Task Queue
 celery[redis]>=5.3.6
@@ -31,9 +18,9 @@ redis>=5.0.3
 
 # Authentication
 python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-dotenv>=1.0.1
 
-# Remote Kernel Connectivity
-ipykernel>=6.0.0
+# Utility
+requests>=2.31.0
