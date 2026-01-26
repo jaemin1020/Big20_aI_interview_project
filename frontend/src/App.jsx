@@ -16,6 +16,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
+<<<<<<< HEAD
 
   // Auth 관련 입력 상태
   const [account, setAccount] = useState({
@@ -24,10 +25,14 @@ function App() {
     email: '',
     fullName: ''
   });
+=======
+>>>>>>> ff7043139e1f6c23a83ef56c435d8dadad68e047
 
+  const [account, setAccount] = useState({});
   const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+<<<<<<< HEAD
 
   // 결과 관련 상태
   const [report, setReport] = useState(null);
@@ -38,6 +43,12 @@ function App() {
   const [isRecording, setIsRecording] = useState(false); // 녹음 상태
   const [fullTranscript, setFullTranscript] = useState(''); // 전체 누적 텍스트
 
+=======
+  const [report, setReport] = useState(null);
+
+  const [transcript, setTranscript] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+>>>>>>> ff7043139e1f6c23a83ef56c435d8dadad68e047
   const [position, setPosition] = useState('');
 
   const videoRef = useRef(null);
