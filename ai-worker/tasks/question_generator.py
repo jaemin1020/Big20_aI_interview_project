@@ -7,17 +7,25 @@ from langchain_core.output_parsers import StrOutputParser
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
 import torch
 
+# DB 헬퍼 함수 import
+from db import (
+    get_best_questions_by_position,  # 직무별 우수 질문 조회
+    increment_question_usage,
+    engine
+)
+from sqlmodel import Session, select
+
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-# 모델 로드 (HuggingFace Pipeline 사용)
+# 모델 설정
 MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
 
 class QuestionGenerator:
     """
-    Llama 3.2-3B 모델을 사용한 면접 질문 생성기
-    4-bit 양자화로 VRAM 사용량 최소화 (~4GB)
+    하이브리드 질문 생성기
+    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
     """
-    _instance = None  # 싱글톤 패턴
+    _instance = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -29,196 +37,125 @@ class QuestionGenerator:
         if self._initialized:
             return
             
-        logger.info(f"Loading Llama model with 4-bit quantization: {MODEL_ID}")
+        logger.info(f"Loading Question Gen Model: {MODEL_ID}")
         token = os.getenv("HUGGINGFACE_HUB_TOKEN")
         
-        # BitsAndBytes 4-bit 양자화 설정 (VRAM 사용량: ~4GB로 축소)
+        # 4-bit 양자화 (메모리 최적화)
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,                    # 4비트 양자화 활성화
-            bnb_4bit_compute_dtype=torch.float16, # 연산은 FP16으로 수행
-            bnb_4bit_use_double_quant=True,       # 중첩 양자화 (메모리 추가 절감)
-            bnb_4bit_quant_type="nf4"             # NormalFloat4 (LLM에 최적화)
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4"
         )
         
-        logger.info("Initializing tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=token)
-        
-        logger.info("Loading 4-bit quantized model (this may take 1-2 minutes)...")
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             quantization_config=quantization_config,
-            device_map="auto",                    # GPU 자동 할당
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,               # CPU 메모리 사용 최소화
+            device_map="auto",
             token=token
         )
         
-        logger.info("✅ Model loaded successfully with 4-bit quantization")
-        logger.info(f"📊 Estimated VRAM usage: ~4GB (original: ~16GB)")
-        
-        # Pipeline 생성
         pipe = pipeline(
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            max_new_tokens=80,  # 질문만 생성하도록 토큰 수 추가 감소
-            temperature=0.7,  # 일관성 향상
-            top_p=0.9,
-            repetition_penalty=1.3,  # 반복 방지 강화
+            max_new_tokens=100,
+            temperature=0.8, # 창의성 확보
             do_sample=True,
-            pad_token_id=self.tokenizer.eos_token_id  # 패딩 토큰 명시
+            pad_token_id=self.tokenizer.eos_token_id
         )
         self.llm = HuggingFacePipeline(pipeline=pipe)
         self._initialized = True
-        
-    def generate_questions(self, position: str, count: int = 5, previous_qa: list = None):
+        logger.info("✅ Question Generator Initialized")
+
+    def generate_questions(self, position: str, count: int = 5, reuse_ratio: float = 0.4):
         """
-        면접 질문을 순차적으로 생성합니다.
-        
-        Args:
-            position: 지원 직무 (예: "Frontend 개발자")
-            count: 생성할 질문 개수
-            previous_qa: 이전 질문-답변 쌍 리스트 [{"question": "...", "answer": "..."}]
-        
-        Returns:
-            list: 생성된 질문 리스트
+        하이브리드 질문 생성 로직
+        1. DB에서 검증된 질문 일부 재활용 (Reuse)
+        2. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
         """
         questions = []
+        reuse_count = int(count * reuse_ratio)
+        generate_count = count - reuse_count
         
-        for i in range(count):
-            # 이전 대화 컨텍스트 구성
-            context = ""
-            if previous_qa and len(previous_qa) > 0:
-                context = "\n### 이전 대화:\n"
-                for qa in previous_qa[-3:]:  # 최근 3개만 참조
-                    context += f"면접관: {qa['question']}\n"
-                    context += f"지원자: {qa['answer']}\n"
-            
-            # 프롬프트 템플릿 (한국어 강제, 면접관 페르소나)
-            if i == 0 and not previous_qa:
-                # 첫 질문: 직무 관련 기본 질문
-                prompt_template = """### 시스템 지시사항:
-당신은 {position} 직무의 전문 면접관입니다.
-지원자에게 할 면접 질문 하나만 작성하세요.
+        # 1. DB 재활용 (검증된 질문)
+        # avg_score가 높고 usage_count가 적절한 질문 조회
+        db_questions = get_best_questions_by_position(position, limit=reuse_count * 2)
+        
+        # (간단한 로직: 점수 높은 순으로 선택)
+        selected_db_questions = db_questions[:reuse_count]
+        
+        for q in selected_db_questions:
+            questions.append(q.content)
+            increment_question_usage(q.id)
+            logger.info(f"♻️ Reused Question (ID={q.id}): {q.content[:30]}...")
 
-### 규칙:
-1. 반드시 한국어로 작성
-2. 질문 하나만 작성 (답변 작성 금지)
-3. 실무 중심의 구체적인 질문
-4. 질문은 "~해주세요" 또는 "~무엇인가요?" 형식으로 끝날 것
-5. 질문 외에 다른 텍스트를 추가하지 마세요
+        # 2. Few-Shot 프롬프트 구성
+        # DB 질문들을 예시로 제공하여 스타일을 모방하게 함
+        few_shot_examples = ""
+        if db_questions:
+            examples = [f"- {q.content}" for q in db_questions[:3]]
+            few_shot_examples = "\n".join(examples)
+        
+        prompt_template = """### Role:
+You are an expert technical interviewer for the '{position}' role.
 
-### 면접관 질문:
+### Task:
+Generate a single, sharp, and practical interview question in Korean.
+
+### Context (Reference Style):
+Here are some good examples of questions for this role:
+{examples}
+
+### Instructions:
+1. Write ONLY the question in Korean.
+2. Do not include any introductory text like "Here is a question".
+3. The question should be technical and specific to the role.
+4. Avoid duplicating the reference examples.
+
+### Question:
 """
-            else:
-                prompt_template = """### 시스템 지시사항:
-당신은 {position} 직무의 전문 면접관입니다.
-{context}
-지원자에게 할 다음 면접 질문 하나만 작성하세요.
+        prompt = PromptTemplate.from_template(prompt_template)
+        chain = prompt | self.llm | StrOutputParser()
 
-### 규칙:
-1. 반드시 한국어로 작성
-2. 질문 하나만 작성 (답변 작성 금지)
-3. 이전 답변과 연관된 심화 질문 또는 새로운 각도의 질문
-4. 질문은 "~해주세요" 또는 "~무엇인가요?" 형식으로 끝날 것
-5. 질문 외에 다른 텍스트를 추가하지 마세요
-
-### 면접관 질문:
-"""
-            
-            prompt = PromptTemplate.from_template(prompt_template)
-            chain = prompt | self.llm | StrOutputParser()
-            
+        # 3. LLM 생성 (나머지 개수만큼)
+        for i in range(generate_count):
             try:
-                result = chain.invoke({
+                raw_result = chain.invoke({
                     "position": position,
-                    "context": context
+                    "examples": few_shot_examples
                 })
                 
-                # 생성된 텍스트에서 질문 추출 (불필요한 부분 제거)
-                question = self._extract_question(result)
+                # 후처리 (불필요한 공백/특수문자 제거)
+                generated_q = raw_result.strip().replace('"', '')
                 
-                if question:
-                    questions.append(question)
-                    logger.info(f"Generated question {i+1}/{count}: {question}")
+                if len(generated_q) > 10:
+                    questions.append(generated_q)
+                    logger.info(f"✨ Generated Question: {generated_q[:30]}...")
                 else:
-                    # 질문 생성 실패 시 폴백
-                    fallback = self._get_fallback_question(position, i)
-                    questions.append(fallback)
-                    logger.warning(f"Using fallback question {i+1}/{count}")
+                    # 실패 시 폴백
+                    questions.append(self._get_fallback_question(position, i))
                     
             except Exception as e:
-                logger.error(f"Question generation error: {e}")
-                fallback = self._get_fallback_question(position, i)
-                questions.append(fallback)
-        
+                logger.error(f"Generation failed: {e}")
+                questions.append(self._get_fallback_question(position, i))
+
         return questions
-    
-    def _extract_question(self, raw_output: str) -> str:
-        """생성된 텍스트에서 실제 질문만 추출"""
-        # 줄바꿈으로 분리
-        lines = [line.strip() for line in raw_output.split('\n') if line.strip()]
-        
-        # 접두사 제거 및 정리
-        cleaned_lines = []
-        for line in lines:
-            # "면접관:", "질문:", "###" 등 접두사 제거
-            line = line.replace("면접관:", "").replace("질문:", "").replace("###", "").strip()
-            # "지원자:", "답변:" 등이 포함된 줄은 제외 (답변 생성 방지)
-            if any(keyword in line for keyword in ["지원자:", "답변:", "예시:", "A:", "Answer:"]):
-                continue
-            # 질문 형식으로 끝나는 문장만 선택
-            if line.endswith(("?", "가요?", "나요?", "세요?", "주세요.", "주세요?")):
-                cleaned_lines.append(line)
-        
-        # 가장 긴 질문 문장 선택
-        if cleaned_lines:
-            question = max(cleaned_lines, key=len)
-            # 최소 길이 검증
-            if len(question) > 10 and len(question) < 200:
-                return question
-        
-        # 정제된 질문이 없으면 빈 문자열 반환
-        return ""
-    
-    def _get_fallback_question(self, position: str, index: int) -> str:
-        """질문 생성 실패 시 사용할 기본 질문"""
-        fallback_questions = [
-            f"{position} 직무에 지원하게 된 동기는 무엇인가요?",
-            f"{position} 분야에서 가장 자신 있는 기술이나 경험은 무엇인가요?",
-            "최근 진행한 프로젝트에 대해 설명해주세요.",
-            "기술적 문제를 해결했던 경험을 구체적으로 공유해주세요.",
-            "팀 협업 과정에서 어려움을 겪었던 경험과 해결 방법을 말씀해주세요."
+
+    def _get_fallback_question(self, position, index):
+        backups = [
+            f"{position} 직무에서 가장 중요하게 생각하는 역량은 무엇인가요?",
+            "최근 겪었던 가장 어려운 기술적 챌린지는 무엇이었나요?",
+            "우리 회사 서비스 중 개선하고 싶은 부분이 있다면 무엇인가요?",
+            "동료와 기술적 견해 차이가 있을 때 어떻게 해결하나요?"
         ]
-        return fallback_questions[index % len(fallback_questions)]
+        return backups[index % len(backups)]
 
-
-# Celery 태스크 정의
-@shared_task(
-    name="tasks.question_generator.generate_questions",
-    bind=True,
-    max_retries=3,
-    default_retry_delay=10
-)
-def generate_questions_task(self, position: str, count: int = 5, previous_qa: list = None):
-    """
-    Celery 태스크: 면접 질문 생성
-    
-    Args:
-        position: 지원 직무
-        count: 생성할 질문 개수
-        previous_qa: 이전 질문-답변 쌍 (선택)
-    
-    Returns:
-        list: 생성된 질문 리스트
-    """
+@shared_task(name="tasks.question_generator.generate_questions")
+def generate_questions_task(position: str, count: int = 5):
     try:
-        logger.info(f"Starting question generation for position: {position}, count: {count}")
         generator = QuestionGenerator()
-        questions = generator.generate_questions(position, count, previous_qa)
-        logger.info(f"Successfully generated {len(questions)} questions")
-        return questions
+        return generator.generate_questions(position, count)
     except Exception as e:
-        logger.error(f"Question generation task failed: {str(e)}")
-        # 재시도 로직
-        raise self.retry(exc=e)
+        logger.error(f"Task Error: {e}")
+        return []
