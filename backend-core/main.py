@@ -242,7 +242,8 @@ async def create_transcript(
                     transcript.id,
                     question.content,
                     transcript.text,
-                    question.rubric_json
+                    question.rubric_json,
+                    question.id  # 질문 ID 추가 (평균 점수 업데이트용)
                 ]
             )
             logger.info(f"Evaluation task sent for transcript {transcript.id}")
