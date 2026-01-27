@@ -75,7 +75,20 @@ function App() {
         setAuthMode('login');
       }
     } catch (err) {
-      setAuthError(err.response?.data?.detail || '인증 실패');
+      // FastAPI validation error (422) 처리
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+        if (Array.isArray(detail)) {
+          // Validation error 배열
+          setAuthError(detail.map(e => e.msg).join(', '));
+        } else if (typeof detail === 'string') {
+          setAuthError(detail);
+        } else {
+          setAuthError('인증 실패');
+        }
+      } else {
+        setAuthError(err.message || '인증 실패');
+      }
     }
   };
 
