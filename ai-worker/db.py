@@ -1,4 +1,5 @@
-from sqlmodel import SQLModel, create_engine, Session, Field, Column, select
+from sqlmodel import SQLModel, create_engine, Session, Field, select
+from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 from typing import Optional, Dict, Any, List
@@ -59,7 +60,8 @@ class Question(SQLModel, table=True):
     category: QuestionCategory
     difficulty: QuestionDifficulty
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
-    embedding: Optional[List[float]] = Field(default=None, sa_column=Column(Vector(768)))
+    # Using Any for embedding to bypass SQLModel type inference bug with List[float]
+    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
     company: Optional[str] = None
     industry: Optional[str] = None
     position: Optional[str] = None
@@ -98,7 +100,7 @@ class AnswerBank(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     question_id: int
     answer_text: str
-    embedding: Optional[List[float]] = Field(default=None, sa_column=Column(Vector(768)))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
     score: float
     evaluator_feedback: Optional[str] = None
     company: Optional[str] = None
