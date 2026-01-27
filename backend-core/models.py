@@ -109,8 +109,11 @@ class Question(SQLModel, table=True):
     # 평가 기준 (JSON 형식)
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
     
-    # Vector DB 참조 (pgvector 연동용)
-    vector_id: Optional[str] = Field(default=None, index=True)
+    # 벡터 임베딩 (768차원 - 질문 유사도 검색용)
+    embedding: Optional[List[float]] = Field(
+        default=None,
+        sa_column=Column(Vector(768))
+    )
     
     # 메타데이터 (계층적 분류)
     company: Optional[str] = Field(default=None, index=True)    # 회사명 (예: "삼성전자", "카카오")
@@ -187,10 +190,10 @@ class AnswerBank(SQLModel, table=True):
     # 답변 내용
     answer_text: str
     
-    # 벡터 임베딩 (1536 차원 - OpenAI text-embedding-ada-002 또는 HuggingFace)
+    # 벡터 임베딩 (768차원 - Question과 동일한 모델 사용)
     embedding: Optional[List[float]] = Field(
         default=None,
-        sa_column=Column(Vector(1536))
+        sa_column=Column(Vector(768))
     )
     
     # 평가 점수 및 피드백
