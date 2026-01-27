@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector  # pgvector 지원
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
@@ -111,8 +112,10 @@ class Question(SQLModel, table=True):
     # Vector DB 참조 (pgvector 연동용)
     vector_id: Optional[str] = Field(default=None, index=True)
     
-    # 메타데이터
-    position: Optional[str] = None  # 특정 직무 전용 질문
+    # 메타데이터 (계층적 분류)
+    company: Optional[str] = Field(default=None, index=True)    # 회사명 (예: "삼성전자", "카카오")
+    industry: Optional[str] = Field(default=None, index=True)   # 산업 (예: "IT", "금융", "제조")
+    position: Optional[str] = Field(default=None, index=True)   # 직무 (예: "Backend 개발자")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = Field(default=True)
     
@@ -173,6 +176,38 @@ class EvaluationReport(SQLModel, table=True):
     
     # Relationship
     interview: Interview = Relationship(back_populates="evaluation_report")
+
+class AnswerBank(SQLModel, table=True):
+    """우수 답변 은행 (벡터 검색용)"""
+    __tablename__ = "answer_bank"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    question_id: int = Field(foreign_key="questions.id", index=True)
+    
+    # 답변 내용
+    answer_text: str
+    
+    # 벡터 임베딩 (1536 차원 - OpenAI text-embedding-ada-002 또는 HuggingFace)
+    embedding: Optional[List[float]] = Field(
+        default=None,
+        sa_column=Column(Vector(1536))
+    )
+    
+    # 평가 점수 및 피드백
+    score: float = Field(description="답변 점수 (0-100)")
+    evaluator_feedback: Optional[str] = None
+    
+    # 계층적 분류 (질문과 동일)
+    company: Optional[str] = Field(default=None, index=True)
+    industry: Optional[str] = Field(default=None, index=True)
+    position: Optional[str] = Field(default=None, index=True)
+    
+    # 메타데이터
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_active: bool = Field(default=True)
+    
+    # 통계
+    reference_count: int = Field(default=0)  # 참고된 횟수
 
 # ==================== Request/Response Models ====================
 

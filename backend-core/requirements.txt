@@ -11,6 +11,10 @@ python-multipart>=0.0.9
 # Database
 sqlmodel>=0.0.14
 psycopg[binary]>=3.2.0
+pgvector>=0.2.0  # Vector similarity search
+
+# Vector Embeddings
+sentence-transformers>=2.2.0  # 한국어 임베딩 모델
 
 # Task Queue
 celery[redis]>=5.3.6
