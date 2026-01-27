@@ -16,7 +16,6 @@ from models import (
     EvaluationReport, EvaluationReportResponse
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from chains.llama_gen import generator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
@@ -97,14 +96,14 @@ async def create_interview(
 ):
     """면접 세션 생성 및 질문 생성"""
     
-    # 1. Interview 레코드 생성
+    # 1. Interview 레코드 생성 (상태: SCHEDULED)
     new_interview = Interview(
         candidate_id=current_user.id,
         position=interview_data.position,
         job_posting_id=interview_data.job_posting_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.utcnow()  # 즉시 시작
+        start_time=datetime.utcnow()
     )
     db.add(new_interview)
     db.commit()
@@ -112,22 +111,43 @@ async def create_interview(
     
     logger.info(f"Interview created: ID={new_interview.id}, Position={new_interview.position}")
     
-    # 2. AI 질문 생성
+    # 2. AI 질문 생성 (AI-Worker에 위임)
+    # Backend가 직접 LLM을 돌리지 않으므로, Celery Task를 호출합니다.
+    generated_questions = []
+    
     try:
-        generated_texts = generator.generate_questions(
-            position=interview_data.position,
-            count=5
+        logger.info("Requesting question generation from AI-Worker...")
+        # Celery 태스크 호출 (최대 30초 대기)
+        task = celery_app.send_task(
+            "tasks.question_generator.generate_questions",
+            args=[interview_data.position, 5]
         )
+        # 동기적으로 결과를 기다림 (UX상 질문이 바로 필요함)
+        generated_questions = task.get(timeout=30)
+        logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
         
-        # 3. Questions 테이블에 저장
-        for i, q_text in enumerate(generated_texts):
+    except Exception as e:
+        logger.warning(f"AI-Worker question generation failed ({e}). Using fallback questions.")
+        # 실패 시 폴백 질문 생성
+        generated_questions = [
+            f"{interview_data.position} 직무에 지원하게 된 동기를 구체적으로 말씀해주세요.",
+            "가장 도전적이었던 프로젝트 경험과 그 과정에서 얻은 교훈은 무엇인가요?",
+            f"{interview_data.position}로서 본인의 가장 큰 강점과 보완하고 싶은 점은 무엇인가요?",
+            "갈등 상황을 해결했던 구체적인 사례가 있다면 설명해주세요.",
+            "향후 5년 뒤의 커리어 목표는 무엇인가요?"
+        ]
+
+    # 3. Questions 및 Transcript 테이블에 저장
+    try:
+        for i, q_text in enumerate(generated_questions):
+            # 3-1. 질문 은행에 저장
             question = Question(
                 content=q_text,
-                category=QuestionCategory.TECHNICAL,  # 기본값
+                category=QuestionCategory.TECHNICAL if i < 3 else QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.MEDIUM,
                 rubric_json={
-                    "criteria": ["기술적 정확성", "논리적 구성", "전문성"],
-                    "weight": {"technical": 0.4, "communication": 0.3, "depth": 0.3}
+                    "criteria": ["구체성", "직무 적합성", "논리력"], 
+                    "weight": {"content": 0.5, "communication": 0.5}
                 },
                 position=interview_data.position
             )
@@ -135,7 +155,7 @@ async def create_interview(
             db.commit()
             db.refresh(question)
             
-            # 4. AI 질문을 Transcript에 저장 (Speaker=AI)
+            # 3-2. Transcript에 AI 발화로 기록
             transcript = Transcript(
                 interview_id=new_interview.id,
                 speaker=Speaker.AI,
@@ -145,26 +165,15 @@ async def create_interview(
             )
             db.add(transcript)
         
+        # 면접 상태 업데이트: LIVE
+        new_interview.status = InterviewStatus.LIVE
+        db.add(new_interview)
         db.commit()
-        logger.info(f"Generated {len(generated_texts)} questions for interview {new_interview.id}")
+        db.refresh(new_interview)
         
     except Exception as e:
-        logger.error(f"Question generation failed: {e}")
-        # 폴백 질문 사용
-        fallback_question = Question(
-            content=f"{interview_data.position} 직무에 지원하게 된 동기는 무엇인가요?",
-            category=QuestionCategory.BEHAVIORAL,
-            difficulty=QuestionDifficulty.EASY,
-            rubric_json={"criteria": ["진정성", "열정"]},
-            position=interview_data.position
-        )
-        db.add(fallback_question)
-        db.commit()
-    
-    # 면접 상태를 LIVE로 변경
-    new_interview.status = InterviewStatus.LIVE
-    db.add(new_interview)
-    db.commit()
+        logger.error(f"Failed to save questions: {e}")
+        # 에러 발생 시에도 면접 세션은 반환 (빈 질문 목록일 수 있음)
     
     return InterviewResponse(
         id=new_interview.id,

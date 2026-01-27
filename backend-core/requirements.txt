@@ -24,6 +24,7 @@ python-dotenv>=1.0.1
 
 # Utility
 requests>=2.31.0
+<<<<<<< HEAD
 
 # LLM for Question Generation
 langchain>=0.1.0
@@ -33,3 +34,5 @@ transformers>=4.38.0
 torch>=2.2.0
 bitsandbytes>=0.42.0
 accelerate>=0.27.0
+=======
+>>>>>>> 40311f7866fdbacf997e1b7a4412c3d641518527

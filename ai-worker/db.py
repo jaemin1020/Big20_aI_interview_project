@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:1234@db:5432/interview_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
 
 # ==================== Models (AI-Worker 버전) ====================
