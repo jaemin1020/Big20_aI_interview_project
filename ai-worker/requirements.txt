@@ -42,7 +42,7 @@ librosa>=0.10.1
 # Data Processing
 numpy>=1.23.0,<2.0.0
 
-# Pydantic (v1 for compatibility)
+# Pydantic 
 pydantic>=2.0.0
 
 # Remote Kernel Connectivity
