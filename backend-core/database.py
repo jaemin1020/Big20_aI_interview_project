@@ -4,7 +4,7 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy.exc import OperationalError
 
-from models import User, InterviewSession, InterviewRecord, SessionCreate
+from models import User, JobPosting, Interview, Question, Transcript, EvaluationReport
 
 
 # 로깅 설정 (프로젝트 원칙 적용)
