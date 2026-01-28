@@ -16,6 +16,10 @@
   - 평균 점수(`avg_score`)가 높고 사용 빈도(`usage_count`)가 낮은 질문 우선 선택
   - 선택 알고리즘: `score = avg_score - (usage_count * 0.01)` (점수 높고 덜 사용된 질문 우선)
 
+> **📝 수정 사항 (2026-01-27 함유라)**
+> 답변 점수(`avg_score`)를 질문의 품질로 보는 것은 논리적 오류가 있습니다.
+> **변경**: `avg_score` 대신 **`quality_score` (LLM이 평가한 질문 자체 점수)**를 기준으로 변경합니다.
+
 #### 1.2 사용 통계 추적
 - **기능**: 질문이 사용될 때마다 `usage_count` 자동 증가
 - **효과**: 
@@ -41,6 +45,12 @@
   weight = min(usage_count, 10) / 10
   new_avg = old_avg * weight + new_score * (1 - weight)
   ```
+
+> **📝 수정 사항 (2026-01-27 함유라)**
+> **변경**: 답변 점수 단순 평균 대신, **LLM에게 "이 질문이 면접에 적합한가?"를 평가**하게 하여 그 점수(`quality_score`)를 추적하도록 로직을 전면 수정합니다.
+- **효과**: 
+  - 지원자의 답변 실력과 무관하게 **질문 자체의 퀄리티**를 객관적으로 검증
+  - 모호하거나 직무와 관련 없는 질문 자동 도태
 - **효과**: 
   - 초기 몇 개 답변에 과도하게 영향받지 않음
   - 10회 이상 사용 시 안정적인 평균값 유지
@@ -64,12 +74,19 @@ class Question(SQLModel, table=True):
     avg_score: Optional[float] = None        # 평균 평가 점수 (0-100)
 ```
 
+> **📝 수정 사항 (2026-01-27 함유라)**
+> **변경**: `avg_score` 필드를 삭제하고, 질문 평가 전용 점수인 **`quality_score` (1-5점 척도)** 필드를 추가합니다.
+```
+
 #### 3.2 새로운 헬퍼 함수
 | 함수명 | 기능 | 사용처 |
 |:---|:---|:---|
 | `get_questions_by_position()` | 직무별 질문 조회 (평균 점수 높은 순) | 질문 재활용 |
 | `increment_question_usage()` | 사용 횟수 증가 | 질문 선택 시 |
 | `update_question_avg_score()` | 평균 점수 업데이트 (이동 평균) | 답변 평가 후 |
+
+> **📝 수정 사항 (2026-01-27 함유라)**
+> **변경**: `get_questions_by_position`은 품질 점수(`quality_score`) 기준으로, `update_question_avg_score`는 `update_question_quality`로 변경합니다.
 
 ---
 
@@ -100,7 +117,7 @@ class Question(SQLModel, table=True):
 [질문 생성 요청] → AI-Worker
     ↓
 [DB 조회: 기존 질문 2개 선택]
-    ├─ avg_score 높은 순 정렬
+    ├─ quality_score 높은 순 정렬 (질문 자체 퀄리티 기준)
     ├─ usage_count 낮은 것 우선
     └─ increment_question_usage()
     ↓
@@ -110,11 +127,13 @@ class Question(SQLModel, table=True):
     ↓
 [사용자 답변 제출]
     ↓
-[Solar LLM 평가] → 점수 산출 (1-5)
+[Solar LLM 평가]
+    ├─ 1. 답변 평가 (User 점수)
+    └─ 2. 질문 평가 (Question 점수, 1-5점)
     ↓
-[update_question_avg_score()] → DB 업데이트
+[update_question_quality()] → DB 업데이트
     ↓
-[다음 면접에서 해당 질문의 avg_score 반영]
+[다음 면접에서 고품질 질문(`quality_score` high) 재사용]
 ```
 
 ---
@@ -153,6 +172,14 @@ class Question(SQLModel, table=True):
 
 ---
 
-**작성일**: 2026-01-26  
-**작성자**: AI Assistant  
-**버전**: v2.0
+
+### 6. **변경 이력**
+- **2026-01-27 (함유라)**: 
+  - **변경 사유**: 지원자의 답변 점수(`avg_score`)를 질문의 품질로 간주하는 기존 논리의 오류 수정. 답변 실력과 무관하게 **질문 자체의 퀄리티**를 평가하는 것이 더 타당함.
+  - **변경 내용**: `avg_score` → `quality_score`로 변경 및 LLM의 질문 평가 단계 추가.
+
+---
+
+**작성일**: 2026-01-27  
+**작성자**: AI Assistant & 함유라  
+**버전**: v2.1
