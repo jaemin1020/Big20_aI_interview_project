@@ -16,6 +16,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("Media-Server")
 
 app = FastAPI()
+
+# CORS 설정 (프론트엔드 연결 허용)
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 relay = MediaRelay()
 
 # 2. Celery 설정 (ai-worker로 감정 분석 요청 전달용)
@@ -142,16 +153,21 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
             
             try:
                 # 오디오 트랙에서 프레임 수신 및 전송
+                frame_count = 0
                 while True:
                     try:
                         frame = await audio_track.recv()
+                        frame_count += 1
                         
                         # 프레임을 ndarray로 변환 후 바이트로 추출하여 Deepgram으로 전송
                         audio_data = frame.to_ndarray().tobytes()
                         await dg_connection.send(audio_data)
                         
+                        if frame_count % 100 == 0:
+                            logger.debug(f"[{session_id}] Processed {frame_count} audio frames")
+                        
                     except Exception as e:
-                        logger.debug(f"[{session_id}] Audio track recv 에러: {e}")
+                        logger.error(f"[{session_id}] Audio track recv 에러: {e}")
                         break
                         
             except Exception as e:
