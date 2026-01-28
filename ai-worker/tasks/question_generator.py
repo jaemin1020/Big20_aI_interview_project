@@ -159,3 +159,12 @@ def generate_questions_task(position: str, count: int = 5):
     except Exception as e:
         logger.error(f"Task Error: {e}")
         return []
+
+# Eager Initialization: Worker 시작 시 모델 미리 로드
+# 이렇게 하면 첫 요청에서 타임아웃이 발생하지 않습니다
+try:
+    logger.info("🔥 Pre-loading Question Generator model...")
+    _warmup_generator = QuestionGenerator()
+    logger.info("✅ Question Generator ready for requests")
+except Exception as e:
+    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
