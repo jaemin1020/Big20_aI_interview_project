@@ -50,11 +50,41 @@ class User(SQLModel, table=True):
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="candidate")
 
+class Company(SQLModel, table=True):
+    """회사 정보 테이블 (벡터 검색 지원)"""
+    __tablename__ = "companies"
+    
+    # Primary Key (문자열 - 직접 삽입)
+    id: str = Field(primary_key=True, max_length=50, description="회사 고유 ID (예: KAKAO, NAVER)")
+    
+    # 기본 정보
+    company_name: str = Field(index=True, description="회사명")
+    
+    # 회사 특성 (벡터화 대상)
+    ideal: Optional[str] = Field(default=None, description="회사가 추구하는 인재상 및 가치관")
+    description: Optional[str] = Field(default=None, description="회사 소개 및 비전")
+    
+    # 벡터 임베딩 (768차원 - ideal + description 통합 임베딩)
+    embedding: Any = Field(
+        default=None,
+        sa_column=Column(Vector(768)),
+        description="회사 특성 벡터 (유사 회사 검색 및 문화 적합성 평가용)"
+    )
+    
+    # 시스템 필드
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationships
+    job_postings: List["JobPosting"] = Relationship(back_populates="company")
+
 class JobPosting(SQLModel, table=True):
-    """채용 공고 테이블 (선택적 - 추후 확장용)"""
+    """채용 공고 테이블"""
     __tablename__ = "job_postings"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", index=True)
+    
     title: str
     description: str
     requirements: str
@@ -62,6 +92,7 @@ class JobPosting(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
+    company: Company = Relationship(back_populates="job_postings")
     interviews: List["Interview"] = Relationship(back_populates="job_posting")
 
 class Interview(SQLModel, table=True):
