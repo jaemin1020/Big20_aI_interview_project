@@ -10,7 +10,7 @@ import os
 
 from database import init_db, get_session
 from models import (
-    User, UserCreate, UserLogin,
+    User, UserCreate, UserLogin, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
@@ -37,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Company Router 등록
+from routes.companies import router as companies_router
+app.include_router(companies_router)
 
 # Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
