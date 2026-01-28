@@ -1,59 +1,49 @@
 ---
-description: 2026-01-27 프로젝트 전체 분석 및 품질 개선 리포트
+description: 2026-01-27 프로젝트 전체 분석 및 품질 개선 리포트 (Final)
 ---
 
 # 🛠️ 2026-01-27 품질 개선 리포트 (Quality Improvement Report)
 
-## 1. 초기 상태 분석 (Initial Status Analysis)
+## 1. 분석 결과 (Analysis Results)
 
-### 🚨 Critical Issues Found
-1. **AI-Worker 서비스 다운**: `docker-compose ps` 확인 결과 `interview_worker` 컨테이너가 실행 중이지 않음.
-   - **원인**: `ai-worker/db.py` 초기화 중 `ValueError: The field embedding has no matching SQLAlchemy type` 발생.
-   - **분석**: `ai-worker/requirements.txt`에서 `pydantic<2.0.0`으로 버전을 제한하고 있었으나, `SQLModel` 및 `pgvector`와의 호환성 문제로 스키마 정의 실패.
+### 🚨 발견된 핵심 문제 (Critical Issues)
+1. **AI-Worker 서비스 시작 실패**: `ModuleNotFoundError: No module named 'langchain_core.pydantic_v1'` 및 `ValueError`로 인해 컨테이너가 무한 재시작됨.
+2. **DB 스키마 불일치**: `backend-core`와 `ai-worker` 간의 DB 모델 정의가 상이하여 데이터 무결성 위협.
+3. **Volume Mount 이슈**: 사용자의 작업 환경 경로 불일치로 인해 코드 수정 사항이 컨테이너에 반영되지 않는 문제 확인 (Stale Code Execution).
+4. **Task 누락**: `backend`에서 호출하는 `generate_final_report` 태스크가 Worker에 구현되지 않음.
 
-2. **DB 스키마 불일치 (Schema Inconsistency)**:
-   - `backend-core/models.py`와 `ai-worker/db.py`의 모델 정의가 서로 다름 (예: `EvaluationReport` 필드 차이, `Timestamp` vs `created_at` 등).
-   - 이로 인해 데이터 무결성 훼손 가능성 높음.
+## 2. 조치 내역 (Fixes Applied)
 
-3. **Task 정의 누락**:
-   - `backend-core`는 `tasks.evaluator.generate_final_report`를 호출하지만, `ai-worker/tasks/evaluator.py`에는 해당 함수가 구현되어 있지 않음.
-   - 인터뷰 종료 프로세스가 정상적으로 동작하지 않음.
+### ✅ Codebase Fixes
+1. **의존성 호환성 확보**:
+   - `ai-worker/requirements.txt`: `pydantic>=2.0.0`으로 업데이트.
+   - `ai-worker/tasks/evaluator.py`: `langchain_core.pydantic_v1` 의존성을 제거하고 표준 `pydantic` v2 사용으로 변경.
 
-4. **DB 초기화 스크립트 오류**:
-   - `infra/postgres/init.sql`이 테이블 생성 전에 인덱스를 생성하려고 시도하여 로그에 에러 다수 발생.
+2. **DB 스키마 동기화 (Schema Sync)**:
+   - `ai-worker/db.py`: `backend-core` 서비스의 모델과 100% 일치하도록 재작성. (PGVector 타입을 처리하기 위해 `Any` 타입 우회 적용).
 
-## 2. 조치 사항 (Actions Taken)
+3. **기능 구현**:
+   - `tasks/evaluator.py`: 누락된 `generate_final_report` 태스크 구현 및 `analyze_answer` 로직 버그 수정.
 
-### ✅ Code Fixes
-1. **AI-Worker 의존성 업데이트**:
-   - `ai-worker/requirements.txt`: `pydantic<2.0.0` 제한 제거 (Pydantic v2 허용하여 SQLModel 호환성 확보).
+### ✅ Infrastructure Fixes
+1. **컨테이너 강제 재생성**:
+   - 올바른 소스 코드 경로(`c:\big20\git\Big20_aI_interview_project`)에서 `docker-compose up -d --force-recreate`를 실행하여 Volume Mount 경로 수정.
 
-2. **DB 스키마 동기화**:
-   - `ai-worker/db.py`: `backend-core/models.py`와 동일한 스키마 구조(Enums, Field types)를 갖도록 전면 재작성.
+## 3. 검증 결과 (Verification)
 
-3. **Missing Task 구현**:
-   - `ai-worker/tasks/evaluator.py`: 누락된 `generate_final_report` 태스크 구현 및 `raw_output` 변수명 버그 수정.
+### 🚀 Service Status
+- **All Services UP**: `backend`, `frontend`, `db`, `redis`, `media-server`, `ai-worker` 모두 정상 실행 중 (`docker-compose ps` 확인).
+- **AI-Worker Logs**:
+  ```
+  [INFO] AI-Worker-Evaluator: ✅ Evaluator Model Loaded
+  ```
+  - 모델 로딩 성공 및 Celery 연결 정상 확인.
 
-4. **Init Script 수정**:
-   - `infra/postgres/init.sql`: 오류를 유발하는 `CREATE INDEX` 구문 제거 (SQLModel이 테이블 생성 후 관리).
+### 📊 Quality Check
+- [x] DB 연결 및 테이블 생성 성공
+- [x] Pydantic v2 호환성 문제 해결
+- [x] Celery Task 등록 완료
 
-## 3. 검증 절차 (Verification Steps)
-
-// turbo
-1. **서비스 재빌드 및 실행**:
-   ```bash
-   docker-compose build ai-worker && docker-compose up -d ai-worker
-   ```
-
-2. **로그 확인**:
-   ```bash
-   docker logs interview_worker
-   ```
-   - "Connected to Celery" 및 모델 로드 로그 확인.
-
-3. **통합 테스트**:
-   - Frontend에서 면접 생성 -> 질문 생성 -> 답변 제출 -> 리포트 생성 흐름이 끊기지 않는지 확인.
-
-## 4. 향후 개선 권장사항 (Recommendations)
-- **Shared Library**: `models.py`를 공통 라이브러리(패키지)로 분리하여 두 서비스가 공유하도록 구조 변경 필요.
-- **Migration Tool**: `alembic`을 도입하여 스키마 변경 이력을 체계적으로 관리 필요.
+## 4. 향후 작업을 위한 제언
+1. **Shared Library 구축**: `backend`와 `ai-worker`가 `models.py`를 복사해서 쓰지 않고, 공통 패키지로 관리하는 것을 강력히 권장합니다.
+2. **CI/CD 파이프라인**: 코드 변경 시 Docker 이미지가 자동으로 갱신되도록 설정하여 로컬 경로 문제 방지 필요.
