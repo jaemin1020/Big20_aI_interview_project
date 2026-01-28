@@ -29,10 +29,17 @@ export const register = async (email, username, password, fullName) => {
 };
 
 export const login = async (username, password) => {
-    const response = await api.post('/token', {
-        username,
-        password
+    // FastAPI OAuth2PasswordRequestForm은 form-data 형식 요구
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    const response = await api.post('/token', formData.toString(), {
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
     });
+    
     if (response.data.access_token) {
         localStorage.setItem('token', response.data.access_token);
     }
