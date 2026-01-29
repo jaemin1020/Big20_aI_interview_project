@@ -49,6 +49,47 @@ class User(SQLModel, table=True):
     
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="candidate")
+    resumes: List["Resume"] = Relationship(back_populates="candidate")
+
+class Resume(SQLModel, table=True):
+    """이력서 테이블"""
+    __tablename__ = "resumes"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    candidate_id: int = Field(foreign_key="users.id", index=True)
+    
+    # 파일 정보
+    file_name: str = Field(description="원본 파일명")
+    file_path: str = Field(description="저장 경로 (S3 또는 로컬)")
+    file_size: int = Field(description="파일 크기 (bytes)")
+    
+    # 추출된 텍스트 (PDF → Text)
+    extracted_text: Optional[str] = Field(default=None, description="PDF에서 추출한 전체 텍스트")
+    
+    # 구조화된 정보 (JSON)
+    structured_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSONB),
+        description="경력, 학력, 기술스택 등 구조화된 데이터"
+    )
+    
+    # 벡터 임베딩 (768차원 - 이력서 전체 내용)
+    embedding: Any = Field(
+        default=None,
+        sa_column=Column(Vector(768)),
+        description="이력서 내용 벡터 (유사 이력서 검색용)"
+    )
+    
+    # 메타데이터
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    processed_at: Optional[datetime] = Field(default=None, description="파싱 완료 시각")
+    is_active: bool = Field(default=True)
+    processing_status: str = Field(default="pending", description="pending, processing, completed, failed")
+    
+    # Relationships
+    candidate: User = Relationship(back_populates="resumes")
+    interviews: List["Interview"] = Relationship(back_populates="resume")
+
 
 class Company(SQLModel, table=True):
     """회사 정보 테이블 (벡터 검색 지원)"""
@@ -76,24 +117,9 @@ class Company(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    job_postings: List["JobPosting"] = Relationship(back_populates="company")
-
-class JobPosting(SQLModel, table=True):
-    """채용 공고 테이블"""
-    __tablename__ = "job_postings"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    company_id: str = Field(foreign_key="companies.id", index=True)
-    
-    title: str
-    description: str
-    requirements: str
-    position: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    
     # Relationships
-    company: Company = Relationship(back_populates="job_postings")
-    interviews: List["Interview"] = Relationship(back_populates="job_posting")
+    interviews: List["Interview"] = Relationship(back_populates="company")
+
 
 class Interview(SQLModel, table=True):
     """면접 세션 테이블"""
@@ -101,10 +127,11 @@ class Interview(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int = Field(foreign_key="users.id", index=True)
-    job_posting_id: Optional[int] = Field(default=None, foreign_key="job_postings.id")
+    company_id: Optional[str] = Field(default=None, foreign_key="companies.id", index=True)
+    resume_id: Optional[int] = Field(default=None, foreign_key="resumes.id", index=True)
     
     # 면접 정보
-    position: str  # 지원 직무
+    position: str = Field(description="지원 직무 (예: Backend Engineer)")
     status: InterviewStatus = Field(default=InterviewStatus.SCHEDULED)
     
     # 시간 정보
@@ -124,7 +151,8 @@ class Interview(SQLModel, table=True):
     
     # Relationships
     candidate: User = Relationship(back_populates="interviews")
-    job_posting: Optional[JobPosting] = Relationship(back_populates="interviews")
+    company: Optional[Company] = Relationship(back_populates="interviews")
+    resume: Optional[Resume] = Relationship(back_populates="interviews")
     transcripts: List["Transcript"] = Relationship(back_populates="interview")
     evaluation_report: Optional["EvaluationReport"] = Relationship(back_populates="interview")
 
@@ -136,6 +164,11 @@ class Question(SQLModel, table=True):
     content: str
     category: QuestionCategory
     difficulty: QuestionDifficulty
+    
+    # 질문 유형 및 추가 질문 여부
+    question_type: Optional[str] = Field(default=None, description="자기소개, 지원동기, 직무지식, 직무경험, 문제해결, 협업, 책임감, 성장가능성")
+    is_follow_up: bool = Field(default=False, description="추가 질문(1-1, 2-1, 3-1) 여부")
+    parent_question_id: Optional[int] = Field(default=None, foreign_key="questions.id", description="원 질문 ID (추가 질문인 경우)")
     
     # 평가 기준 (JSON 형식)
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
@@ -261,7 +294,7 @@ class UserLogin(SQLModel):
 class InterviewCreate(SQLModel):
     """면접 생성 요청 모델"""
     position: str
-    job_posting_id: Optional[int] = None
+    company_id: Optional[str] = None
     scheduled_time: Optional[datetime] = None
 
 class InterviewResponse(SQLModel):

@@ -41,16 +41,10 @@ USE_DEEPGRAM = bool(DEEPGRAM_API_KEY)
 
 if USE_DEEPGRAM:
     try:
-        # Deepgram SDK v5+ 올바른 import
-        from deepgram import (
-            DeepgramClient,
-            DeepgramClientOptions,
-            LiveTranscriptionEvents,
-            LiveOptions,
-        )
+        from deepgram import DeepgramClient
         logger.info("✅ Deepgram SDK v5+ loaded successfully")
-    except ImportError:
-        logger.error("❌ deepgram-sdk not installed")
+    except ImportError as e:
+        logger.error(f"❌ deepgram-sdk import failed: {e}")
         USE_DEEPGRAM = False
     except Exception as e:
         logger.warning(f"⚠️ Error loading Deepgram SDK: {e}. STT will be disabled.")
@@ -98,8 +92,7 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
     
     try:
         # Deepgram 클라이언트 초기화 (v5)
-        config = DeepgramClientOptions(options={"keepalive": "true"})
-        deepgram = DeepgramClient(DEEPGRAM_API_KEY, config)
+        deepgram = DeepgramClient(DEEPGRAM_API_KEY)
         
         # 연결 옵션 설정
         options = LiveOptions(
@@ -143,8 +136,8 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
             logger.error(f"[{session_id}] Deepgram 에러: {error}")
 
         # 이벤트 핸들러 등록
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+        dg_connection.on("Results", on_message)
+        dg_connection.on("Error", on_error)
         
         # 연결 시작
         if await dg_connection.start(options) is False:
