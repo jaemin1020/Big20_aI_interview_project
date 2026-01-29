@@ -39,11 +39,41 @@ class Speaker(str, Enum):
     USER = "User"
 
 # Models (Matching Backend)
+class Company(SQLModel, table=True):
+    """회사 정보 테이블 (벡터 검색 지원)"""
+    __tablename__ = "companies"
+    
+    id: str = Field(primary_key=True, max_length=50)
+    company_name: str
+    ideal: Optional[str] = None
+    description: Optional[str] = None
+    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Resume(SQLModel, table=True):
+    """이력서 테이블"""
+    __tablename__ = "resumes"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    candidate_id: int
+    file_name: str
+    file_path: str
+    file_size: int
+    extracted_text: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    processed_at: Optional[datetime] = None
+    is_active: bool = Field(default=True)
+    processing_status: str = Field(default="pending")
+
 class Interview(SQLModel, table=True):
     __tablename__ = "interviews"
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int
-    job_posting_id: Optional[int] = None
+    company_id: Optional[str] = None
+    resume_id: Optional[int] = None
     position: str
     status: InterviewStatus = Field(default=InterviewStatus.SCHEDULED)
     scheduled_time: Optional[datetime] = None
@@ -59,6 +89,9 @@ class Question(SQLModel, table=True):
     content: str
     category: QuestionCategory
     difficulty: QuestionDifficulty
+    question_type: Optional[str] = None
+    is_follow_up: bool = Field(default=False)
+    parent_question_id: Optional[int] = None
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
     # Using Any for embedding to bypass SQLModel type inference bug with List[float]
     embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
@@ -69,6 +102,7 @@ class Question(SQLModel, table=True):
     is_active: bool = Field(default=True)
     usage_count: int = Field(default=0)
     avg_score: Optional[float] = None
+
 
 class Transcript(SQLModel, table=True):
     __tablename__ = "transcripts"
@@ -188,3 +222,46 @@ def update_interview_overall_score(interview_id: int, score: float):
             interview.overall_score = score
             session.add(interview)
             session.commit()
+
+# ==================== Company Helper Functions ====================
+
+def create_company(company_id: str, company_name: str, ideal: str = None, description: str = None, embedding: List[float] = None):
+    """회사 정보 생성"""
+    with Session(engine) as session:
+        company = Company(
+            id=company_id,
+            company_name=company_name,
+            ideal=ideal,
+            description=description,
+            embedding=embedding
+        )
+        session.add(company)
+        session.commit()
+        session.refresh(company)
+        return company
+
+def get_company_by_id(company_id: str):
+    """회사 ID로 조회"""
+    with Session(engine) as session:
+        return session.get(Company, company_id)
+
+def update_company_embedding(company_id: str, embedding: List[float]):
+    """회사 특성 벡터 업데이트"""
+    with Session(engine) as session:
+        company = session.get(Company, company_id)
+        if company:
+            company.embedding = embedding
+            company.updated_at = datetime.utcnow()
+            session.add(company)
+            session.commit()
+
+def find_similar_companies(embedding: List[float], limit: int = 5):
+    """벡터 유사도 기반 유사 회사 검색"""
+    with Session(engine) as session:
+        stmt = select(Company).where(
+            Company.embedding.isnot(None)
+        ).order_by(
+            Company.embedding.cosine_distance(embedding)
+        ).limit(limit)
+        
+        return session.exec(stmt).all()
