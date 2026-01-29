@@ -4,7 +4,7 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session, text
 from sqlalchemy.exc import OperationalError
 
-from models import User, Interview, Transcript, EvaluationReport, Question, JobPosting
+from models import User, Interview, Transcript, EvaluationReport, Question
 
 # 로깅 설정
 logger = logging.getLogger("Database")

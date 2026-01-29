@@ -36,6 +36,7 @@ function App() {
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
+  const isRecordingRef = useRef(false);
 
   // 자동 로그인 확인
   useEffect(() => {
@@ -124,8 +125,12 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
-          setTranscript(prev => prev + ' ' + data.text);
-          console.log('[STT]:', data.text);
+          console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
+          
+          // 녹음 중일 때만 transcript 업데이트
+          if (isRecordingRef.current) {
+            setTranscript(prev => prev + ' ' + data.text);
+          }
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -137,6 +142,7 @@ function App() {
   };
 
   const setupWebRTC = async (interviewId) => {
+    console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
 
@@ -145,8 +151,12 @@ function App() {
         video: true, 
         audio: true 
       });
+      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+        console.log('[WebRTC] Added track:', track.kind, track.label);
+      });
     } catch (err) {
       console.warn('[WebRTC] Camera failed, trying audio-only:', err);
       try {
@@ -161,6 +171,7 @@ function App() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    console.log('[WebRTC] Sending offer to server...');
 
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
@@ -172,16 +183,23 @@ function App() {
       headers: { 'Content-Type': 'application/json' }
     });
 
+    if (!response.ok) {
+      throw new Error(`WebRTC offer failed: ${response.status}`);
+    }
+
     const answer = await response.json();
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log('[WebRTC] Connection established successfully');
   };
 
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
+      isRecordingRef.current = false;
     } else {
       setTranscript('');
       setIsRecording(true);
+      isRecordingRef.current = true;
     }
   };
 

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from celery import Celery
@@ -9,7 +10,7 @@ import os
 
 from database import init_db, get_session
 from models import (
-    User, UserCreate, UserLogin,
+    User, UserCreate, UserLogin, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
@@ -36,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Company Router 등록
+from routes.companies import router as companies_router
+app.include_router(companies_router)
 
 # Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
@@ -68,7 +73,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
     return {"id": new_user.id, "username": new_user.username, "email": new_user.email}
 
 @app.post("/token")
-async def login(form_data: UserLogin, db: Session = Depends(get_session)):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)):
     stmt = select(User).where(User.username == form_data.username)
     user = db.exec(stmt).first()
     
@@ -100,7 +105,7 @@ async def create_interview(
     new_interview = Interview(
         candidate_id=current_user.id,
         position=interview_data.position,
-        job_posting_id=interview_data.job_posting_id,
+        company_id=interview_data.company_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
         start_time=datetime.utcnow()
@@ -117,13 +122,13 @@ async def create_interview(
     
     try:
         logger.info("Requesting question generation from AI-Worker...")
-        # Celery 태스크 호출 (최대 30초 대기)
+        # Celery 태스크 호출 (최대 90초 대기 - 모델 로딩 시간 고려)
         task = celery_app.send_task(
             "tasks.question_generator.generate_questions",
             args=[interview_data.position, 5]
         )
         # 동기적으로 결과를 기다림 (UX상 질문이 바로 필요함)
-        generated_questions = task.get(timeout=30)
+        generated_questions = task.get(timeout=90)
         logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
         
     except Exception as e:
