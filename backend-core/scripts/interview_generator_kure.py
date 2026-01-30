@@ -10,16 +10,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class InterviewQuestionGenerator:
     """
-    BGE-M3 모델을 활용한 면접 질문 매칭 시스템
-    (생성형 LLM이 아닌, 검색 기반의 질문 추천 시스템)
+    KURE-v1 모델을 활용한 면접 질문 매칭 시스템
+    (nlpai-lab/KURE-v1)
     """
 
     def __init__(self):
-        print("🔄 모델을 로드하고 있습니다... (BGE-M3)")
-        self.model = SentenceTransformer('BAAI/bge-m3')
+        print("🔄 모델을 로드하고 있습니다... (nlpai-lab/KURE-v1)")
+        # trust_remote_code=True가 필요할 수 있음
+        self.model = SentenceTransformer('nlpai-lab/KURE-v1', trust_remote_code=True)
         print("✅ 모델 로드 완료!")
 
-        # 가상의 면접 질문 데이터베이스 (실제로는 DB에서 가져와야 함)
+        # 가상의 면접 질문 데이터베이스
         self.question_bank = [
             # Python
             "Python의 GIL(Global Interpreter Lock)에 대해 설명하고, 이것이 멀티스레딩 성능에 미치는 영향을 설명해주세요.",
@@ -65,7 +66,6 @@ class InterviewQuestionGenerator:
     def analyze_text(self, text: str) -> Dict[str, Any]:
         """입력 텍스트(이력서/자기소개) 분석"""
 
-        # 간단한 키워드 추출 (비효율적이지만 데모용)
         keywords = ['Python', 'Django', 'FastAPI', 'Java', 'Spring', 'Docker', 'AWS', 'SQL', 'React']
         found_keywords = [k for k in keywords if k.lower() in text.lower()]
 
@@ -102,10 +102,10 @@ def main():
     clear_screen()
     print("=" * 60)
     print("🤖 면접 질문 생성기 (Interview Question Generator)")
-    print("   Powered by BGE-M3 (Retrieval-based)")
+    print("   Powered by nlpai-lab/KURE-v1")
     print("=" * 60)
-    print("이력서 내용이나 자기소개, 혹은 기술 스택을 입력하면")
-    print("준비된 질문 DB에서 가장 적합한 면접 질문을 찾아줍니다.")
+    print("이력서 내용이나 자기소개를 입력하면 KURE-v1 모델이")
+    print("가장 적합한 면접 질문을 찾아줍니다.")
     print("-" * 60)
 
     generator = InterviewQuestionGenerator()
@@ -134,10 +134,9 @@ def main():
         # 2. 질문 매칭
         questions = generator.generate_questions(user_input, top_k=5)
 
-        print(f"\n🎯 '{analysis['summary']}'에 대한 추천 면접 질문:")
+        print(f"\n🎯 '{analysis['summary']}'에 대한 추천 면접 질문 (KURE-v1):")
         for i, item in enumerate(questions, 1):
             score = item['similarity']
-            # 유사도가 너무 낮으면 표시 안 함 (옵션)
             relevance = ""
             if score > 0.6: relevance = "(매우 관련됨)"
             elif score > 0.4: relevance = "(관련됨)"
