@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
-  createInterview, 
-  getInterviewQuestions, 
+import {
+  createInterview,
+  getInterviewQuestions,
   createTranscript,
   completeInterview,
   getEvaluationReport,
-  login as apiLogin, 
-  register as apiRegister, 
-  logout as apiLogout, 
-  getCurrentUser 
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  getCurrentUser
 } from './api/interview';
 
 function App() {
@@ -16,23 +16,23 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
-  
-  const [account, setAccount] = useState({ 
-    username: '', 
-    password: '', 
+
+  const [account, setAccount] = useState({
+    username: '',
+    password: '',
     email: '',
-    fullName: '' 
+    fullName: ''
   });
 
   const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [report, setReport] = useState(null);
-  
+
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [position, setPosition] = useState('');
-  
+
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
@@ -100,11 +100,11 @@ function App() {
       // 1. Interview 생성
       const newInterview = await createInterview(position);
       setInterview(newInterview);
-      
+
       // 2. 질문 조회
       const qs = await getInterviewQuestions(newInterview.id);
       setQuestions(qs);
-      
+
       setStep('interview');
     } catch (err) {
       console.error("Interview start error:", err);
@@ -141,9 +141,9 @@ function App() {
     pcRef.current = pc;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
       });
       videoRef.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -187,7 +187,7 @@ function App() {
 
   const nextQuestion = async () => {
     const answerText = transcript.trim() || "답변 없음";
-    
+
     try {
       // Transcript 저장 (사용자 답변)
       await createTranscript(
@@ -196,7 +196,7 @@ function App() {
         answerText,
         questions[currentIdx].id
       );
-      
+
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(currentIdx + 1);
         setTranscript('');
@@ -204,13 +204,13 @@ function App() {
       } else {
         // 면접 종료
         setStep('loading');
-        
+
         if (wsRef.current) wsRef.current.close();
         if (pcRef.current) pcRef.current.close();
-        
+
         // 면접 완료 처리
         await completeInterview(interview.id);
-        
+
         // 평가 리포트 대기
         setTimeout(async () => {
           try {
@@ -260,16 +260,16 @@ function App() {
               <>
                 <div>
                   <label>이메일:</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     value={account.email}
                     onChange={(e) => setAccount({ ...account, email: e.target.value })}
                   />
                 </div>
                 <div>
                   <label>성함:</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={account.fullName}
                     onChange={(e) => setAccount({ ...account, fullName: e.target.value })}
                   />
@@ -278,16 +278,16 @@ function App() {
             )}
             <div>
               <label>아이디:</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={account.username}
                 onChange={(e) => setAccount({ ...account, username: e.target.value })}
               />
             </div>
             <div>
               <label>비밀번호:</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={account.password}
                 maxLength={24}
                 onChange={(e) => setAccount({ ...account, password: e.target.value })}
@@ -298,8 +298,8 @@ function App() {
           <button onClick={handleAuth}>
             {authMode === 'login' ? '로그인' : '회원가입'}
           </button>
-          <p 
-            style={{ cursor: 'pointer', color: '#3b82f6', fontSize: '0.9em' }} 
+          <p
+            style={{ cursor: 'pointer', color: '#3b82f6', fontSize: '0.9em' }}
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
           >
             {authMode === 'login' ? '회원가입' : '로그인'}
@@ -317,9 +317,9 @@ function App() {
           <div className="input-group">
             <div>
               <label>지원 직무:</label>
-              <input 
-                type="text" 
-                placeholder="예: Frontend 개발자" 
+              <input
+                type="text"
+                placeholder="예: Frontend 개발자"
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
               />
@@ -333,16 +333,16 @@ function App() {
         <div className="card">
           <h2>실시간 면접</h2>
           <video ref={videoRef} autoPlay playsInline muted />
-          
+
           {questions.length > 0 && (
             <div className="question-box">
               <h3>질문 {currentIdx + 1}:</h3>
               <p>{questions[currentIdx].content}</p>
-              
-              <div style={{ 
-                marginTop: '15px', 
-                padding: '10px', 
-                background: 'rgba(16, 185, 129, 0.1)', 
+
+              <div style={{
+                marginTop: '15px',
+                padding: '10px',
+                background: 'rgba(16, 185, 129, 0.1)',
                 borderRadius: '8px'
               }}>
                 <h4 style={{ color: '#10b981' }}>
@@ -352,15 +352,15 @@ function App() {
               </div>
             </div>
           )}
-          
+
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            <button 
+            <button
               onClick={toggleRecording}
               style={{ backgroundColor: isRecording ? '#ef4444' : '#10b981' }}
             >
               {isRecording ? '⏸ 녹음 중지' : '🎤 녹음 시작'}
             </button>
-            
+
             <button onClick={nextQuestion}>
               {currentIdx < questions.length - 1 ? "다음 질문 ➡️" : "면접 종료 ✓"}
             </button>
@@ -378,10 +378,10 @@ function App() {
       {step === 'result' && report && (
         <div className="card">
           <h2>면접 결과 분석</h2>
-          
+
           <div className="question-box">
             <h3>종합 점수: {report.overall_score?.toFixed(1)}/100</h3>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '15px' }}>
               <div style={{ textAlign: 'center' }}>
                 <p>기술 점수</p>
@@ -396,26 +396,26 @@ function App() {
                 <h2 style={{ color: '#f59e0b' }}>{report.cultural_fit_score?.toFixed(1)}</h2>
               </div>
             </div>
-            
+
             <div style={{ marginTop: '20px', textAlign: 'left' }}>
               <h4>종합 평가:</h4>
               <p>{report.summary_text}</p>
-              
+
               {report.details_json && (
                 <>
                   <h4 style={{ marginTop: '15px' }}>강점:</h4>
                   <p>{report.details_json.strengths}</p>
-                  
+
                   <h4 style={{ marginTop: '15px' }}>개선점:</h4>
                   <p>{report.details_json.areas_for_improvement}</p>
-                  
+
                   <h4 style={{ marginTop: '15px' }}>채용 추천:</h4>
                   <p>{report.details_json.recommendation}</p>
                 </>
               )}
             </div>
           </div>
-          
+
           <button onClick={() => setStep('landing')}>처음으로</button>
         </div>
       )}
