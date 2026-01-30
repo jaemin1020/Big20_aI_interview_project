@@ -18,9 +18,10 @@ def get_embedding_model():
     """임베딩 모델 싱글톤"""
     global _model
     if _model is None:
-        print("🔄 임베딩 모델 로딩 중...")
-        _model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+        print("🔄 BGE-M3 모델 로딩 중...")
+        _model = SentenceTransformer('BAAI/bge-m3')
         print("✅ 모델 로드 완료!")
+        print(f"📊 임베딩 차원: {_model.get_sentence_embedding_dimension()}")
     return _model
 
 def find_similar_questions(
