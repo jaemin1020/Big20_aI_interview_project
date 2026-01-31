@@ -104,6 +104,8 @@ function App() {
       return;
     }
 
+    setStep('loading_questions'); // 로딩 상태 시작
+
     try {
       // 0. 이력서 업로드 (있다면)
       let resumeId = null;
@@ -115,6 +117,7 @@ function App() {
             console.log("Resume uploaded, ID:", resumeId);
         } catch (e) {
             if(!confirm("이력서 업로드에 실패했습니다. 이력서 없이 진행하시겠습니까?")) {
+                setStep('landing'); // 취소 시 랜딩으로 복귀
                 return;
             }
         }
@@ -133,6 +136,7 @@ function App() {
     } catch (err) {
       console.error("Interview start error:", err);
       alert("면접 세션 생성 실패");
+      setStep('landing'); // 실패 시 랜딩으로 복귀
     }
   };
 
@@ -514,6 +518,14 @@ function App() {
               {currentIdx < questions.length - 1 ? "다음 질문 ➡️" : "면접 종료 ✓"}
             </button>
           </div>
+        </div>
+      )}
+
+      {step === 'loading_questions' && (
+        <div className="card">
+          <h2>AI 면접관이 질문을 준비하고 있습니다...</h2>
+          <p>지원 직무와 이력서를 분석 중입니다. (약 30초 소요)</p>
+          <div className="spinner"></div>
         </div>
       )}
 
