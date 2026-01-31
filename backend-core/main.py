@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from typing import List
 import logging
 import os
+import shutil
+from pathlib import Path
 
 from database import init_db, get_session
 from models import (
@@ -14,7 +16,8 @@ from models import (
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
-    EvaluationReport, EvaluationReportResponse
+    EvaluationReport, EvaluationReportResponse,
+    Resume
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
@@ -325,6 +328,115 @@ async def get_evaluation_report(
         raise HTTPException(status_code=404, detail="Report not yet available")
     
     return report
+
+# ==================== Resume Endpoints ====================
+
+# 업로드 디렉토리 설정
+UPLOAD_DIR = Path("./uploads/resumes")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.post("/resumes/upload")
+async def upload_resume(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """이력서 파일 업로드 (PDF, DOC, DOCX)"""
+    
+    # 파일 확장자 검증
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    # 파일 저장 경로 생성 (candidate_id_timestamp_filename)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{current_user.id}_{timestamp}_{file.filename}"
+    file_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        # 파일 저장
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Resume 레코드 생성
+        new_resume = Resume(
+            candidate_id=current_user.id,
+            file_name=file.filename,
+            file_path=str(file_path),
+            file_size=file_path.stat().st_size,
+            processing_status="pending"
+        )
+        db.add(new_resume)
+        db.commit()
+        db.refresh(new_resume)
+        
+        logger.info(f"Resume uploaded: ID={new_resume.id}, User={current_user.username}, File={file.filename}")
+        
+        # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
+        celery_app.send_task(
+            "parse_resume_pdf",
+            args=[new_resume.id, str(file_path)]
+        )
+        logger.info(f"Resume parsing task sent for ID={new_resume.id}")
+        
+        return {
+            "id": new_resume.id,
+            "file_name": new_resume.file_name,
+            "file_size": new_resume.file_size,
+            "status": "uploaded",
+            "message": "Resume uploaded successfully. Processing will begin shortly."
+        }
+        
+    except Exception as e:
+        logger.error(f"Resume upload failed: {e}")
+        # 실패 시 파일 삭제
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail="File upload failed")
+
+# ==================== Recruiter Endpoints ====================
+
+@app.get("/interviews")
+async def get_all_interviews(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """전체 인터뷰 목록 조회 (리크루터용)"""
+    
+    # 권한 체크: recruiter 또는 admin만 접근 가능
+    if current_user.role not in ["recruiter", "admin"]:
+        # candidate는 자신의 인터뷰만 조회 가능
+        stmt = select(Interview).where(
+            Interview.candidate_id == current_user.id
+        ).order_by(Interview.created_at.desc())
+    else:
+        # recruiter/admin은 전체 조회
+        stmt = select(Interview).order_by(Interview.created_at.desc())
+    
+    interviews = db.exec(stmt).all()
+    
+    # 응답 데이터 구성 (candidate 정보 포함)
+    result = []
+    for interview in interviews:
+        candidate = db.get(User, interview.candidate_id)
+        result.append({
+            "id": interview.id,
+            "candidate_id": interview.candidate_id,
+            "candidate_name": candidate.full_name if candidate else "Unknown",
+            "position": interview.position,
+            "status": interview.status,
+            "created_at": interview.created_at,
+            "start_time": interview.start_time,
+            "end_time": interview.end_time,
+            "overall_score": interview.overall_score
+        })
+    
+    logger.info(f"Interviews list requested by {current_user.username} ({current_user.role}): {len(result)} records")
+    return result
 
 # ==================== Health Check ====================
 
