@@ -63,6 +63,22 @@ function App() {
 
   const handleAuth = async () => {
     setAuthError('');
+    
+    // 클라이언트 사이드 유효성 검사
+    if (authMode === 'register') {
+        const usernameRegex = /^[a-z0-9_]{4,12}$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!usernameRegex.test(account.username)) {
+            setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+            return;
+        }
+        if (!emailRegex.test(account.email)) {
+            setAuthError("유효한 이메일 주소를 입력해주세요.");
+            return;
+        }
+    }
+
     try {
       if (authMode === 'login') {
         await apiLogin(account.username, account.password);
