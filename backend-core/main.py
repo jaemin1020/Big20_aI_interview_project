@@ -22,7 +22,9 @@ from models import (
     Resume
 )
 # 인증 관련 모듈 임포트
+# 인증 관련 모듈 임포트
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from utils.common import validate_email, validate_username  # 유효성 검사 추가
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
@@ -56,7 +58,17 @@ celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis:/
 # 회원가입
 @app.post("/register")
 async def register(user_data: UserCreate, db: Session = Depends(get_session)):
-    # 중복 확인
+    # 1. 유효성 검사 (길이 및 포맷)
+    if not validate_username(user_data.username):
+        raise HTTPException(
+            status_code=400, 
+            detail="아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 사용 가능합니다."
+        )
+    
+    if not validate_email(user_data.email):
+        raise HTTPException(status_code=400, detail="유효하지 않은 이메일 형식입니다.")
+
+    # 2. 중복 확인
     stmt = select(User).where(
         (User.username == user_data.username) | (User.email == user_data.email)
     )

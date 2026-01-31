@@ -117,8 +117,33 @@ def validate_email(email: str) -> bool:
     Returns:
         bool: 유효 여부
     """
+    if not email or len(email) > 255:
+        return False
+        
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email))
+
+
+def validate_username(username: str) -> bool:
+    """
+    아이디 유효성 검증 (최대 12글자)
+    
+    Args:
+        username: 사용자 아이디
+        
+    Returns:
+        bool: 유효 여부
+    """
+    if not username:
+        return False
+        
+    # 길이 체크 (4~12자 권장, 요구사항은 최대 12자)
+    if len(username) < 4 or len(username) > 12:
+        return False
+        
+    # 영문 소문자, 숫자, 밑줄(_)만 허용하는 정규식
+    pattern = r'^[a-z0-9_]+$'
+    return bool(re.match(pattern, username))
 
 
 def validate_phone(phone: str) -> bool:
