@@ -5,51 +5,58 @@ Big20_aI_interview_project/
 ```plaintext
 ├── .env                        # 공통 환경 변수 (API 키, DB 접속 정보)
 ├── docker-compose.yml          # 전체 서비스 오케스트레이션 (포트 및 네트워크 설정)
+├── commit_convention.md        # 커밋 메시지 컨벤션 가이드
+├── README.md                   # 프로젝트 문서
 │
-├── backend-core/               # [FastAPI] 실시간 질문 생성 (GPU 사용: Llama-3.1-8B Q4)
+├── backend-core/               # [FastAPI] 실시간 질문 생성 및 메인 API
 │   ├── main.py                 # API 라우팅, Celery 태스크 발행
 │   ├── database.py             # PostgreSQL & SQLModel 설정
 │   ├── models.py               # DB 테이블 정의 (InterviewSession, Question, Answer)
 │   ├── auth.py                 # 사용자 인증 및 보안 관련 로직
-│   ├── chains/
-│   │   └── llama_gen.py        # GPU 가속 질문 생성 로직 (HuggingFace Pipeline)
+│   ├── utils/                  # 유틸리티 모듈
+│   │   ├── question_helper.py  # 질문 생성 헬퍼
+│   │   └── rubric_generator.py # 평가 루브릭 생성기
 │   ├── logs/                   # 백엔드 서비스 로그 저장
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── ai-worker/                  # [Celery] 정밀 평가 및 감정 분석 (Solar-10.7B / DeepFace)
+├── ai-worker/                  # [Celery] 정밀 평가, 질문 생성, 감정 분석
 │   ├── main.py                 # Celery Worker 실행부
 │   ├── db.py                   # 워커용 데이터베이스 연결 유틸리티
 │   ├── tasks/
-│   │   ├── evaluator.py        # LangChain 기반 답변 정밀 평가
-│   │   └── vision.py           # DeepFace 기반 표정/감정 분석
-│   ├── models/                 # LLM 모델 파일 저장 (.gguf 등)
-│   ├── logs/                   # 분석 워커 상세 로그 저장
+│   │   ├── question_generator.py # Llama-3.1 기반 직무 맞춤형 질문 생성
+│   │   ├── evaluator.py        # Solar-10.7B 기반 답변 정밀 평가
+│   │   └── vision.py           # DeepFace 기반 표정/감정 분석 (예정)
+│   ├── tools/                  # LangChain 도구 (ResumeTool, CompanyTool)
+│   ├── models/                 # LLM 모델 파일 저장 (.gguf)
+│   ├── logs/                   # 워커 상세 로그
 │   ├── Dockerfile
 │   └── requirements.txt
 │
 ├── media-server/               # [WebRTC] 실시간 음성 및 영상 스트리밍 서버
-│   ├── main.py                 # aiortc & Deepgram(Nova-2) 연동 프레임워크
-│   ├── logs/                   # 스트리밍 및 미디어 처리 로그
+│   ├── main.py                 # aiortc & Deepgram(Nova-2) STT 연동
+│   ├── logs/                   # 스트리밍 로그
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── frontend/                   # [React/Vite] 프리미엄 웹 인터페이스
+├── frontend/                   # [React/Vite] 웹 인터페이스
 │   ├── src/
-│   │   ├── components/         # WebRTC 플레이어 및 채팅 UI 컴포넌트
-│   │   ├── api/                # Backend-core API 통신 모듈
-│   │   ├── App.jsx             # 메인 애플리케이션 컴포넌트
-│   │   ├── main.jsx            # 진입점 (Entry point)
-│   │   └── index.css           # 글로벌 스타일 (Glassmorphism 적용)
-│   ├── public/                 # 정적 자원 (이미지, 폰트 등)
-│   ├── index.html
-│   ├── vite.config.js          # Vite 빌드 설정
+│   │   ├── components/         # UI 컴포넌트
+│   │   ├── api/                # API 통신 모듈
+│   │   ├── App.jsx             # 메인 앱 로직
+│   │   └── main.jsx            # 진입점
+│   ├── public/                 # 정적 자원
+│   ├── vite.config.js          # Vite 설정
 │   ├── Dockerfile
 │   └── package.json
 │
-└── infra/                      # 인프라 데이터 저장소
-    ├── postgres/               # DB 데이터 영구 저장 (Volume 매핑)
-    └── redis/                  # Celery 메시지 브로커 데이터 캐싱
+├── docs/                       # 프로젝트 문서 및 가이드
+│   ├── DB_CONNECTION_STANDARD.md
+│   └── DB_INSERT_GUIDE.md
+│
+└── infra/                      # 인프라 데이터 저장소 (Volume)
+    ├── postgres/               # DB 데이터
+    └── redis/                  # Celery 브로커 데이터
 ```
 
 ## 2. 프로젝트 실행 (Workflow)
