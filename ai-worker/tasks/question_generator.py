@@ -191,10 +191,10 @@ class QuestionGenerator:
         return fallback_questions[:count]
 
 @shared_task(name="tasks.question_generator.generate_questions")
-def generate_questions_task(position: str, count: int = 5):
+def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
     try:
         generator = QuestionGenerator()
-        return generator.generate_questions(position, count)
+        return generator.generate_questions(position, interview_id, count)
     except Exception as e:
         logger.error(f"Task Error: {e}")
         return []
