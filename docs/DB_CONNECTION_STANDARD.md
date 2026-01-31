@@ -4,11 +4,7 @@
 본 문서는 `Big20_aI_interview_project`의 백엔드 시스템(`backend-core`, `ai-worker`)에서 사용하는 데이터베이스 연동 및 관리 기준을 정의합니다.
 
 ### 1.1 기술 스택
-<<<<<<< HEAD
 - **DBMS**: PostgreSQL 18 (pgvector 확장 사용)
-=======
-- **DBMS**: PostgreSQL 16 (pgvector 확장 사용)
->>>>>>> b07713b (db연동 기준서)
 - **Driver**: `psycopg` (v3, 비동기 지원)
 - **ORM**: SQLModel (SQLAlchemy 2.0 기반 wrapper)
 - **Connection URL**: `postgresql+psycopg://<user>:<password>@<host>:<port>/<dbname>`
