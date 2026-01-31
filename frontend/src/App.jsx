@@ -364,7 +364,7 @@ function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h1>AI Interview System v2.0</h1>
             <div>
-                <button onClick={handleRecruiterDashboard} style={{ fontSize: '0.8em', marginRight: '10px', backgroundColor: '#6366f1' }}>리크루터 모드</button>
+                <button onClick={handleRecruiterDashboard} style={{ fontSize: '0.8em', marginRight: '10px', backgroundColor: '#6366f1' }}>면접결과 확인</button>
                 <button onClick={handleLogout} style={{ fontSize: '0.8em' }}>로그아웃</button>
             </div>
           </div>
