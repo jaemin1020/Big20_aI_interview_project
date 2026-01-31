@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
+import av
 
 # 1. 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -105,36 +106,74 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
             "encoding": "linear16",
             "channels": 1,
             "sample_rate": 16000,
+            # VAD 및 발화 감지 옵션 추가
+            "interim_results": True,      # 중간 결과 수신 (빠른 피드백)
+            "vad_events": True,           # 발화 시작(SpeechStarted) 감지 활성화
+            "utterance_end_ms": "3000",   # 1초 침묵 시 발화 종료로 간주
+            # "endpointing": 300            # (선택) 더 빠른 문장 종결 처리
         }
+
+        # Deepgram 요구사항에 맞게 오디오 변환 (16kHz, Mono, s16le)
+        resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
 
         # Thread-safe WebSocket sending helper
         loop = asyncio.get_running_loop()
+
+        # [중요] Deepgram 연결 타임아웃 방지: 첫 오디오 프레임이 도착할 때까지 대기
+        try:
+            logger.info(f"[{session_id}] Waiting for first audio frame...")
+            first_frame = await audio_track.recv()
+            logger.info(f"[{session_id}] First audio frame received. Connecting to Deepgram...")
+        except Exception as e:
+            logger.warning(f"[{session_id}] Failed to receive first frame: {e}")
+            return
         
         # Deepgram v5 Sync Connect Pattern
-        # Note: using with statement as per docs / user snippet
         with deepgram.listen.v1.connect(**options) as connection:
             logger.info(f"[{session_id}] Deepgram V5 Connection Established")
 
             def on_message(message, **kwargs):
-                """Callback for receiving transcripts"""
+                """Callback for receiving transcripts & events"""
                 try:
-                    # message는 ListenV1SocketClientResponse 타입
-                    # user snippet logic:
+                    # 1. 메시지 타입 확인 (SpeechStarted 등)
+                    msg_type = getattr(message, "type", "Result")
+                    
+                    if msg_type == "SpeechStarted":
+                        logger.info(f"[{session_id}] 🗣️ Speech Started detected")
+                        # 프론트엔드에 발화 시작 알림 (말하기 시작했음을 UI에 표시 가능)
+                        event_data = {
+                            "session_id": session_id,
+                            "type": "speech_started",
+                            "timestamp": time.time()
+                        }
+                        if session_id in active_websockets:
+                            ws = active_websockets[session_id]
+                            asyncio.run_coroutine_threadsafe(send_to_websocket(ws, event_data), loop)
+                        return
+
+                    # 2. 일반 Transcript 처리
                     if hasattr(message, 'channel') and hasattr(message.channel, 'alternatives'):
-                        sentence = message.channel.alternatives[0].transcript
+                        alt = message.channel.alternatives[0]
+                        sentence = alt.transcript
+                        
                         if len(sentence) == 0:
                             return
                         
-                        logger.info(f"[{session_id}] STT: {sentence}")
+                        # 최종 결과(final)만 로그 또는 처리할 수도 있고, interim도 보낼 수 있음
+                        is_final = message.is_final if hasattr(message, 'is_final') else False
+                        
+                        # 로그에는 Final만, 프론트엔드에는 둘 다 전송하여 실시간성을 높임
+                        if is_final:
+                            logger.info(f"[{session_id}] STT (Final): {sentence}")
                         
                         stt_data = {
                             "session_id": session_id,
                             "text": sentence,
                             "type": "stt_result",
+                            "is_final": is_final,
                             "timestamp": time.time()
                         }
                         
-                        # Bridge to Asyncio Loop for WebSocket
                         if session_id in active_websockets:
                             ws = active_websockets[session_id]
                             asyncio.run_coroutine_threadsafe(send_to_websocket(ws, stt_data), loop)
@@ -148,7 +187,6 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
             # Register Events
             connection.on(EventType.MESSAGE, on_message)
             connection.on(EventType.ERROR, on_error)
-            # connection.on(EventType.OPEN, lambda _: logger.info(f"[{session_id}] Deepgram Connected"))
             
             # Start listening in a separate thread (Blocking call)
             def listening_thread_func():
@@ -160,19 +198,32 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
             listen_thread = threading.Thread(target=listening_thread_func, daemon=True)
             listen_thread.start()
 
+            
             try:
                 # Main Audio Send Loop (Async)
-                logger.info(f"[{session_id}] Starting Audio Stream to Deepgram...")
-                frame_count = 0
+                # 1. 첫 번째 프레임 처리 (이미 받았으므로)
+                try:
+                    transformed = resampler.resample(first_frame)
+                    for tf in transformed:
+                        connection.send_media(tf.to_ndarray().tobytes())
+                except Exception as e:
+                    logger.error(f"[{session_id}] Error sending first frame: {e}")
+
+                # 2. 이후 프레임 루프
+                logger.info(f"[{session_id}] Streaming audio to Deepgram...")
+                frame_count = 1
                 while True:
                     try:
                         frame = await audio_track.recv()
                         frame_count += 1
                         
-                        audio_data = frame.to_ndarray().tobytes()
+                        # WebRTC AudioFrame(보통 48kHz, Stereo) -> Deepgram(16kHz, Mono) 변환
+                        # 변환하지 않으면 Deepgram이 데이터를 인식하지 못해 Timeout(1011) 발생 가능
+                        transformed_frames = resampler.resample(frame)
                         
-                        # Send media (Sync call inside Async loop - assumes low overhead)
-                        connection.send_media(audio_data)
+                        for tf in transformed_frames:
+                            audio_data = tf.to_ndarray().tobytes()
+                            connection.send_media(audio_data)
                         
                         if frame_count % 100 == 0:
                             logger.debug(f"[{session_id}] Sent {frame_count} frames")
