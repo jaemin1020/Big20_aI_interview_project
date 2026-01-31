@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger("ResumeStructurer")
 
 
-class ResumeStructurerV2:
+class ResumeStructurer:
     """실제 이력서 구조 기반 파서"""
     
     @staticmethod
@@ -24,15 +24,15 @@ class ResumeStructurerV2:
             dict: 구조화된 이력서 데이터
         """
         structured = {
-            "personal_info": ResumeStructurerV2._extract_personal_info(text),
-            "target_position": ResumeStructurerV2._extract_target_position(text),
-            "experience": ResumeStructurerV2._extract_experience(text),
-            "education": ResumeStructurerV2._extract_education(text),
-            "certifications": ResumeStructurerV2._extract_certifications(text),
-            "projects": ResumeStructurerV2._extract_projects(text),
-            "skills": ResumeStructurerV2._extract_skills(text),
-            "languages": ResumeStructurerV2._extract_languages(text),
-            "cover_letter": ResumeStructurerV2._extract_cover_letter(text)
+            "personal_info": ResumeStructurer._extract_personal_info(text),
+            "target_position": ResumeStructurer._extract_target_position(text),
+            "experience": ResumeStructurer._extract_experience(text),
+            "education": ResumeStructurer._extract_education(text),
+            "certifications": ResumeStructurer._extract_certifications(text),
+            "projects": ResumeStructurer._extract_projects(text),
+            "skills": ResumeStructurer._extract_skills(text),
+            "languages": ResumeStructurer._extract_languages(text),
+            "cover_letter": ResumeStructurer._extract_cover_letter(text)
         }
         
         return structured
@@ -130,7 +130,7 @@ class ResumeStructurerV2:
                     "duration": period,
                     "description": description,
                     "achievements": [],
-                    "tech_stack": ResumeStructurerV2._extract_tech_from_text(description)
+                    "tech_stack": ResumeStructurer._extract_tech_from_text(description)
                 })
         
         return experiences
@@ -239,7 +239,7 @@ class ResumeStructurerV2:
                     "duration": None,
                     "description": description,
                     "role": None,
-                    "tech_stack": ResumeStructurerV2._extract_tech_from_text(description),
+                    "tech_stack": ResumeStructurer._extract_tech_from_text(description),
                     "achievements": []
                 })
         
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     with open("resume_text.txt", "r", encoding="utf-8") as f:
         resume_text = f.read()
     
-    structurer = ResumeStructurerV2()
+    structurer = ResumeStructurer()
     result = structurer.structure_resume(resume_text)
     
     print(json.dumps(result, ensure_ascii=False, indent=2))
