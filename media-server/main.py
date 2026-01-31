@@ -182,12 +182,16 @@ async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str
                         break
             finally:
                 # Loop ends when track closes
-                pass
-                # Context manager will handle connection close
+                logger.info(f"[{session_id}] Audio track closed. Finishing Deepgram session...")
+                # Context manager exit will automatically call finish(), but explicit call ensures thread unblocks
+                connection.finish()
             
-            # Wait for thread? (Optional, but context exit might kill it)
-            # listen_thread.join(timeout=1.0)
-            logger.info(f"[{session_id}] Deepgram Session Finished")
+            # Wait for listening thread to exit
+            listen_thread.join(timeout=2.0)
+            if listen_thread.is_alive():
+                logger.warning(f"[{session_id}] Deepgram listening thread did not exit cleanly")
+            else:
+                logger.info(f"[{session_id}] Deepgram listening thread finished")
 
     except Exception as e:
         logger.error(f"[{session_id}] Deepgram Init Failed: {e}")
