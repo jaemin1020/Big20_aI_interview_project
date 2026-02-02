@@ -165,7 +165,6 @@ class QuestionGenerator:
         4. 각 질문은 한 줄로 작성
         5. 질문만 나열하고 번호나 추가 설명 없이
 
-        질문 {count}개:
         """)}]
         
         try:
