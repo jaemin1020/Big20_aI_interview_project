@@ -60,7 +60,7 @@ class QuestionGenerator:
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            max_new_tokens=100,
+            max_new_tokens=512,  # 질문 여러 개를 생성하기 위해 충분한 길이 확보
             temperature=0.8, # 창의성 확보
             do_sample=True,
             pad_token_id=self.tokenizer.eos_token_id
@@ -124,7 +124,8 @@ class QuestionGenerator:
         """DB에서 검증된 질문 가져오기"""
         
         try:
-            db_questions = get_questions_by_position(position, limit=count)
+            # db.py의 함수명에 맞춰 호출
+            db_questions = get_best_questions_by_position(position, limit=count)
             
             # 재활용 시 사용량 증가
             for q in db_questions:
@@ -140,8 +141,6 @@ class QuestionGenerator:
     
     def _generate_new_questions(self, position: str, count: int, examples: list, context: str = ""):
         """LLM으로 새 질문 생성 (Few-Shot + Context)"""
-        if not self._initialized:
-            self._initialize()
         
         # Few-Shot 예시 구성
         few_shot_examples = "\n".join([f"- {q}" for q in examples[:3]]) if examples else "예시 없음"
@@ -149,28 +148,41 @@ class QuestionGenerator:
         # 컨텍스트 추가
         context_section = f"\n\n추가 컨텍스트:\n{context}" if context else ""
         
-        prompt = f"""당신은 면접 질문 생성 전문가입니다.
-아래 정보를 바탕으로 {position} 직무에 적합한 면접 질문을 {count}개 생성하세요.
-{context_section}
+        # 사용자 요청에 따른 프롬프트 구조
+        prompt = [{'role':'system','content':
+        (f"""
+        당신은 면접 질문 생성 전문가입니다.
+        아래 정보를 바탕으로 {position} 직무에 적합한 면접 질문을 {count}개 생성하세요.
+        {context_section}
 
-기존 질문 예시:
-{few_shot_examples}
+        기존 질문 예시:
+        {few_shot_examples}
 
-요구사항:
-1. 기술적 깊이와 실무 경험을 평가할 수 있는 질문
-2. 지원자의 이력서 내용과 연관된 질문 (이력서 정보가 있는 경우)
-3. 회사의 인재상에 부합하는지 평가할 수 있는 질문 (회사 정보가 있는 경우)
-4. 각 질문은 한 줄로 작성
-5. 질문만 나열하고 번호나 추가 설명 없이
+        요구사항:
+        1. 기술적 깊이와 실무 경험을 평가할 수 있는 질문
+        2. 지원자의 이력서 내용과 연관된 질문 (이력서 정보가 있는 경우)
+        3. 회사의 인재상에 부합하는지 평가할 수 있는 질문 (회사 정보가 있는 경우)
+        4. 각 질문은 한 줄로 작성
+        5. 질문만 나열하고 번호나 추가 설명 없이
 
-질문 {count}개:
-"""
+        """)}]
         
         try:
-            response = self.llm.invoke(prompt)
+            # Llama 3.2 모델을 위한 채팅 템플릿 적용
+            prompt_str = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+            
+            # 질문 생성을 위해 더 긴 토큰 허용
+            response = self.llm.invoke(prompt_str)
+            
             # 응답 파싱
             lines = [line.strip() for line in response.split('\n') if line.strip() and not line.strip().startswith('#')]
+            # 불필요한 접두어 및 번호 제거
             questions = [line.lstrip('- ').lstrip('1234567890. ') for line in lines if len(line) > 10]
+            
+            # 만약 결과가 부족하면 다시 시도하거나 로그 남김
+            if len(questions) < count:
+                logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count})")
+                
             return questions[:count]
         except Exception as e:
             logger.error(f"LLM 질문 생성 실패: {e}")
