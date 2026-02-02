@@ -12,6 +12,7 @@ import {
   logout as apiLogout, 
   getCurrentUser 
 } from './api/interview';
+import { createClient } from "@deepgram/sdk";
 
 function App() {
   const [step, setStep] = useState('auth');
@@ -44,6 +45,9 @@ function App() {
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
+  const [subtitle, setSubtitle] = useState(''); // 실시간 자막용
 
   // 자동 로그인 확인
   useEffect(() => {
@@ -192,6 +196,59 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
+  const setupDeepgram = (stream) => {
+    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      console.warn("Deepgram API Key not found");
+      return;
+    }
+
+    const deepgram = createClient(apiKey);
+    const connection = deepgram.listen.live({
+      model: "nova-2",
+      language: "ko",
+      smart_format: true,
+      encoding: "linear16", 
+      sample_rate: 16000,
+    });
+
+    connection.on("Open", () => {
+      console.log("Deepgram WebSocket Connected");
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0 && connection.getReadyState() === 1) {
+          connection.send(event.data);
+        }
+      });
+      mediaRecorder.start(250);
+      mediaRecorderRef.current = mediaRecorder;
+    });
+
+    connection.on("Results", (result) => {
+      const channel = result.channel;
+      if (channel && channel.alternatives && channel.alternatives[0]) {
+        const transcriptText = channel.alternatives[0].transcript;
+        const isFinal = result.is_final;
+        
+        if (transcriptText) {
+          if (isFinal) {
+             setTranscript(prev => prev + ' ' + transcriptText);
+             setSubtitle(''); 
+          } else {
+             setSubtitle(transcriptText);
+          }
+        }
+      }
+    });
+
+    connection.on("Error", (err) => {
+      console.error("Deepgram Error:", err);
+    });
+
+    deepgramConnectionRef.current = connection;
+  };
+
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
@@ -204,6 +261,10 @@ function App() {
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
+      
+      // Deepgram STT 시작 (Stream 복제하여 사용)
+      setupDeepgram(stream);
+
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track:', track.kind, track.label);
@@ -316,6 +377,8 @@ function App() {
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
+      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
     };
   }, []);
 
@@ -499,6 +562,24 @@ function App() {
         <div className="card">
           <h2>실시간 면접</h2>
           <video ref={videoRef} autoPlay playsInline muted />
+          
+          {/* 실시간 자막 오버레이 */}
+          {subtitle && (
+            <div style={{
+              marginTop: '-45px',
+              padding: '8px 15px',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              borderRadius: '20px',
+              position: 'relative',
+              textAlign: 'center',
+              zIndex: 10,
+              display: 'inline-block',
+              maxWidth: '90%'
+            }}>
+              {subtitle}
+            </div>
+          )}
           
           {questions.length > 0 && (
             <div className="question-box">
