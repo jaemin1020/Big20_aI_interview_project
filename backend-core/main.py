@@ -151,7 +151,7 @@ async def create_interview(
             args=[interview_data.position, new_interview.id, 5]
         )
         # 동기적으로 결과를 기다림 (UX상 질문이 바로 필요함)
-        generated_questions = task.get(timeout=90)
+        generated_questions = task.get(timeout=180)
         logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
         
     except Exception as e:
