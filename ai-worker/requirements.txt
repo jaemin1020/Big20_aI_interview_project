@@ -4,8 +4,7 @@
 # ==========================================
 
 # Task Queue
-celery[redis]>=5.3.6
-redis>=5.0.3
+celery[redis]~=5.4.0
 
 # Database
 sqlmodel>=0.0.14

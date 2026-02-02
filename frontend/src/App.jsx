@@ -262,7 +262,6 @@ function App() {
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
       
-      // Deepgram STT 시작 (Stream 복제하여 사용)
       setupDeepgram(stream);
 
       stream.getTracks().forEach(track => {
