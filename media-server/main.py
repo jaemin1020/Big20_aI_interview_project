@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
+import av
 
 # 1. 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -42,6 +43,7 @@ USE_DEEPGRAM = bool(DEEPGRAM_API_KEY)
 if USE_DEEPGRAM:
     try:
         from deepgram import DeepgramClient
+        from deepgram.core.events import EventType
         logger.info("✅ Deepgram SDK v5+ loaded successfully")
     except ImportError as e:
         logger.error(f"❌ deepgram-sdk import failed: {e}")
@@ -51,6 +53,8 @@ if USE_DEEPGRAM:
         USE_DEEPGRAM = False
 else:
     logger.warning("⚠️ DEEPGRAM_API_KEY not set. STT will be disabled.")
+
+import threading
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -85,100 +89,164 @@ class VideoAnalysisTrack(MediaStreamTrack):
         return frame
 
 async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str):
-    """Deepgram 실시간 STT 실행 및 WebSocket으로 결과 전송 (SDK v5+)"""
+    """Deepgram 실시간 STT 실행 (SDK v5 Sync Pattern with Threading)"""
     if not USE_DEEPGRAM:
         logger.warning(f"[{session_id}] Deepgram 비활성화 상태. STT 건너뜀.")
         return
     
     try:
-        # Deepgram 클라이언트 초기화 (v5)
-        deepgram = DeepgramClient(DEEPGRAM_API_KEY)
+        # Deepgram 클라이언트 초기화 (v5 방식)
+        deepgram = DeepgramClient()
         
-        # 연결 옵션 설정
-        options = LiveOptions(
-            model="nova-2",
-            language="ko",
-            smart_format=True,
-            encoding="linear16",
-            channels=1,
-            sample_rate=16000,
-        )
+        # 연결 옵션
+        options = {
+            "model": "nova-2",
+            "language": "ko",
+            "smart_format": True,
+            "encoding": "linear16",
+            "channels": 1,
+            "sample_rate": 16000,
+            # VAD 및 발화 감지 옵션 추가
+            "interim_results": True,      # 중간 결과 수신 (빠른 피드백)
+            "vad_events": True,           # 발화 시작(SpeechStarted) 감지 활성화
+            "utterance_end_ms": "3000",   # 1초 침묵 시 발화 종료로 간주
+            # "endpointing": 300            # (선택) 더 빠른 문장 종결 처리
+        }
 
-        # WebSocket 연결 생성
-        dg_connection = deepgram.listen.asynclive.v("1")
+        # Deepgram 요구사항에 맞게 오디오 변환 (16kHz, Mono, s16le)
+        resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
 
-        # 이벤트 핸들러 정의
-        async def on_message(self, result, **kwargs):
-            """실시간 transcript 처리"""
-            try:
-                if not result:
-                    return
+        # Thread-safe WebSocket sending helper
+        loop = asyncio.get_running_loop()
 
-                # Transcript 추출
-                sentence = result.channel.alternatives[0].transcript
-                if sentence:
-                    stt_data = {
-                        "session_id": session_id,
-                        "text": sentence,
-                        "type": "stt_result",
-                        "timestamp": time.time()
-                    }
-                    logger.info(f"[{session_id}] STT: {sentence}")
-                    
-                    # WebSocket으로 프론트엔드에 전송
-                    if session_id in active_websockets:
-                        ws = active_websockets[session_id]
-                        await send_to_websocket(ws, stt_data)
-            except Exception as e:
-                logger.error(f"[{session_id}] on_message 에러: {e}")
-
-        async def on_error(self, error, **kwargs):
-            logger.error(f"[{session_id}] Deepgram 에러: {error}")
-
-        # 이벤트 핸들러 등록
-        dg_connection.on("Results", on_message)
-        dg_connection.on("Error", on_error)
-        
-        # 연결 시작
-        if await dg_connection.start(options) is False:
-            logger.error(f"[{session_id}] Deepgram 연결 실패")
-            return
-
-        logger.info(f"[{session_id}] Deepgram STT 연결 성공 (v5)")
-            
+        # [중요] Deepgram 연결 타임아웃 방지: 첫 오디오 프레임이 도착할 때까지 대기
         try:
-            # 오디오 스트리밍
-            frame_count = 0
-            while True:
-                try:
-                    frame = await audio_track.recv()
-                    frame_count += 1
-                    
-                    # 오디오 데이터 전송
-                    audio_data = frame.to_ndarray().tobytes()
-                    await dg_connection.send(audio_data)
-                    
-                    if frame_count % 100 == 0:
-                        logger.debug(f"[{session_id}] Processed {frame_count} frames")
-                    
-                except Exception as e:
-                    logger.error(f"[{session_id}] Audio recv 에러: {e}")
-                    break
+            logger.info(f"[{session_id}] Waiting for first audio frame...")
+            first_frame = await audio_track.recv()
+            logger.info(f"[{session_id}] First audio frame received. Connecting to Deepgram...")
         except Exception as e:
-            logger.error(f"[{session_id}] STT 루프 에러: {e}")
-        finally:
-            # 연결 종료
+            logger.warning(f"[{session_id}] Failed to receive first frame: {e}")
+            return
+        
+        # Deepgram v5 Sync Connect Pattern
+        with deepgram.listen.v1.connect(**options) as connection:
+            logger.info(f"[{session_id}] Deepgram V5 Connection Established")
+
+            def on_message(message, **kwargs):
+                """Callback for receiving transcripts & events"""
+                try:
+                    # 1. 메시지 타입 확인 (SpeechStarted 등)
+                    msg_type = getattr(message, "type", "Result")
+                    
+                    if msg_type == "SpeechStarted":
+                        logger.info(f"[{session_id}] 🗣️ Speech Started detected")
+                        # 프론트엔드에 발화 시작 알림 (말하기 시작했음을 UI에 표시 가능)
+                        event_data = {
+                            "session_id": session_id,
+                            "type": "speech_started",
+                            "timestamp": time.time()
+                        }
+                        if session_id in active_websockets:
+                            ws = active_websockets[session_id]
+                            asyncio.run_coroutine_threadsafe(send_to_websocket(ws, event_data), loop)
+                        return
+
+                    # 2. 일반 Transcript 처리
+                    if hasattr(message, 'channel') and hasattr(message.channel, 'alternatives'):
+                        alt = message.channel.alternatives[0]
+                        sentence = alt.transcript
+                        
+                        if len(sentence) == 0:
+                            return
+                        
+                        # 최종 결과(final)만 로그 또는 처리할 수도 있고, interim도 보낼 수 있음
+                        is_final = message.is_final if hasattr(message, 'is_final') else False
+                        
+                        # 로그에는 Final만, 프론트엔드에는 둘 다 전송하여 실시간성을 높임
+                        if is_final:
+                            logger.info(f"[{session_id}] STT (Final): {sentence}")
+                        
+                        stt_data = {
+                            "session_id": session_id,
+                            "text": sentence,
+                            "type": "stt_result",
+                            "is_final": is_final,
+                            "timestamp": time.time()
+                        }
+                        
+                        if session_id in active_websockets:
+                            ws = active_websockets[session_id]
+                            asyncio.run_coroutine_threadsafe(send_to_websocket(ws, stt_data), loop)
+
+                except Exception as e:
+                    logger.error(f"[{session_id}] on_message Error: {e}")
+
+            def on_error(error, **kwargs):
+                logger.error(f"[{session_id}] Deepgram Error: {error}")
+
+            # Register Events
+            connection.on(EventType.MESSAGE, on_message)
+            connection.on(EventType.ERROR, on_error)
+            
+            # Start listening in a separate thread (Blocking call)
+            def listening_thread_func():
+                try:
+                    connection.start_listening()
+                except Exception as e:
+                    logger.error(f"[{session_id}] Listening Thread Error: {e}")
+
+            listen_thread = threading.Thread(target=listening_thread_func, daemon=True)
+            listen_thread.start()
+
+            
             try:
-                await dg_connection.finish()
-                logger.info(f"[{session_id}] Deepgram STT 종료됨")
-            except Exception as finish_error:
-                logger.warning(f"[{session_id}] Deepgram 종료 중 에러: {finish_error}")
+                # Main Audio Send Loop (Async)
+                # 1. 첫 번째 프레임 처리 (이미 받았으므로)
+                try:
+                    transformed = resampler.resample(first_frame)
+                    for tf in transformed:
+                        connection.send_media(tf.to_ndarray().tobytes())
+                except Exception as e:
+                    logger.error(f"[{session_id}] Error sending first frame: {e}")
+
+                # 2. 이후 프레임 루프
+                logger.info(f"[{session_id}] Streaming audio to Deepgram...")
+                frame_count = 1
+                while True:
+                    try:
+                        frame = await audio_track.recv()
+                        frame_count += 1
+                        
+                        # WebRTC AudioFrame(보통 48kHz, Stereo) -> Deepgram(16kHz, Mono) 변환
+                        # 변환하지 않으면 Deepgram이 데이터를 인식하지 못해 Timeout(1011) 발생 가능
+                        transformed_frames = resampler.resample(frame)
+                        
+                        for tf in transformed_frames:
+                            audio_data = tf.to_ndarray().tobytes()
+                            connection.send_media(audio_data)
+                        
+                        if frame_count % 100 == 0:
+                            logger.debug(f"[{session_id}] Sent {frame_count} frames")
+                            
+                    except Exception as e:
+                        logger.warning(f"[{session_id}] Audio Stream Ended/Error: {e}")
+                        break
+            finally:
+                # Loop ends when track closes
+                logger.info(f"[{session_id}] Audio track closed. Finishing Deepgram session...")
+                # Context manager exit will automatically call finish(), but explicit call ensures thread unblocks
+                connection.finish()
+            
+            # Wait for listening thread to exit
+            listen_thread.join(timeout=2.0)
+            if listen_thread.is_alive():
+                logger.warning(f"[{session_id}] Deepgram listening thread did not exit cleanly")
+            else:
+                logger.info(f"[{session_id}] Deepgram listening thread finished")
 
     except Exception as e:
-        logger.error(f"[{session_id}] Deepgram 초기화 에러: {e}")
+        logger.error(f"[{session_id}] Deepgram Init Failed: {e}")
 
-    except Exception as e:
-        logger.error(f"[{session_id}] STT 실행 중 치명적 에러: {str(e)}")
 
 async def send_to_websocket(ws: WebSocket, data: dict):
     """WebSocket으로 데이터 전송 (에러 처리 포함)"""
