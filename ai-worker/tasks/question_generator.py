@@ -62,10 +62,10 @@ class QuestionGenerator:
             model=self.model,
             tokenizer=self.tokenizer,
             max_new_tokens=256,  # [최적화] 256토큰
-            temperature=0.5, # 창의성 확보
+            temperature=0.5, 
             do_sample=True,
             pad_token_id=self.tokenizer.eos_token_id,
-            return_full_text=False  # [중요] 입력 프롬프트가 출력에 포함되지 않도록 설정
+            return_full_text=False  # 입력 프롬프트가 출력에 포함되지 않도록 설정
         )
         self.llm = HuggingFacePipeline(pipeline=pipe)
         self._initialized = True
