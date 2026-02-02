@@ -181,10 +181,7 @@ function App() {
         if (data.type === 'stt_result' && data.text) {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
           
-          // 녹음 중일 때만 transcript 업데이트
-          if (isRecordingRef.current) {
-            setTranscript(prev => prev + ' ' + data.text);
-          }
+          setTranscript(prev => prev + ' ' + data.text);
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -540,7 +537,7 @@ function App() {
       {step === 'loading_questions' && (
         <div className="card">
           <h2>AI 면접관이 질문을 준비하고 있습니다...</h2>
-          <p>지원 직무와 이력서를 분석 중입니다. (약 30초 소요)</p>
+          <p>지원 직무와 이력서를 분석 중입니다. (AI 모델 로딩에 따라 최대 2분 소요)</p>
           <div className="spinner"></div>
         </div>
       )}
