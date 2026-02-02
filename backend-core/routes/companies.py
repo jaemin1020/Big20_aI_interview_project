@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List
-from sentence_transformers import SentenceTransformer
 import logging
 
 from database import get_session
@@ -11,16 +10,7 @@ from pydantic import BaseModel
 logger = logging.getLogger("Backend-Core")
 router = APIRouter(prefix="/companies", tags=["companies"])
 
-# 임베딩 모델 (한국어 지원)
-embedding_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
-
 # ==================== Request/Response Models ====================
-
-class CompanyCreate(BaseModel):
-    id: str
-    company_name: str
-    ideal: str | None = None
-    description: str | None = None
 
 class CompanyResponse(BaseModel):
     id: str
@@ -29,33 +19,8 @@ class CompanyResponse(BaseModel):
     description: str | None
 
 # ==================== Endpoints ====================
-
-@router.post("/", response_model=CompanyResponse)
-async def create_company(company_data: CompanyCreate, db: Session = Depends(get_session)):
-    """회사 정보 생성 (자동 벡터화)"""
-    
-    # 벡터 임베딩 생성 (ideal + description 통합)
-    text_for_embedding = " ".join(filter(None, [
-        company_data.ideal or "",
-        company_data.description or ""
-    ]))
-    
-    embedding = None
-    if text_for_embedding.strip():
-        embedding = embedding_model.encode(text_for_embedding).tolist()
-    
-    # 회사 생성
-    new_company = Company(
-        **company_data.model_dump(),
-        embedding=embedding
-    )
-    
-    db.add(new_company)
-    db.commit()
-    db.refresh(new_company)
-    
-    logger.info(f"Company created: {new_company.id} - {new_company.company_name}")
-    return new_company
+# Note: 회사 데이터는 DB에 직접 삽입됩니다 (벡터 임베딩 포함)
+# 임베딩 생성은 ai-worker의 별도 스크립트에서 처리
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: str, db: Session = Depends(get_session)):
@@ -100,52 +65,3 @@ async def find_similar_companies(
     
     similar_companies = db.exec(stmt).all()
     return similar_companies
-
-@router.put("/{company_id}", response_model=CompanyResponse)
-async def update_company(
-    company_id: str,
-    company_data: CompanyCreate,
-    db: Session = Depends(get_session)
-):
-    """회사 정보 업데이트 (벡터 재생성)"""
-    company = db.get(Company, company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # 벡터 재생성
-    text_for_embedding = " ".join(filter(None, [
-        company_data.ideal or "",
-        company_data.description or ""
-    ]))
-    
-    if text_for_embedding.strip():
-        embedding = embedding_model.encode(text_for_embedding).tolist()
-        company.embedding = embedding
-    
-    # 필드 업데이트
-    company.company_name = company_data.company_name
-    company.ideal = company_data.ideal
-    company.description = company_data.description
-    
-    from datetime import datetime
-    company.updated_at = datetime.utcnow()
-    
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-    
-    logger.info(f"Company updated: {company.id}")
-    return company
-
-@router.delete("/{company_id}")
-async def delete_company(company_id: str, db: Session = Depends(get_session)):
-    """회사 삭제"""
-    company = db.get(Company, company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    db.delete(company)
-    db.commit()
-    
-    logger.info(f"Company deleted: {company_id}")
-    return {"message": "Company deleted successfully"}

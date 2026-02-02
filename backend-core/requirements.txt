@@ -1,6 +1,6 @@
 # ==========================================
 # Backend-Core Requirements
-# Purpose: FastAPI + DB + Celery Client (No Heavy LLM)
+# Purpose: FastAPI + DB + Celery Client (No AI/ML)
 # ==========================================
 
 # Web Framework
@@ -12,9 +12,6 @@ python-multipart>=0.0.9
 sqlmodel>=0.0.14
 psycopg2-binary>=2.9.9
 pgvector>=0.2.0  # Vector similarity search
-
-# Vector Embeddings
-sentence-transformers>=2.2.0  # 한국어 임베딩 모델
 
 # Task Queue
 celery[redis]>=5.3.6
