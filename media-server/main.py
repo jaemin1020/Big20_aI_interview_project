@@ -7,7 +7,7 @@ import time
 import cv2
 from typing import Dict, Set
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
@@ -18,7 +18,7 @@ logger = logging.getLogger("Media-Server")
 
 app = FastAPI()
 
-# CORS 설정 (프론트엔드 연결 허용)
+# CORS 설정
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
@@ -30,31 +30,12 @@ app.add_middleware(
 
 relay = MediaRelay()
 
-# 2. Celery 설정 (ai-worker로 감정 분석 요청 전달용)
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+# 2. Celery 설정
+redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
-
-# 4. Deepgram 설정 (STT가 활성화된 경우에만)
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-USE_DEEPGRAM = bool(DEEPGRAM_API_KEY)
-
-if USE_DEEPGRAM:
-    try:
-        from deepgram import DeepgramClient
-        from deepgram.core.events import EventType
-        logger.info("✅ Deepgram SDK v5+ loaded successfully")
-    except ImportError as e:
-        logger.error(f"❌ deepgram-sdk import failed: {e}")
-        USE_DEEPGRAM = False
-    except Exception as e:
-        logger.warning(f"⚠️ Error loading Deepgram SDK: {e}. STT will be disabled.")
-        USE_DEEPGRAM = False
-else:
-    logger.warning("⚠️ DEEPGRAM_API_KEY not set. STT will be disabled.")
-
-import threading
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -70,7 +51,7 @@ class VideoAnalysisTrack(MediaStreamTrack):
         frame = await self.track.recv()
         current_time = time.time()
 
-        # 2초마다 한 번씩 프레임 추출 (CPU 부하 방지 및 4650G 최적화)
+        # 2초마다 한 번씩 프레임 추출
         if current_time - self.last_frame_time > 2.0:
             self.last_frame_time = current_time
             
@@ -79,7 +60,7 @@ class VideoAnalysisTrack(MediaStreamTrack):
             _, buffer = cv2.imencode('.jpg', img)
             base64_img = base64.b64encode(buffer).decode('utf-8')
 
-            # ai-worker에 비동기 감정 분석 태스크 전달 (JSON 포맷 데이터)
+            # ai-worker에 비동기 감정 분석 태스크 전달
             celery_app.send_task(
                 "tasks.vision.analyze_emotion",
                 args=[self.session_id, base64_img]
@@ -88,112 +69,8 @@ class VideoAnalysisTrack(MediaStreamTrack):
 
         return frame
 
-async def start_stt_with_deepgram(audio_track: MediaStreamTrack, session_id: str):
-    """Deepgram 실시간 STT 실행 (SDK v5 Sync Pattern with Threading)"""
-    if not USE_DEEPGRAM:
-        logger.warning(f"[{session_id}] Deepgram 비활성화 상태. STT 건너뜀.")
-        return
-    
-        # Deepgram SDK v5 Sync Pattern (Live Stream)
-        # 1. 초기화 및 연결 설정
-        deepgram = DeepgramClient()
-        options = {
-            "model": "nova-2", 
-            "language": "ko", 
-            "smart_format": True,
-            "encoding": "linear16", 
-            "channels": 1, 
-            "sample_rate": 16000,
-            "interim_results": True,
-            "vad_events": True,
-            "utterance_end_ms": "3000"
-        }
-        resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
-        loop = asyncio.get_running_loop()
-
-        # 2. Connection 핸들러 (Thread-Safe Event 사용)
-        ready = threading.Event()
-
-        # 3. Connection with Context Manager
-        with deepgram.listen.v1.connect(**options) as connection:
-            logger.info(f"[{session_id}] Deepgram V5 Connection Established")
-
-            # Callback: 메시지 수신 (쓰레드에서 실행됨)
-            def on_message(result, **kwargs):
-                try:
-                    msg_type = getattr(result, "type", "Result")
-                    if msg_type == "SpeechStarted":
-                        # 발화 시작 감지
-                        logger.debug(f"[{session_id}] Speech Started")
-                        return
-                    
-                    # Transcript 처리
-                    channel = getattr(result, "channel", None)
-                    if channel and hasattr(channel, "alternatives"):
-                        alt = channel.alternatives[0]
-                        sentence = alt.transcript
-                        if len(sentence) == 0: return
-
-                        is_final = getattr(result, "is_final", False)
-                        
-                        stt_data = {
-                            "session_id": session_id,
-                            "text": sentence,
-                            "type": "stt_result",
-                            "is_final": is_final,
-                            "timestamp": time.time()
-                        }
-                        # 프론트엔드로 전송
-                        if session_id in active_websockets:
-                            ws = active_websockets[session_id]
-                            asyncio.run_coroutine_threadsafe(send_to_websocket(ws, stt_data), loop)
-
-                except Exception as e:
-                    logger.error(f"[{session_id}] on_message Error: {e}")
-
-            # Events 등록
-            connection.on(EventType.OPEN, lambda _: ready.set())
-            connection.on(EventType.MESSAGE, on_message)
-            connection.on(EventType.ERROR, lambda error, **kwargs: logger.error(f"Deepgram Error: {error}"))
-
-            # 4. Listening Thread 시작 (Daemon)
-            # LiveClient.start_listening() is blocking? No, SDK v5 uses thread inside or needs explicit start?
-            # 사용자 예제에 따르면 start_listening()을 호출하고, stream을 별도로 돌림
-            # 하지만 SDK v5 live client는 start() 호출 후 데이터를 send해야 함.
-            
-            # Deepgram SDK v5 Live Client Start
-            if connection.start(options) is False: # start() returns bool in some versions, or just starts
-                # v5.x might differ slightly, but assuming connection object from connect() context
-                # The context manager does the connect handling.
-                # Just need to ensure it's ready.
-                pass
-            
-            # ready event 대기 (Connection Open)
-            # Note: SDK v5 connect() context might already wait for open. 
-            # But let uses the event just in case.
-            
-            # 5. Audio Streaming Loop (WebRTC -> Deepgram)
-            logger.info(f"[{session_id}] Streaming audio to Deepgram...")
-            try:
-                while True:
-                    frame = await audio_track.recv()
-                    transformed_frames = resampler.resample(frame)
-                    for tf in transformed_frames:
-                        audio_data = tf.to_ndarray().tobytes()
-                        # Deepgram으로 오디오 데이터 전송
-                        connection.send(audio_data) 
-                        
-            except Exception as e:
-                logger.warning(f"[{session_id}] Audio Stream Ended: {e}")
-            finally:
-                # Loop ends (WebRTC track closed)
-                logger.info(f"[{session_id}] Finishing Deepgram session...")
-                connection.finish()
-
-
-
 async def send_to_websocket(ws: WebSocket, data: dict):
-    """WebSocket으로 데이터 전송 (에러 처리 포함)"""
+    """WebSocket으로 데이터 전송"""
     try:
         await ws.send_json(data)
     except Exception as e:
@@ -202,17 +79,14 @@ async def send_to_websocket(ws: WebSocket, data: dict):
 # ============== WebSocket 엔드포인트 ==============
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """프론트엔드와 실시간 STT 결과 공유를 위한 WebSocket 연결"""
     await websocket.accept()
     active_websockets[session_id] = websocket
     logger.info(f"[{session_id}] ✅ WebSocket 연결 성공")
     
     try:
-        # 연결 유지 및 클라이언트로부터 메시지 수신 대기
         while True:
-            data = await websocket.receive_text()
-            # 필요 시 클라이언트로부터 받은 메시지 처리
-            logger.debug(f"[{session_id}] Received from client: {data}")
+            # 클라이언트로부터 메시지 수신 대기 (현재는 특별한 처리 없음)
+            await websocket.receive_text()
             
     except WebSocketDisconnect:
         logger.info(f"[{session_id}] ❌ WebSocket 연결 종료")
@@ -231,18 +105,30 @@ async def offer(request: Request):
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
     session_id = params.get("session_id", "unknown")
 
-    pc = RTCPeerConnection()
+    # STUN 서버 설정은 유지 (비디오 연결 안정성을 위해)
+    pc = RTCPeerConnection(
+        configuration=RTCConfiguration(
+            iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
+        )
+    )
     logger.info(f"[{session_id}] WebRTC 연결 시도")
 
     @pc.on("track")
     def on_track(track):
         logger.info(f"[{session_id}] Received track: {track.kind}")
-        if track.kind == "audio":
-            asyncio.ensure_future(start_stt_with_deepgram(track, session_id))
-            logger.info(f"[{session_id}] Audio track processing started (STT enabled)")
-        elif track.kind == "video":
+        if track.kind == "video":
+            # 비디오 트랙: 감정 분석 처리
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
-            logger.info(f"[{session_id}] Video track processing started (Emotion analysis enabled)")
+            logger.info(f"[{session_id}] Video analysis track added")
+        elif track.kind == "audio":
+            # 오디오 트랙: 서버에서는 처리하지 않음 (STT는 프론트엔드에서 수행)
+            # 다만 WebRTC 연결 유지를 위해 트랙을 소비해주는 것이 좋음 (Blackhole)
+            @track.on("ended")
+            async def on_ended():
+                logger.info(f"[{session_id}] Audio track ended")
+            
+            asyncio.ensure_future(consume_audio(track))
+            logger.info(f"[{session_id}] Audio track ignored (Client-side STT used)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
@@ -255,14 +141,21 @@ async def offer(request: Request):
         "type": pc.localDescription.type
     }
 
+async def consume_audio(track):
+    """오디오 트랙을 소비하여 버퍼가 차지 않도록 함"""
+    try:
+        while True:
+            await track.recv()
+    except Exception:
+        # 트랙이 종료되면 예외 발생 (정상적인 종료)
+        pass
+
 @app.get("/")
 async def root():
     return {
         "service": "AI Interview Media Server",
         "status": "running",
-        "websocket_endpoint": "/ws/{session_id}",
-        "webrtc_endpoint": "/offer",
-        "deepgram_enabled": USE_DEEPGRAM
+        "mode": "Video Analysis Only (STT migrated to frontend)"
     }
 
 if __name__ == "__main__":
