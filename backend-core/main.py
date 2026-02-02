@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from celery import Celery
@@ -6,22 +7,31 @@ from datetime import datetime, timedelta
 from typing import List
 import logging
 import os
+import shutil
+from pathlib import Path
 
+# DB 설정
 from database import init_db, get_session
+# DB 테이블 모듈 임포트
 from models import (
-    User, UserCreate, UserLogin,
+    User, UserCreate, UserLogin, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
-    EvaluationReport, EvaluationReportResponse
+    EvaluationReport, EvaluationReportResponse,
+    Resume
 )
+# 인증 관련 모듈 임포트
+# 인증 관련 모듈 임포트
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from utils.common import validate_email, validate_username  # 유효성 검사 추가
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
 
 app = FastAPI(title="AI Interview Backend v2.0")
 
+# DB 초기화
 @app.on_event("startup")
 def on_startup():
     init_db()
@@ -37,14 +47,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Company Router 등록
+from routes.companies import router as companies_router
+app.include_router(companies_router)
+
 # Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
 
 # ==================== Auth Endpoints ====================
-
+# 회원가입
 @app.post("/register")
 async def register(user_data: UserCreate, db: Session = Depends(get_session)):
-    # 중복 확인
+    # 1. 유효성 검사 (길이 및 포맷)
+    if not validate_username(user_data.username):
+        raise HTTPException(
+            status_code=400, 
+            detail="아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 사용 가능합니다."
+        )
+    
+    if not validate_email(user_data.email):
+        raise HTTPException(status_code=400, detail="유효하지 않은 이메일 형식입니다.")
+
+    # 2. 중복 확인
     stmt = select(User).where(
         (User.username == user_data.username) | (User.email == user_data.email)
     )
@@ -67,27 +91,30 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
     logger.info(f"New user registered: {new_user.username} ({new_user.role})")
     return {"id": new_user.id, "username": new_user.username, "email": new_user.email}
 
+# 로그인
 @app.post("/token")
-async def login(form_data: UserLogin, db: Session = Depends(get_session)):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)):
+    # 사용자 인증
     stmt = select(User).where(User.username == form_data.username)
     user = db.exec(stmt).first()
-    
+    # 비밀번호 확인
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
-    
+    # 토큰 생성
     access_token = create_access_token(data={"sub": user.username})
     logger.info(f"User logged in: {user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
+# 사용자 정보 조회
 @app.get("/users/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 # ==================== Interview Endpoints ====================
-
+# 면접 생성
 @app.post("/interviews", response_model=InterviewResponse)
 async def create_interview(
     interview_data: InterviewCreate,
@@ -100,30 +127,31 @@ async def create_interview(
     new_interview = Interview(
         candidate_id=current_user.id,
         position=interview_data.position,
-        job_posting_id=interview_data.job_posting_id,
+        company_id=interview_data.company_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
         start_time=datetime.utcnow()
     )
+    # DB에 저장
     db.add(new_interview)
     db.commit()
     db.refresh(new_interview)
     
     logger.info(f"Interview created: ID={new_interview.id}, Position={new_interview.position}")
     
-    # 2. AI 질문 생성 (AI-Worker에 위임)
+    # 2. AI 질문 생성
     # Backend가 직접 LLM을 돌리지 않으므로, Celery Task를 호출합니다.
     generated_questions = []
     
     try:
         logger.info("Requesting question generation from AI-Worker...")
-        # Celery 태스크 호출 (최대 30초 대기)
+        # Celery 태스크 호출 (최대 90초 대기 - 모델 로딩 시간 고려)
         task = celery_app.send_task(
             "tasks.question_generator.generate_questions",
-            args=[interview_data.position, 5]
+            args=[interview_data.position, new_interview.id, 5]
         )
         # 동기적으로 결과를 기다림 (UX상 질문이 바로 필요함)
-        generated_questions = task.get(timeout=30)
+        generated_questions = task.get(timeout=180)
         logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
         
     except Exception as e:
@@ -185,6 +213,9 @@ async def create_interview(
         overall_score=new_interview.overall_score
     )
 
+# ==================== Question Endpoints ====================
+
+# 면접 질문 조회
 @app.get("/interviews/{interview_id}/questions")
 async def get_interview_questions(
     interview_id: int,
@@ -211,6 +242,7 @@ async def get_interview_questions(
 
 # ==================== Transcript Endpoints ====================
 
+# 대화 기록 저장
 @app.post("/transcripts")
 async def create_transcript(
     transcript_data: TranscriptCreate,
@@ -250,6 +282,7 @@ async def create_transcript(
     
     return {"id": transcript.id, "status": "saved"}
 
+# 대화 기록 조회
 @app.get("/interviews/{interview_id}/transcripts")
 async def get_interview_transcripts(
     interview_id: int,
@@ -277,6 +310,7 @@ async def get_interview_transcripts(
 
 # ==================== Evaluation Endpoints ====================
 
+# 면접 완료 처리 및 최종 평가 리포트 생성
 @app.post("/interviews/{interview_id}/complete")
 async def complete_interview(
     interview_id: int,
@@ -321,8 +355,119 @@ async def get_evaluation_report(
     
     return report
 
+# ==================== Resume Endpoints ====================
+
+# 업로드 디렉토리 설정
+UPLOAD_DIR = Path("./uploads/resumes")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.post("/resumes/upload")
+async def upload_resume(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """이력서 파일 업로드 (PDF, DOC, DOCX)"""
+    
+    # 파일 확장자 검증
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    # 파일 저장 경로 생성 (candidate_id_timestamp_filename)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{current_user.id}_{timestamp}_{file.filename}"
+    file_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        # 파일 저장
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Resume 레코드 생성
+        new_resume = Resume(
+            candidate_id=current_user.id,
+            file_name=file.filename,
+            file_path=str(file_path),
+            file_size=file_path.stat().st_size,
+            processing_status="pending"
+        )
+        db.add(new_resume)
+        db.commit()
+        db.refresh(new_resume)
+        
+        logger.info(f"Resume uploaded: ID={new_resume.id}, User={current_user.username}, File={file.filename}")
+        
+        # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
+        celery_app.send_task(
+            "parse_resume_pdf",
+            args=[new_resume.id, str(file_path)]
+        )
+        logger.info(f"Resume parsing task sent for ID={new_resume.id}")
+        
+        return {
+            "id": new_resume.id,
+            "file_name": new_resume.file_name,
+            "file_size": new_resume.file_size,
+            "status": "uploaded",
+            "message": "Resume uploaded successfully. Processing will begin shortly."
+        }
+        
+    except Exception as e:
+        logger.error(f"Resume upload failed: {e}")
+        # 실패 시 파일 삭제
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail="File upload failed")
+
+# ==================== Recruiter Endpoints ====================
+
+# 전체 인터뷰 목록 조회
+@app.get("/interviews")
+async def get_all_interviews(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """전체 인터뷰 목록 조회 (리크루터용)"""
+    
+    # 권한 체크: recruiter 또는 admin만 접근 가능
+    if current_user.role not in ["recruiter", "admin"]:
+        # candidate는 자신의 인터뷰만 조회 가능
+        stmt = select(Interview).where(
+            Interview.candidate_id == current_user.id
+        ).order_by(Interview.created_at.desc())
+    else:
+        # recruiter/admin은 전체 조회
+        stmt = select(Interview).order_by(Interview.created_at.desc())
+    
+    interviews = db.exec(stmt).all()
+    
+    # 응답 데이터 구성 (candidate 정보 포함)
+    result = []
+    for interview in interviews:
+        candidate = db.get(User, interview.candidate_id)
+        result.append({
+            "id": interview.id,
+            "candidate_id": interview.candidate_id,
+            "candidate_name": candidate.full_name if candidate else "Unknown",
+            "position": interview.position,
+            "status": interview.status,
+            "created_at": interview.created_at,
+            "start_time": interview.start_time,
+            "end_time": interview.end_time,
+            "overall_score": interview.overall_score
+        })
+    
+    logger.info(f"Interviews list requested by {current_user.username} ({current_user.role}): {len(result)} records")
+    return result
+
 # ==================== Health Check ====================
 
+# 서버 상태 확인
 @app.get("/")
 async def root():
     return {
