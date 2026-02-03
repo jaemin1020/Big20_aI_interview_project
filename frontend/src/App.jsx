@@ -215,6 +215,12 @@ function App() {
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
+<<<<<<< HEAD
+=======
+      
+      setupDeepgram(stream);
+
+>>>>>>> a92d34bf98feaa597edfbab54cdc5d2582da6d97
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track:', track.kind, track.label);

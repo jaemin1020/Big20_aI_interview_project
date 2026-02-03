@@ -72,7 +72,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       # - MODEL_PATH=/app/models/solar-10.7b-instruct-v1.0.Q8_0.gguf
-      - MODEL_PATH=/app/models/EXAONE-3.5-2.4B-Instruct
+      - MODEL_PATH=/app/models/EXAONE-4.0-1.2B-BF16.gguf
       - N_GPU_LAYERS=0 # Solar 모델은 순수 CPU 연산
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN} # 질문 생성용
     depends_on:
