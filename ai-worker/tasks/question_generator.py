@@ -7,6 +7,7 @@ from langchain_community.llms import LlamaCpp
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from typing import Optional, List
+import torch
 
 # DB 헬퍼 함수 import
 from db import (
@@ -38,22 +39,36 @@ class QuestionGenerator:
         if self._initialized:
             return
 
-        logger.info(f"Loading Question Gen GGUF Model: {MODEL_PATH}")
+        logger.info(f"Loading Question Gen Model: {MODEL_ID}")
+        token = os.getenv("HUGGINGFACE_HUB_TOKEN")
 
-        try:
-            self.llm = LlamaCpp(
-                model_path=MODEL_PATH,
-                n_ctx=4096,
-                n_threads=6,  # CPU 코어 수에 맞춰 조절
-                n_gpu_layers=0, # CPU 모드 강제
-                temperature=0.7,
-                verbose=False
-            )
-            self._initialized = True
-            logger.info("✅ Question Generator Initialized (GGUF)")
-        except Exception as e:
-            logger.error(f"Failed to Load Question Gen Model: {e}")
-            self.llm = None
+        # 4-bit 양자화 (메모리 최적화)
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4"
+        )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=token)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            quantization_config=quantization_config,
+            device_map="auto",
+            token=token
+        )
+
+        pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            max_new_tokens=100,
+            temperature=0.8, # 창의성 확보
+            do_sample=True,
+            pad_token_id=self.tokenizer.eos_token_id
+        )
+        self.llm = HuggingFacePipeline(pipeline=pipe)
+        self._initialized = True
+        logger.info("✅ Question Generator Initialized")
 
     def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
         from tools import ResumeTool, CompanyTool
@@ -91,7 +106,9 @@ class QuestionGenerator:
 
     def _reuse_questions_from_db(self, position: str, count: int):
         try:
-            db_questions = get_best_questions_by_position(position, limit=count)
+            db_questions = get_questions_by_position(position, limit=count)
+
+            # 재활용 시 사용량 증가
             for q in db_questions:
                 try:
                     increment_question_usage(q.id)
@@ -103,48 +120,42 @@ class QuestionGenerator:
             return []
 
     def _generate_new_questions(self, position: str, count: int, examples: list, context: str = ""):
+        """LLM으로 새 질문 생성 (Few-Shot + Context)"""
+        if not self._initialized:
+            self._initialize()
+
+        # Few-Shot 예시 구성
         few_shot_examples = "\n".join([f"- {q}" for q in examples[:3]]) if examples else "예시 없음"
 
-        # 사용자가 제공한 Integrated Prompt 반영
-        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-# Role
-당신은 20년 차 IT 기술 면접관이자 테크 리드입니다. 지원자의 이력서와 관련 기술 문서를 바탕으로 기술적 깊이를 확인할 수 있는 첫 번째 질문을 생성하고 검수하십시오.
+        # 컨텍스트 추가
+        context_section = f"\n\n추가 컨텍스트:\n{context}" if context else ""
 
-# Persona & Rules
-1. 냉철하고 전문적인 태도를 유지하며, 말투는 반드시 격식체(~하십시오체)를 사용하십시오.
-2. 기술 용어는 원어(English) 그대로 사용하되, 설명은 한국어로 하십시오.
-3. 질문은 2문장 이내로 간결하게 작성하십시오.
-4. "느낀 점"과 같은 추상적 질문은 배제하고, 기술적 근거(Metric, Logic)를 요구하십시오.
+        prompt = f"""당신은 면접 질문 생성 전문가입니다.
+아래 정보를 바탕으로 {position} 직무에 적합한 면접 질문을 {count}개 생성하세요.
+{context_section}
 
-# Internal Process (Self-Critique Loop)
-Step 1. [User Resume]와 [Technical Context]를 매칭하여 핵심 기술 질문 생성.
-Step 2. 자가 검수 수행 (Fact-Check / Specificity / Tone & Manner).
-Step 3. 검수 기준 미달 시 문항 즉시 수정.
+기존 질문 예시:
+{few_shot_examples}
 
-# Input Data
-- [User Resume]: {context if context else "이력서 정보 없음"}
-- [Technical Context]: {position} 관련 기술 표준 및 모범 사례
+요구사항:
+1. 기술적 깊이와 실무 경험을 평가할 수 있는 질문
+2. 지원자의 이력서 내용과 연관된 질문 (이력서 정보가 있는 경우)
+3. 회사의 인재상에 부합하는지 평가할 수 있는 질문 (회사 정보가 있는 경우)
+4. 각 질문은 한 줄로 작성
+5. 질문만 나열하고 번호나 추가 설명 없이
 
-# Task
-제공된 이력서에서 가장 핵심적인 프로젝트 하나를 선정하십시오. 해당 프로젝트에 사용된 기술 중 연관된 부분을 찾아, '왜(Why)' 해당 기술을 썼는지 혹은 '어떻게(How)' 문제를 해결했는지 묻는 날카로운 질문을 생성하십시오.
-최종 질문은 반드시 한국어로 출력하되 기술 용어는 English를 유지하십시오.
-
-# Final Output (Only one question)
-[Final Question]: (검수가 완료된 최종 질문만 출력하십시오.)<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+질문 {count}개:
 """
+
         try:
             response = self.llm.invoke(prompt)
-            # "[Final Question]:" 이후의 텍스트만 추출
-            if "[Final Question]:" in response:
-                question = response.split("[Final Question]:")[-1].strip()
-            else:
-                question = response.strip()
-
-            # 한 문항씩 생성하도록 최적화 (유저 요청에 따라)
-            return [question] if question else []
+            # 응답 파싱
+            lines = [line.strip() for line in response.split('\n') if line.strip() and not line.strip().startswith('#')]
+            questions = [line.lstrip('- ').lstrip('1234567890. ') for line in lines if len(line) > 10]
+            return questions[:count]
         except Exception as e:
             logger.error(f"LLM 질문 생성 실패: {e}")
-            return []
+            return self._get_fallback_questions(position, count)
 
     def _get_fallback_questions(self, position: str, count: int) -> List[str]:
         fallback_questions = [
