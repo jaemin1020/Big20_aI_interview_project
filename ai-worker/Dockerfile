@@ -25,15 +25,18 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 # numpy와 cython은 llama-cpp-python 및 deepface 빌드 시 사전에 필요할 수 있음
 RUN pip install --no-cache-dir "numpy>=1.23.0,<2.0.0" "Cython"
 
-# 4. llama-cpp-python 빌드 및 설치 (CPU 최적화: OpenBLAS 사용)
-# CMAKE_ARGS를 통해 CPU 연산 최적화를 강제합니다.
-# requirements.txt에 해당 패키지가 있어도 여기서 먼저 설치되면 캐시를 사용하게 됩니다.
+# 4. llama-cpp-python 설치
+# 네트워크 불안정을 위해 timeout과 retries를 추가하고, CPU 최적화를 위해 OpenBLAS를 사용합니다.
 RUN CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS" \
-    pip install --no-cache-dir llama-cpp-python==0.2.56
+    CMAKE_BUILD_PARALLEL_LEVEL=4 \
+    pip install --no-cache-dir \
+    --default-timeout=100 --retries 5 \
+    llama-cpp-python==0.2.85 \
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
 # 5. 나머지 Python 패키지 설치
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 --retries 5 -r requirements.txt
 
 # 6. 소스 코드 및 모델 경로 설정
 COPY . .

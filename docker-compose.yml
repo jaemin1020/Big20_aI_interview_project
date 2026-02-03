@@ -1,5 +1,3 @@
-
-
 services:
   # 1. Database: PostgreSQL + pgvector
   db:
@@ -38,7 +36,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
@@ -63,19 +61,20 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '8.0'          # CPU 코어 제한
-          memory: 32G          # 대용량 RAM
+          cpus: '8.0' # CPU 코어 제한
+          memory: 32G # 대용량 RAM
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]  # GPU 접근 (질문 생성용)
+              capabilities: [ gpu ] # GPU 접근 (질문 생성용)
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
-      - MODEL_PATH=/app/models/solar-10.7b-instruct-v1.0.Q8_0.gguf
+      - EVALUATOR_MODEL_PATH=/app/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+      - GENERATOR_MODEL_ID=meta-llama/Meta-Llama-3.1-8B-Instruct
       - N_GPU_LAYERS=0 # Solar 모델은 순수 CPU 연산
-      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}  # 질문 생성용
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN} # 질문 생성용
     depends_on:
       - redis
       - db

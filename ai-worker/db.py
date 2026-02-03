@@ -8,7 +8,10 @@ from enum import Enum
 import os
 
 # Database Connection
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+# Use psycopg (v3) driver for PostgreSQL
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:1234@db:5432/interview_db")
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 engine = create_engine(DATABASE_URL)
 
 # Enums (Matching Backend)
@@ -42,7 +45,7 @@ class Speaker(str, Enum):
 class Company(SQLModel, table=True):
     """회사 정보 테이블 (벡터 검색 지원)"""
     __tablename__ = "companies"
-    
+
     id: str = Field(primary_key=True, max_length=50)
     company_name: str
     ideal: Optional[str] = None
@@ -54,7 +57,7 @@ class Company(SQLModel, table=True):
 class Resume(SQLModel, table=True):
     """이력서 테이블"""
     __tablename__ = "resumes"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int
     file_name: str
@@ -187,16 +190,16 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
         report = session.exec(stmt).first()
-        
+
         if report:
             for key, value in kwargs.items():
                 if hasattr(report, key):
-                     setattr(report, key, value)
+                    setattr(report, key, value)
         else:
             valid_keys = EvaluationReport.__fields__.keys()
             filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
             report = EvaluationReport(interview_id=interview_id, **filtered_kwargs)
-        
+
         session.add(report)
         session.commit()
         session.refresh(report)
@@ -263,5 +266,5 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         ).order_by(
             Company.embedding.cosine_distance(embedding)
         ).limit(limit)
-        
+
         return session.exec(stmt).all()
