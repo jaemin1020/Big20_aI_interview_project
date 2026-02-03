@@ -6,7 +6,7 @@ from sqlmodel import Session
 from db import Resume, engine
 from utils.pdf_parser import ResumePDFParser
 from utils.resume_structurer import ResumeStructurer
-from sentence_transformers import SentenceTransformer
+from utils.vector_utils import get_embedding_generator
 from datetime import datetime
 import logging
 import os
@@ -69,10 +69,14 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
         # 4. 임베딩 생성 (이력서 전체 내용)
         logger.info(f"[Resume {resume_id}] 임베딩 생성 중...")
         try:
-            model = SentenceTransformer('jhgan/ko-sroberta-multitask')
             # 텍스트가 너무 길면 앞부분만 사용
             text_for_embedding = cleaned_text[:2000]
-            embedding = model.encode(text_for_embedding).tolist()
+            
+            # vector_utils의 싱글톤 생성기 사용 (KURE-v1, passage 모드)
+            generator = get_embedding_generator()
+            # 이력서는 검색 대상(Passage)이므로 encode_passage 사용 ("passage: " 접두어)
+            embedding = generator.encode_passage(text_for_embedding)
+            
             logger.info(f"[Resume {resume_id}] 임베딩 생성 완료: {len(embedding)} 차원")
         except Exception as e:
             logger.error(f"[Resume {resume_id}] 임베딩 생성 실패: {e}")
