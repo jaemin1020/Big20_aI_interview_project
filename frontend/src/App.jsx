@@ -27,7 +27,7 @@ import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
-  const [step, setStep] = useState('auth');
+  const [step, setStep] = useState('main');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
@@ -52,7 +52,7 @@ function App() {
     profileImage: null,
     termsAgreed: false
   });
-  const [session, setSession] = useState(null);
+  const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [report, setReport] = useState(null);
@@ -70,6 +70,9 @@ function App() {
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
+  const isRecordingRef = useRef(false);
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -80,7 +83,7 @@ function App() {
         })
         .catch(() => {
           localStorage.removeItem('token');
-          setStep('auth');
+          setStep('main');
         });
     }
   }, []);
@@ -168,11 +171,30 @@ function App() {
 
   const initInterviewSession = async () => {
     try {
-      const sess = await createSession(userName, position);
-      setSession(sess);
-      const qs = await getQuestions(sess.id);
-      setQuestions(qs);
+      // 1. Create Interview
+      const newInterview = await createInterview(userName, position);
+      setInterview(newInterview);
+
+      // 2. Upload Resume if available
+      if (resumeFile) {
+        await uploadResume(newInterview.id, resumeFile);
+      }
+
+      // 3. Get Questions
+      const qs = await getInterviewQuestions(newInterview.id);
       
+      // Retry logic if questions are not ready (optional, but good for UX)
+      if (!qs || qs.length === 0) {
+         console.log("Questions not ready, retrying in 3s...");
+         setTimeout(async () => {
+             const retryQs = await getInterviewQuestions(newInterview.id);
+             setQuestions(retryQs);
+             setStep('interview');
+         }, 3000);
+         return;
+      }
+
+      setQuestions(qs);
       setStep('interview');
     } catch (err) {
       console.error("Session init error:", err);
@@ -402,7 +424,6 @@ function App() {
             width: '50px', 
             height: '50px', 
             borderRadius: '50%', 
-            border: 'none', 
             background: 'var(--glass-bg)',
             backdropFilter: 'blur(10px)',
             border: '1px solid var(--glass-border)',
@@ -446,7 +467,7 @@ function App() {
 
       {step === 'guide' && <GuidePage onNext={() => setStep('resume')} />}
       
-      {step === 'resume' && <ResumePage onNext={() => setStep('env_test')} />}
+      {step === 'resume' && <ResumePage onNext={() => setStep('env_test')} onFileSelect={setResumeFile} />}
       
       {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
       
@@ -475,11 +496,11 @@ function App() {
 
       {step === 'result' && (
         <ResultPage 
-          results={results} 
+          results={report || []} 
           onReset={() => {
             setStep('landing');
             setCurrentIdx(0);
-            setResults([]);
+            setReport(null);
           }} 
         />
       )}
