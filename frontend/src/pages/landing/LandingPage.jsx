@@ -19,51 +19,42 @@ const LandingPage = ({
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
             </div>
           </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
-            생성형 AI가 제공하는 실시간 모의 면접 서비스입니다.<br/>
-            귀하의 이력서와 직무에 맞춘 최적화된 질문을 통해 실전 감각을 키워보세요.
+          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+            지금부터 모의면접을 시작합니다.
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', opacity: 0.8 }}>
+            아래 안내사항을 확인해주세요
           </p>
         </div>
 
-        <div className="input-group" style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '1fr 1fr', 
-          gap: '1.5rem', 
-          textAlign: 'left',
-          marginBottom: '2.5rem' 
+        <div style={{ 
+          border: '1px solid var(--glass-border)', 
+          borderRadius: '16px', 
+          padding: '1.5rem', 
+          textAlign: 'left', 
+          marginBottom: '2.5rem',
+          background: 'rgba(255, 255, 255, 0.03)'
         }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '10px', fontSize: '0.95rem', fontWeight: '500' }}>이름</label>
-            <input 
-              type="text" 
-              placeholder="이름을 입력하세요" 
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '10px', fontSize: '0.95rem', fontWeight: '500' }}>지원 직무</label>
-            <input 
-              type="text" 
-              placeholder="예: Backend 개발자" 
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-            />
-          </div>
+          <ul style={{ 
+            margin: 0, 
+            paddingLeft: '1.2rem', 
+            color: 'var(--text-main)', 
+            fontSize: '1rem', 
+            lineHeight: '1.8',
+            listStyleType: 'disc' 
+          }}>
+            <li>예상 소요시간 : 20분</li>
+            <li>진행 방식 : 영상 또는 음성 응답</li>
+            <li>중간 종료 가능</li>
+          </ul>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
           <PremiumButton 
-            onClick={() => startInterview(userName, position)}
-            style={{ padding: '16px 40px', fontSize: '1.1rem' }}
+            onClick={() => startInterview(userName, 'General')}
+            style={{ padding: '16px 60px', fontSize: '1.2rem' }}
           >
-            면접 시작하기
-          </PremiumButton>
-          <PremiumButton 
-            variant="secondary"
-            style={{ padding: '16px 40px', fontSize: '1.1rem' }}
-          >
-            더 알아보기
+            면접 시작
           </PremiumButton>
         </div>
       </GlassCard>

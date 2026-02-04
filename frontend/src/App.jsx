@@ -119,7 +119,7 @@ function App() {
     }
     setUserName(uName);
     setPosition(uPos);
-    setStep('guide');
+    setStep('resume');
   };
 
   const initInterviewSession = async () => {
