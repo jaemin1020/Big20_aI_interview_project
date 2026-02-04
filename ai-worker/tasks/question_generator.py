@@ -5,19 +5,29 @@ from langchain_huggingface import HuggingFacePipeline
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
+from typing import Optional, List
 import torch
+import re
+
+# DB 헬퍼 함수 import
+from db import (
+    get_best_questions_by_position,  # 직무별 우수 질문 조회
+    increment_question_usage,
+    engine
+)
+from sqlmodel import Session, select
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-# 모델 로드 (HuggingFace Pipeline 사용)
+# 모델 설정
 MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
 
 class QuestionGenerator:
     """
-    Llama 3.2-3B 모델을 사용한 면접 질문 생성기
-    4-bit 양자화로 VRAM 사용량 최소화 (~4GB)
+    하이브리드 질문 생성기
+    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
     """
-    _instance = None  # 싱글톤 패턴
+    _instance = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -29,196 +39,254 @@ class QuestionGenerator:
         if self._initialized:
             return
             
-        logger.info(f"Loading Llama model with 4-bit quantization: {MODEL_ID}")
+        logger.info(f"Loading Question Gen Model: {MODEL_ID}")
         token = os.getenv("HUGGINGFACE_HUB_TOKEN")
         
-        # BitsAndBytes 4-bit 양자화 설정 (VRAM 사용량: ~4GB로 축소)
+        # 4-bit 양자화 (메모리 최적화)
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,                    # 4비트 양자화 활성화
-            bnb_4bit_compute_dtype=torch.float16, # 연산은 FP16으로 수행
-            bnb_4bit_use_double_quant=True,       # 중첩 양자화 (메모리 추가 절감)
-            bnb_4bit_quant_type="nf4"             # NormalFloat4 (LLM에 최적화)
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4"
         )
         
-        logger.info("Initializing tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=token)
-        
-        logger.info("Loading 4-bit quantized model (this may take 1-2 minutes)...")
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             quantization_config=quantization_config,
-            device_map="auto",                    # GPU 자동 할당
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,               # CPU 메모리 사용 최소화
+            device_map="cuda:0",
             token=token
         )
         
-        logger.info("✅ Model loaded successfully with 4-bit quantization")
-        logger.info(f"📊 Estimated VRAM usage: ~4GB (original: ~16GB)")
-        
-        # Pipeline 생성
         pipe = pipeline(
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            max_new_tokens=80,  # 질문만 생성하도록 토큰 수 추가 감소
-            temperature=0.7,  # 일관성 향상
-            top_p=0.9,
-            repetition_penalty=1.3,  # 반복 방지 강화
+            max_new_tokens=256,  # [최적화] 256토큰
+            temperature=0.5, 
             do_sample=True,
-            pad_token_id=self.tokenizer.eos_token_id  # 패딩 토큰 명시
+            pad_token_id=self.tokenizer.eos_token_id,
+            return_full_text=False  # 입력 프롬프트가 출력에 포함되지 않도록 설정
         )
         self.llm = HuggingFacePipeline(pipeline=pipe)
         self._initialized = True
-        
-    def generate_questions(self, position: str, count: int = 5, previous_qa: list = None):
+        logger.info("✅ Question Generator Initialized")
+
+    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
         """
-        면접 질문을 순차적으로 생성합니다.
+        하이브리드 질문 생성 로직 (이력서 및 회사 정보 기반)
+        1. DB에서 검증된 질문 일부 재활용 (Reuse)
+        2. 이력서 + 회사 정보로 컨텍스트 구성
+        3. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
         
         Args:
-            position: 지원 직무 (예: "Frontend 개발자")
-            count: 생성할 질문 개수
-            previous_qa: 이전 질문-답변 쌍 리스트 [{"question": "...", "answer": "..."}]
-        
-        Returns:
-            list: 생성된 질문 리스트
+            position: 지원 직무
+            interview_id: 면접 ID (이력서/회사 정보 조회용)
+            count: 생성할 총 질문 수
+            reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
         """
+        from tools import ResumeTool, CompanyTool
+        
         questions = []
+        reuse_count = int(count * reuse_ratio)
+        generate_count = count - reuse_count
         
-        for i in range(count):
-            # 이전 대화 컨텍스트 구성
-            context = ""
-            if previous_qa and len(previous_qa) > 0:
-                context = "\n### 이전 대화:\n"
-                for qa in previous_qa[-3:]:  # 최근 3개만 참조
-                    context += f"면접관: {qa['question']}\n"
-                    context += f"지원자: {qa['answer']}\n"
+        # 1. 컨텍스트 수집 (이력서 + 회사 정보)
+        context_parts = []
+        
+        if interview_id:
+            # 이력서 정보
+            resume_info = ResumeTool.get_resume_by_interview(interview_id)
+            if resume_info.get("has_resume"):
+                context_parts.append(ResumeTool.format_for_llm(resume_info))
+                logger.info(f"이력서 정보 로드 완료: {resume_info.get('summary', '')[:50]}...")
             
-            # 프롬프트 템플릿 (한국어 강제, 면접관 페르소나)
-            if i == 0 and not previous_qa:
-                # 첫 질문: 직무 관련 기본 질문
-                prompt_template = """### 시스템 지시사항:
-당신은 {position} 직무의 전문 면접관입니다.
-지원자에게 할 면접 질문 하나만 작성하세요.
-
-### 규칙:
-1. 반드시 한국어로 작성
-2. 질문 하나만 작성 (답변 작성 금지)
-3. 실무 중심의 구체적인 질문
-4. 질문은 "~해주세요" 또는 "~무엇인가요?" 형식으로 끝날 것
-5. 질문 외에 다른 텍스트를 추가하지 마세요
-
-### 면접관 질문:
+            # 회사 정보
+            company_info = CompanyTool.get_company_by_interview(interview_id)
+            if company_info.get("has_company"):
+                context_parts.append(CompanyTool.format_for_llm(company_info))
+                logger.info(f"회사 정보 로드 완료: {company_info.get('name', '')}")
+        
+        context = "\n\n".join(context_parts) if context_parts else ""
+        
+        # 2. DB에서 기존 질문 재활용 (Reuse)
+        if reuse_count > 0:
+            reused = self._reuse_questions_from_db(position, reuse_count)
+            questions.extend(reused)
+            logger.info(f"✅ DB에서 {len(reused)}개 질문 재활용")
+        
+        # 3. LLM으로 새 질문 생성 (Create with Context)
+        if generate_count > 0:
+            generated = self._generate_new_questions(position, generate_count, questions, context)
+            questions.extend(generated)
+            logger.info(f"✅ LLM으로 {len(generated)}개 질문 생성 (컨텍스트 포함)")
+        
+        return questions[:count]  # 정확히 count개만 반환
+    
+    def _reuse_questions_from_db(self, position: str, count: int):
+        """DB에서 검증된 질문 가져오기"""
+        
+        try:
+            # db.py의 함수명에 맞춰 호출
+            db_questions = get_best_questions_by_position(position, limit=count)
+            
+            # 재활용 시 사용량 증가
+            for q in db_questions:
+                try:
+                    increment_question_usage(q.id)
+                except Exception as e:
+                    logger.warning(f"Question {q.id} 사용량 증가 실패: {e}")
+            
+            return [q.content for q in db_questions]
+        except Exception as e:
+            logger.warning(f"DB 질문 조회 실패: {e}. 빈 리스트 반환")
+            return []
+    
+    def _generate_new_questions(self, position: str, count: int, examples: list, context: str = ""):
+        """LLM으로 새 질문 생성 (Few-Shot + Context)"""
+        
+        
+        # Few-Shot 예시 구성 (예시가 없으면 강력한 한국어 기본 예시 제공)
+        if examples:
+            few_shot_examples = "\n".join([f"- {q}" for q in examples[:3]])
+        else:
+            few_shot_examples = """
+- React의 Virtual DOM이 무엇이며, 이것이 성능에 어떤 영향을 미치는지 설명해주세요.
+- 비동기 프로그래밍에서 Promise와 async/await의 차이점은 무엇인가요?
+- 사용해본 상태 관리 라이브러리는 무엇이며, 그 선택 이유는 무엇인가요?
 """
-            else:
-                prompt_template = """### 시스템 지시사항:
-당신은 {position} 직무의 전문 면접관입니다.
-{context}
-지원자에게 할 다음 면접 질문 하나만 작성하세요.
-
-### 규칙:
-1. 반드시 한국어로 작성
-2. 질문 하나만 작성 (답변 작성 금지)
-3. 이전 답변과 연관된 심화 질문 또는 새로운 각도의 질문
-4. 질문은 "~해주세요" 또는 "~무엇인가요?" 형식으로 끝날 것
-5. 질문 외에 다른 텍스트를 추가하지 마세요
-
-### 면접관 질문:
-"""
+        
+        # 컨텍스트 추가
+        context_section = f"\n\n추가 컨텍스트:\n{context}" if context else ""
+        
+        # 사용자 요청에 따른 프롬프트 구조
+        prompt = [{'role':'system','content':
+        (f"""
+        당신은 한국 기업의 면접관이자 채용 전문가입니다.
+        아래 정보를 바탕으로 {position} 직무에 적합한 '한국어 면접 질문'을 {count}개 생성하세요.
+        {context_section}
+        
+        기존 질문 예시:
+        {few_shot_examples}
+        
+        [중요 요구사항]
+        1. 모든 질문은 반드시 자연스러운 한국어로 작성해야 합니다. (영어, 태국어 등 타 언어 혼용 금지)
+        2. 기술적 깊이와 실무 경험을 구체적으로 물어보세요.
+        3. 지원자의 이력서 내용과 연관된 질문을 포함하세요. (이력서 정보가 있는 경우)
+        4. 회사의 인재상과 연결된 질문을 포함하세요. (회사 정보가 있는 경우)
+        5. 각 질문은 번호 없이 한 줄씩만 작성하세요.
+        6. 질문의 어조는 정중하고 전문적이어야 합니다.
+        7. 강조 표시(**text**) 금지
+        """)}]
+        
+        try:
+            # Llama 3.2 모델을 위한 채팅 템플릿 적용
+            prompt_str = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
             
-            prompt = PromptTemplate.from_template(prompt_template)
-            chain = prompt | self.llm | StrOutputParser()
+            # 질문 생성을 위해 더 긴 토큰 허용 (return_full_text=False 설정 덕분에 prompt_str은 제외됨)
+            response = self.llm.invoke(prompt_str)
             
-            try:
-                result = chain.invoke({
-                    "position": position,
-                    "context": context
-                })
-                
-                # 생성된 텍스트에서 질문 추출 (불필요한 부분 제거)
-                question = self._extract_question(result)
-                
-                if question:
-                    questions.append(question)
-                    logger.info(f"Generated question {i+1}/{count}: {question}")
-                else:
-                    # 질문 생성 실패 시 폴백
-                    fallback = self._get_fallback_question(position, i)
-                    questions.append(fallback)
-                    logger.warning(f"Using fallback question {i+1}/{count}")
+            # 응답 파싱
+            
+            # 1. 특수 토큰 및 시스템 메시지 제거 패턴
+            system_patterns = [
+                r"<\|.*?\|>",  # 특수 토큰
+                r"Cutting Knowledge Date",
+                r"Today Date",
+                r"^system$", # 헤더 잔여물
+                r"^user$",
+                r"^assistant$",
+                r"당신은 면접 질문 생성 전문가입니다", # 프롬프트 에코 방지
+                r"요구사항:",
+                r"기존 질문 예시:",
+                r"질문 \d+개:"
+            ]
+            
+            clean_lines = []
+            for line in response.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
                     
-            except Exception as e:
-                logger.error(f"Question generation error: {e}")
-                fallback = self._get_fallback_question(position, i)
-                questions.append(fallback)
-        
-        return questions
+                # 시스템 메시지 패턴이 포함된 라인 건너뛰기
+                if any(re.search(pat, line) for pat in system_patterns):
+                    continue
+                
+                # 프롬프트의 지시사항 문장과 유사하면 건너뛰기 (Echo 방지 2차 필터)
+                if "평가할 수 있는 질문" in line or "이력서 내용과 연관" in line or "한 줄로 작성" in line:
+                    continue
+
+                # #으로 시작하는 주석 라인 건너뛰기
+                if line.startswith('#'):
+                    continue
+                    
+                clean_lines.append(line)
+
+            # 2. 질문 추출 및 정제
+            questions = []
+            for line in clean_lines:
+                # 번호 제거 (예: "1. 질문" -> "질문", "- 질문" -> "질문")
+                clean_q = re.sub(r'^[\d\-\.\s]+', '', line)
+                
+                # Markdown 강조 제거 (**text** -> text)
+                clean_q = re.sub(r'\*\*(.*?)\*\*', r'\1', clean_q)
+                
+                # 앞뒤 따옴표 및 공백 제거
+                clean_q = clean_q.strip('"\' ')
+                
+                # [필터링 개선] Whitelist 방식은 너무 엄격하여 Blacklist 방식으로 변경
+                # 일본어(히라가나/가타카나), 한자, 태국어 등이 포함된 경우만 제외하고 나머지는 허용
+                # 기술 면접 질문에는 다양한 특수문자(@, #, &, [] 등)가 사용될 수 있음
+                forbidden_pattern = r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u0E00-\u0E7F]'
+                if re.search(forbidden_pattern, clean_q):
+                    logger.warning(f"제외된 질문(다국어 포함): {clean_q}")
+                    continue
+                
+                # 길이가 너무 짧은 것은 질문이 아닐 확률 높음 (10자 이상)
+                if len(clean_q) > 10:
+                    questions.append(clean_q)
+            
+            # 만약 결과가 부족하면 Fallback 질문으로 채움
+            if len(questions) < count:
+                logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count}). Fallback으로 보충합니다.")
+                fallback_needed = count - len(questions)
+                fallbacks = self._get_fallback_questions(position, fallback_needed)
+                questions.extend(fallbacks)
+                
+            logger.info(f"최종 반환 질문: {questions[:count]}")
+            return questions[:count]
+        except Exception as e:
+            logger.error(f"LLM 질문 생성 중 에러 발생: {e}")
+            # 에러 발생 시에도 빈 리스트 보단 Fallback 리턴
+            return self._get_fallback_questions(position, count)
     
-    def _extract_question(self, raw_output: str) -> str:
-        """생성된 텍스트에서 실제 질문만 추출"""
-        # 줄바꿈으로 분리
-        lines = [line.strip() for line in raw_output.split('\n') if line.strip()]
-        
-        # 접두사 제거 및 정리
-        cleaned_lines = []
-        for line in lines:
-            # "면접관:", "질문:", "###" 등 접두사 제거
-            line = line.replace("면접관:", "").replace("질문:", "").replace("###", "").strip()
-            # "지원자:", "답변:" 등이 포함된 줄은 제외 (답변 생성 방지)
-            if any(keyword in line for keyword in ["지원자:", "답변:", "예시:", "A:", "Answer:"]):
-                continue
-            # 질문 형식으로 끝나는 문장만 선택
-            if line.endswith(("?", "가요?", "나요?", "세요?", "주세요.", "주세요?")):
-                cleaned_lines.append(line)
-        
-        # 가장 긴 질문 문장 선택
-        if cleaned_lines:
-            question = max(cleaned_lines, key=len)
-            # 최소 길이 검증
-            if len(question) > 10 and len(question) < 200:
-                return question
-        
-        # 정제된 질문이 없으면 빈 문자열 반환
-        return ""
-    
-    def _get_fallback_question(self, position: str, index: int) -> str:
-        """질문 생성 실패 시 사용할 기본 질문"""
+    def _get_fallback_questions(self, position: str, count: int) -> List[str]:
+        """폴백 질문 생성"""
         fallback_questions = [
-            f"{position} 직무에 지원하게 된 동기는 무엇인가요?",
-            f"{position} 분야에서 가장 자신 있는 기술이나 경험은 무엇인가요?",
-            "최근 진행한 프로젝트에 대해 설명해주세요.",
-            "기술적 문제를 해결했던 경험을 구체적으로 공유해주세요.",
-            "팀 협업 과정에서 어려움을 겪었던 경험과 해결 방법을 말씀해주세요."
+            f"{position} 직무에서 가장 중요하게 생각하는 역량은 무엇인가요?",
+            "최근 겪었던 가장 어려운 기술적 챌린지는 무엇이었나요?",
+            f"{position} 직무를 수행하는 데 필요한 핵심 기술은 무엇이라고 생각하나요?",
+            "팀 프로젝트에서 의견 충돌이 있을 때 어떻게 해결하나요?",
+            "본인의 강점을 실무에서 어떻게 활용할 수 있을까요?",
+            "우리 회사에 지원한 이유를 구체적으로 말씀해주세요.",
+            "5년 후 본인의 모습을 어떻게 그리고 계신가요?",
+            "실패한 프로젝트 경험과 그로부터 배운 점을 공유해주세요."
         ]
-        return fallback_questions[index % len(fallback_questions)]
+        return fallback_questions[:count]
 
-
-# Celery 태스크 정의
-@shared_task(
-    name="tasks.question_generator.generate_questions",
-    bind=True,
-    max_retries=3,
-    default_retry_delay=10
-)
-def generate_questions_task(self, position: str, count: int = 5, previous_qa: list = None):
-    """
-    Celery 태스크: 면접 질문 생성
-    
-    Args:
-        position: 지원 직무
-        count: 생성할 질문 개수
-        previous_qa: 이전 질문-답변 쌍 (선택)
-    
-    Returns:
-        list: 생성된 질문 리스트
-    """
+@shared_task(name="tasks.question_generator.generate_questions")
+def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
     try:
-        logger.info(f"Starting question generation for position: {position}, count: {count}")
         generator = QuestionGenerator()
-        questions = generator.generate_questions(position, count, previous_qa)
-        logger.info(f"Successfully generated {len(questions)} questions")
-        return questions
+        return generator.generate_questions(position, interview_id, count)
     except Exception as e:
-        logger.error(f"Question generation task failed: {str(e)}")
-        # 재시도 로직
-        raise self.retry(exc=e)
+        logger.error(f"Task Error: {e}")
+        return []
+
+# Eager Initialization: Worker 시작 시 모델 미리 로드
+# 이렇게 하면 첫 요청에서 타임아웃이 발생하지 않습니다
+try:
+    logger.info("🔥 Pre-loading Question Generator model...")
+    _warmup_generator = QuestionGenerator()
+    logger.info("✅ Question Generator ready for requests")
+except Exception as e:
+    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
