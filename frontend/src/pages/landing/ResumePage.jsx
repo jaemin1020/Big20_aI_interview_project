@@ -65,7 +65,7 @@ const ResumePage = ({ onNext }) => {
   return (
     <div className="resume-upload animate-fade-in">
       <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
-        <h1 className="text-gradient">이력서 업로드</h1>
+        <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
         <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
         <div 
