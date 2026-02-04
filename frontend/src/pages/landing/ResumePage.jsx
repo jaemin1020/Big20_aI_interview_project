@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import { uploadResume, getResume } from '../../api/interview';
 
-const ResumePage = ({ onNext, onFileSelect }) => {
+const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [step, setStep] = useState('upload'); // upload, confirm
+  const [uploadResult, setUploadResult] = useState(null);
 
   const handleFileChange = (e) => {
     if (e.target.files[0]) {
@@ -17,14 +19,54 @@ const ResumePage = ({ onNext, onFileSelect }) => {
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
-    // 실제 서비스에서는 여기서 API 호출
-    setTimeout(() => {
+    
+    try {
+      // 1. 초기 업로드 요청
+      const uploadData = await uploadResume(file);
+      const resumeId = uploadData.id;
+      console.log('Upload basic success, ID:', resumeId);
+      
+      // 2. 폴링 (분석 완료 대기)
+      let pollCount = 0;
+      const maxPolls = 30; // 최대 60초 (2초 * 30)
+      
+      const poll = async () => {
+        try {
+          const result = await getResume(resumeId);
+          console.log('Polling result:', result.processing_status);
+          
+          if (result.processing_status === 'completed') {
+            setUploadResult(result);
+            if (onParsedData) {
+              onParsedData(result);
+            }
+            setStep('confirm');
+            setIsUploading(false);
+          } else if (result.processing_status === 'failed') {
+            throw new Error("분석에 실패했습니다.");
+          } else if (pollCount < maxPolls) {
+            pollCount++;
+            setTimeout(poll, 2000); // 2초 뒤 다시 확인
+          } else {
+            throw new Error("분석 시간 초과");
+          }
+        } catch (err) {
+          console.error('Polling error:', err);
+          setIsUploading(false);
+          alert(err.message || "이력서 분석 중 오류가 발생했습니다.");
+        }
+      };
+      
+      setTimeout(poll, 1000); // 1초 뒤 첫 폴링 시작
+      
+    } catch (err) {
+      console.error(err);
       setIsUploading(false);
-      setStep('confirm');
-    }, 1500);
+      alert("이력서 업로드 중 오류가 발생했습니다.");
+    }
   };
 
   if (step === 'confirm') {
@@ -44,16 +86,22 @@ const ResumePage = ({ onNext, onFileSelect }) => {
             border: '1px solid var(--glass-border)'
           }}>
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
-              <dt style={{ color: 'var(--text-muted)' }}>지원 회사</dt>
-              <dd style={{ fontWeight: '600' }}>삼성전자</dd>
+              <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
+              <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
+              
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
-              <dd style={{ fontWeight: '600' }}>S/W 개발</dd>
-              <dt style={{ color: 'var(--text-muted)' }}>경력 요약</dt>
-              <dd>AWS 인턴십 6개월</dd>
-              <dt style={{ color: 'var(--text-muted)' }}>전공</dt>
-              <dd>컴퓨터공학 학사</dd>
-              <dt style={{ color: 'var(--text-muted)' }}>관련 기술</dt>
-              <dd>정보처리기사, 네트워크관리사 2급</dd>
+              <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
+                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+              </dd>
+              
+              {uploadResult?.skills && uploadResult.skills.length > 0 && (
+                <>
+                  <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
+                  <dd>{uploadResult.skills.join(', ')}</dd>
+                </>
+              )}
+              
+             {/* If additional parsed info exists, add here */}
             </dl>
           </div>
 

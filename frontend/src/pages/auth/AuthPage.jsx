@@ -86,13 +86,25 @@ const AuthPage = ({
             </div>
           )}
 
+          {authMode === 'register' && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>이메일</label>
+              <input 
+                type="email" 
+                placeholder="example@email.com"
+                value={account.email}
+                onChange={(e) => setAccount({ ...account, email: e.target.value })}
+              />
+            </div>
+          )}
+
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>이메일</label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>아이디</label>
             <input 
-              type="email" 
-              placeholder="example@email.com"
-              value={account.email}
-              onChange={(e) => setAccount({ ...account, email: e.target.value })}
+              type="text" 
+              placeholder="user_id"
+              value={account.username || ''}
+              onChange={(e) => setAccount({ ...account, username: e.target.value })}
             />
           </div>
 
@@ -168,7 +180,7 @@ const AuthPage = ({
 
           {authMode === 'login' && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>이메일 찾기</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>아이디 찾기</span>
               <span style={{ fontSize: '0.85rem', color: 'var(--glass-border)', cursor: 'default' }}>|</span>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>비밀번호 찾기</span>
             </div>
