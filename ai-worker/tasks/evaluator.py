@@ -198,50 +198,63 @@ def generate_final_report(interview_id: int):
 # Evaluation Principles (Strict)
 1. **데이터 기반 평가**: 모든 점수와 의견은 반드시 면접 로그 내의 구체적인 발언에 근거해야 합니다. 추측은 배제하십시오.
 2. **루브릭 가중치 적용**: A(15%), B(15%), C(20%), D(25%), E(25%) 가중치를 엄격히 준수하십시오.
-3. **추가 질문 비교(Critical)**: 추가 질문에 대한 답변을 초기 답변과 대조하십시오. 논리 보완 시 가산(+), 동일 내용 반복/회피 시 감점(-) 하십시오.
-4. **관찰 포인트 미충족 시 감점**: 각 영역의 'LLM 관찰 포인트' 미확인 시 자동으로 하위권 점수를 부여합니다.
+3. **추가 질문 비교(Critical)**: 추가 질문(1-1, 2-1, 3-1)에 대한 답변을 초기 답변과 대조하십시오.
+   - 논리 보완 및 구체화 시: 가산 (+)
+   - 동일 내용 반복 혹은 모호해질 시: 감산 (-)
+4. **관찰 포인트 미충족 시 감점**: 각 영역의 'LLM 관찰 포인트'가 확인되지 않으면 해당 영역은 자동으로 하위권 점수를 부여합니다.
 5. **태도 및 비즈니스 매너 검증**: 기술적 키워드 사용 여부와 별개로, 비논리적 근거로 질문을 일축하거나 무례한 태도를 보이면 '커뮤니케이션' 및 '인성' 영역에서 즉시 감점합니다.
 6. **BS Detection**: "특정 자격증보다 내 기술력이 낫다"와 같은 주관적 과장이나 타 직무/요건에 대한 비하 발언은 '논리력' 결여로 간주하여 엄격히 평가합니다.
 
 # Evaluation Rubric & Metrics
 ### A. 자기 표현 & 기본 커뮤니케이션 (15%)
+- **관찰**: 서론-본론-결론 구조, 핵심 키워드 사용.
+- **감점**: 장황하지만 핵심 없음, 질문 의도 이탈.
+
 ### B. 지원 동기 & 회사 적합성 (15%)
+- **관찰**: 회사 인재상(핵심가치)과의 정렬, 이력서 경험과 지원 동기의 연결성.
+
 ### C. 직무 지식 이해도 (20%)
+- **관찰**: 기술 개념의 정확성, 용어의 맥락적 사용, 재질문 후 명확성 변화.
+- **감점**: 단순 용어 나열, 개념적 오류, 재질문 시 답변 회피.
 ### D. 직무 경험 & 문제 해결 (25%)
+- **관찰**: STAR 구조 준수 여부, 본인의 구체적 역할(Ownership), 대안/개선 관점 제시.
+- **감점**: 팀 성과 뒤에 숨기(We 위주 기술), 결과(Outcome) 없는 과정 설명.
 ### E. 인성 & 성장 가능성 (25%)
+- **관찰**: 책임감 있는 언어(Ownership language), 실패를 통한 학습 경험, 태도의 일관성.
+- **감점**: 환경/타인 탓(Blame language), 변화 수용 거부.
 
 # Output Format (JSON Only)
 {{
   "overall_analysis": {{
-    "summary": "전체적인 면접 성과 분석"
+    "total_score": 0,
+    "pass_status": "PASS/FAIL/HOLD",
+    "core_summary": "지원자의 핵심 역량을 한 줄로 요약"
   }},
-  "total_score": 0,
-  "pass_status": "PASS/FAIL/HOLD",
-  "core_summary": "지원자의 핵심 역량을 한 줄로 요약",
   "detailed_metrics": {{
-    "A_communication": {{ "score": 0, "reason": "관찰 포인트, 구조적 답변 및 비즈니스 매너(공격성 여부) 근거 기록" }},
-    "B_fit": {{ "score": 0, "reason": "인재상 일치 여부, 지원 동기의 진정성 및 직업 윤리(속물적 언어 여부) 기술" }},
-    "C_knowledge": {{ "score": 0, "reason": "개념 이해 및 추가질문 대응 시의 논리적 방어력 분석" }},
-    "D_experience": {{ "score": 0, "reason": "STAR 구조 기반 기여도 및 구체적 수치 제시 여부 분석" }},
-    "E_attitude": {{ "score": 0, "reason": "성장 가능성, 겸손함, 타인 의견 수용성 분석" }}
-}},
+    "A_communication": {{ "score": 0, "reason": "관찰 포인트 근거 기록" }},
+    "B_fit": {{ "score": 0, "reason": "인재상 일치 여부 기술" }},
+    "C_knowledge": {{ "score": 0, "reason": "개념 이해 및 추가질문 대응 분석" }},
+    "D_experience": {{ "score": 0, "reason": "STAR 구조 및 성과 기여도 분석" }},
+    "E_attitude": {{ "score": 0, "reason": "성장 가능성 및 소통 태도" }}
+  }},
   "comparative_analysis": {{
-    "follow_up_improvement": "추가 질문을 통한 답변 개선/악화 사례 상세 분석"
+    "follow_up_improvement": "추가 질문을 통한 답변 개선/악화 사례 분석"
   }},
   "feedback": {{
     "strengths": ["강점 1", "강점 2"],
     "weaknesses": ["보완점 1", "보완점 2"],
-    "company_specific_advice": "[{{Company_Name}}]의 인재상에 비추어 본 최종 제언",
+    "company_specific_advice": "[{company_name}]의 인재상에 비추어 본 최종 제언",
     "closing_quote": "지원자의 성향을 반영한 맞춤형 동기부여 명언"
   }}
-}}
-<|eot_id|><|start_header_id|>user<|end_header_id|>
+}}<|eot_id|><|start_header_id|>user<|end_header_id|>
+# Input Data
 - [Company Name]: {company_name}
 - [Company Talent Model]: {talent_model}
 - [Resume Summary]: {resume_summary}
 - [Full Interview Log]: {interview_log}
 
-위 데이터를 바탕으로 냉철하고 객관적인 리포트를 생성하십시오.<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+# Task
+위 데이터를 바탕으로 냉철하고 객관적인 평가 리포트를 JSON 형식으로 생성하십시오.<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """
     try:
         raw_output = eval_llm.invoke(prompt)

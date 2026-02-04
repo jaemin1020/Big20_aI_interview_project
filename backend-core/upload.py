@@ -25,8 +25,7 @@ def get_engine():
     """
     db 삽입을 위한 engine 생성
 
-    사용예: docker exec -it interview_backend //bin/bash
-    python import_data.py
+    사용예: docker exec -it interview_backend //bin/bash python upload.py
     """
     try:
         engine = create_engine(DATABASE_URL)
