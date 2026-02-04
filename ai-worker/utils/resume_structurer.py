@@ -38,6 +38,19 @@ class ResumeStructurer:
         return structured
     
     @staticmethod
+    def structure_with_rules(text: str) -> Dict:
+        """
+        규칙 기반 이력서 구조화 (structure_resume의 별칭)
+        
+        Args:
+            text: 이력서 텍스트
+            
+        Returns:
+            dict: 구조화된 이력서 데이터
+        """
+        return ResumeStructurer.structure_resume(text)
+    
+    @staticmethod
     def _extract_personal_info(text: str) -> Dict:
         """개인 정보 추출"""
         info = {}

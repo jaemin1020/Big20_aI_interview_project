@@ -10,7 +10,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
     ports:
       - "15432:5432"
     networks:
@@ -82,7 +82,8 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
-      - ./backend-core:/backend-core  # Shared Code Access
+      - ./backend-core:/backend-core # Shared Code Access
+      - ./backend-core/uploads:/app/uploads # Shared uploads directory
     networks:
       - interview_network
 
