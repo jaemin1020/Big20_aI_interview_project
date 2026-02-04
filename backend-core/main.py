@@ -51,6 +51,10 @@ app.add_middleware(
 from routes.companies import router as companies_router
 app.include_router(companies_router)
 
+# STT Router 등록
+from routes.stt import router as stt_router
+app.include_router(stt_router)
+
 # Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
 

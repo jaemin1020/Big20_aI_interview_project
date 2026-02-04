@@ -12,7 +12,7 @@ import {
   logout as apiLogout, 
   getCurrentUser 
 } from './api/interview';
-import { createClient } from "@deepgram/sdk";
+import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
 
 function App() {
   const [step, setStep] = useState('auth');
@@ -156,8 +156,16 @@ function App() {
       setStep('interview');
     } catch (err) {
       console.error("Interview start error:", err);
-      alert("면접 세션 생성 실패");
-      setStep('landing'); // 실패 시 랜딩으로 복귀
+      
+      // Check if it's an authentication error
+      if (err.response?.status === 401) {
+        alert("인증이 만료되었습니다. 다시 로그인해주세요.");
+        handleLogout();
+      } else {
+        const errorMsg = err.response?.data?.detail || err.message || "면접 세션 생성 실패";
+        alert(errorMsg);
+        setStep('landing'); // 실패 시 랜딩으로 복귀
+      }
     }
   };
 
@@ -199,63 +207,149 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
-  const setupDeepgram = (stream) => {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.warn("Deepgram API Key not found");
-      return;
-    }
-
-    const deepgram = createClient(apiKey);
-    const connection = deepgram.listen.live({
-      model: "nova-2",
-      language: "ko",
-      smart_format: true,
-      encoding: "linear16", 
-      sample_rate: 16000,
-    });
-
-    connection.on("Open", () => {
-      console.log("Deepgram WebSocket Connected");
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0 && connection.getReadyState() === 1) {
-          connection.send(event.data);
+  const setupDeepgram = async (stream) => {
+    try {
+      // 백엔드에서 Deepgram 토큰 가져오기 (보안 개선)
+      const token = localStorage.getItem('token');
+      const tokenResponse = await fetch('http://localhost:8000/stt/token', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      mediaRecorder.start(250);
-      mediaRecorderRef.current = mediaRecorder;
-    });
 
-    connection.on("Results", (result) => {
-      const channel = result.channel;
-      if (channel && channel.alternatives && channel.alternatives[0]) {
-        const transcriptText = channel.alternatives[0].transcript;
-        const isFinal = result.is_final;
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get Deepgram token from backend');
+      }
+
+      const { api_key } = await tokenResponse.json();
+      console.log('✅ Deepgram token received from backend');
+
+      const deepgram = createClient(api_key);
+      
+      // AudioContext Setup with AudioWorklet (modern replacement for ScriptProcessor)
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      
+      const sampleRate = audioContext.sampleRate;
+
+      const connection = deepgram.listen.live({
+        model: "nova-2",
+        language: "ko",
+        smart_format: true,
+        encoding: "linear16",
+        sample_rate: sampleRate,
+      });
+
+      connection.on(LiveTranscriptionEvents.Open, async () => {
+        console.log("Deepgram WebSocket Connected");
+        setSubtitle("🎤 음성 인식 준비 완료");
         
-        if (transcriptText) {
-          if (isFinal) {
-             setTranscript(prev => prev + ' ' + transcriptText);
-             setSubtitle(''); 
-          } else {
-             setSubtitle(transcriptText);
+        try {
+          // Load AudioWorklet module
+          await audioContext.audioWorklet.addModule('/deepgram-processor.js');
+          
+          // Create AudioWorklet node
+          const workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
+          
+          // Handle messages from the worklet
+          workletNode.port.onmessage = (event) => {
+            // Only send if recording and connection is open
+            if (!isRecordingRef.current) return;
+            if (connection.getReadyState() !== 1) return;
+            
+            // event.data is the Int16Array buffer from the worklet
+            connection.send(event.data);
+          };
+          
+          // Connect the audio graph
+          source.connect(workletNode);
+          workletNode.connect(audioContext.destination);
+          
+          // Store worklet node for cleanup
+          connection.workletNode = workletNode;
+          
+          // Clear success message after 2 seconds
+          setTimeout(() => setSubtitle(''), 2000);
+        } catch (err) {
+          console.error("AudioWorklet setup failed:", err);
+          alert("오디오 처리 초기화에 실패했습니다.");
+        }
+      });
+
+      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+        const channel = data.channel;
+        if (channel && channel.alternatives && channel.alternatives[0]) {
+          const transcriptText = channel.alternatives[0].transcript;
+          const isFinal = data.is_final;
+
+          if (transcriptText) {
+            if (isFinal) {
+               setTranscript(prev => prev + ' ' + transcriptText);
+               setSubtitle(''); 
+            } else {
+               setSubtitle(transcriptText);
+            }
           }
         }
-      }
-    });
+      });
 
-    connection.on("Error", (err) => {
-      console.error("Deepgram Error:", err);
-    });
+      connection.on(LiveTranscriptionEvents.Error, (err) => {
+        console.error("Deepgram Error:", err);
+        setSubtitle("⚠️ 음성 인식 오류 발생");
+        setTimeout(() => setSubtitle(''), 3000);
+        
+        // 심각한 에러인 경우 사용자에게 알림
+        if (err.message && err.message.includes('401')) {
+          alert("음성 인식 인증에 실패했습니다. 다시 로그인해주세요.");
+        }
+      });
 
-    deepgramConnectionRef.current = connection;
+      connection.on(LiveTranscriptionEvents.Close, () => {
+        console.log("Deepgram WebSocket Closed");
+      });
+      
+      // Clean up function injection
+      connection.originalFinish = connection.finish;
+      connection.finish = () => {
+          connection.originalFinish();
+          if (connection.workletNode) {
+            connection.workletNode.disconnect();
+          }
+          source.disconnect();
+          if (audioContext.state !== 'closed') audioContext.close();
+      };
+
+      deepgramConnectionRef.current = connection;
+      
+    } catch (err) {
+      console.error("Deepgram setup failed:", err);
+      alert("음성 인식 초기화에 실패했습니다. 백엔드 연결을 확인해주세요.");
+    }
   };
 
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
+
+    // WebRTC 연결 상태 모니터링
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        alert('비디오 연결에 실패했습니다. 네트워크를 확인하거나 페이지를 새로고침해주세요.');
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.warn('[WebRTC] Connection disconnected, may reconnect automatically');
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] Connection state:', pc.connectionState);
+      if (pc.connectionState === 'failed') {
+        alert('미디어 서버 연결이 끊어졌습니다.');
+      }
+    };
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -275,6 +369,10 @@ function App() {
       console.warn('[WebRTC] Camera failed, trying audio-only:', err);
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // 오디오 전용 모드에서도 STT 활성화
+        setupDeepgram(audioStream);
+        
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
         alert('카메라 접근 거부됨. 음성만 사용합니다.');
       } catch (audioErr) {
