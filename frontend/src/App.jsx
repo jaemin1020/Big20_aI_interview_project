@@ -208,9 +208,19 @@ function App() {
   };
 
   const setupDeepgram = async (stream) => {
+    console.log('🎤 [STT] Starting Deepgram setup...');
+    console.log('🎤 [STT] Stream tracks:', stream.getTracks().map(t => ({
+      kind: t.kind,
+      enabled: t.enabled,
+      muted: t.muted,
+      label: t.label
+    })));
+    
     try {
       // 백엔드에서 Deepgram 토큰 가져오기 (보안 개선)
       const token = localStorage.getItem('token');
+      console.log('🎤 [STT] Requesting token from backend...');
+      
       const tokenResponse = await fetch('http://localhost:8000/stt/token', {
         method: 'POST',
         headers: {
@@ -220,11 +230,13 @@ function App() {
       });
 
       if (!tokenResponse.ok) {
-        throw new Error('Failed to get Deepgram token from backend');
+        const errorText = await tokenResponse.text();
+        console.error('🎤 [STT] Token request failed:', tokenResponse.status, errorText);
+        throw new Error(`Failed to get Deepgram token: ${tokenResponse.status}`);
       }
 
       const { api_key } = await tokenResponse.json();
-      console.log('✅ Deepgram token received from backend');
+      console.log('🎤 [STT] ✅ Token received, API key length:', api_key?.length);
 
       const deepgram = createClient(api_key);
       
@@ -233,6 +245,7 @@ function App() {
       const source = audioContext.createMediaStreamSource(stream);
       
       const sampleRate = audioContext.sampleRate;
+      console.log('🎤 [STT] AudioContext sample rate:', sampleRate);
 
       const connection = deepgram.listen.live({
         model: "nova-2",
@@ -243,12 +256,38 @@ function App() {
       });
 
       connection.on(LiveTranscriptionEvents.Open, async () => {
-        console.log("Deepgram WebSocket Connected");
+        console.log("🎤 [STT] Deepgram WebSocket Connected");
         setSubtitle("🎤 음성 인식 준비 완료");
         
         try {
+          // AudioWorklet 코드를 인라인으로 생성 (파일 로딩 문제 해결)
+          const processorCode = `
+            class DeepgramProcessor extends AudioWorkletProcessor {
+              process(inputs, outputs, parameters) {
+                const input = inputs[0];
+                if (input && input.length > 0) {
+                  const channelData = input[0];
+                  const buffer = new Int16Array(channelData.length);
+                  for (let i = 0; i < channelData.length; i++) {
+                    const s = Math.max(-1, Math.min(1, channelData[i]));
+                    buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                  }
+                  this.port.postMessage(buffer.buffer, [buffer.buffer]);
+                }
+                return true;
+              }
+            }
+            registerProcessor('deepgram-processor', DeepgramProcessor);
+          `;
+          
+          const blob = new Blob([processorCode], { type: 'application/javascript' });
+          const processorUrl = URL.createObjectURL(blob);
+          
           // Load AudioWorklet module
-          await audioContext.audioWorklet.addModule('/deepgram-processor.js');
+          await audioContext.audioWorklet.addModule(processorUrl);
+          URL.revokeObjectURL(processorUrl); // 메모리 정리
+          
+          console.log("🎤 [STT] AudioWorklet loaded successfully");
           
           // Create AudioWorklet node
           const workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
@@ -256,8 +295,13 @@ function App() {
           // Handle messages from the worklet
           workletNode.port.onmessage = (event) => {
             // Only send if recording and connection is open
-            if (!isRecordingRef.current) return;
-            if (connection.getReadyState() !== 1) return;
+            if (!isRecordingRef.current) {
+              return;
+            }
+            if (connection.getReadyState() !== 1) {
+              console.warn('🎤 [STT] Connection not ready, state:', connection.getReadyState());
+              return;
+            }
             
             // event.data is the Int16Array buffer from the worklet
             connection.send(event.data);
@@ -267,24 +311,33 @@ function App() {
           source.connect(workletNode);
           workletNode.connect(audioContext.destination);
           
+          console.log("🎤 [STT] Audio graph connected");
+          
           // Store worklet node for cleanup
           connection.workletNode = workletNode;
           
           // Clear success message after 2 seconds
           setTimeout(() => setSubtitle(''), 2000);
         } catch (err) {
-          console.error("AudioWorklet setup failed:", err);
-          alert("오디오 처리 초기화에 실패했습니다.");
+          console.error("🎤 [STT] AudioWorklet setup failed:", err);
+          alert("오디오 처리 초기화에 실패했습니다: " + err.message);
         }
       });
 
       connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+        console.log('🎤 [STT] Transcript event received:', {
+          is_final: data.is_final,
+          channel: data.channel?.alternatives?.[0]?.transcript
+        });
+        
         const channel = data.channel;
         if (channel && channel.alternatives && channel.alternatives[0]) {
           const transcriptText = channel.alternatives[0].transcript;
           const isFinal = data.is_final;
 
           if (transcriptText) {
+            console.log(`🎤 [STT] ${isFinal ? 'FINAL' : 'interim'}:`, transcriptText);
+            
             if (isFinal) {
                setTranscript(prev => prev + ' ' + transcriptText);
                setSubtitle(''); 
