@@ -11,9 +11,31 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        console.log('[API] Request to:', config.url, '| Token present:', !!token);
+    } else {
+        console.warn('[API] Request to:', config.url, '| No token found');
     }
     return config;
+}, (error) => {
+    return Promise.reject(error);
 });
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            console.error('[API] 401 Unauthorized - Token may be expired or invalid');
+            // Clear invalid token
+            localStorage.removeItem('token');
+            // Redirect to login if not already on auth page
+            if (window.location.pathname !== '/') {
+                window.location.href = '/';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 // ==================== Auth ====================
 
