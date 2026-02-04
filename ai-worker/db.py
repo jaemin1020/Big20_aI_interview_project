@@ -1,17 +1,43 @@
-from sqlmodel import SQLModel, create_engine, Session, Field, select
-from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSONB
-from pgvector.sqlalchemy import Vector
+
+from sqlmodel import SQLModel, create_engine, Session, select
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from enum import Enum
 import os
+import sys
+from pathlib import Path
 
+# ==========================================
+# Path Setup for Shared Models
+# ==========================================
+# Try to find backend-core to import central models
+current_dir = Path(__file__).parent.resolve()
+
+# 1. Docker Path (/backend-core)
+backend_core_docker = Path("/backend-core")
+# 2. Local Path relative to this file (../backend-core)
+backend_core_local = current_dir.parent / "backend-core"
+
+if backend_core_docker.exists():
+    sys.path.append(str(backend_core_docker))
+elif backend_core_local.exists():
+    sys.path.append(str(backend_core_local))
+else:
+    print("Warning: backend-core not found. Model imports may fail.")
+
+try:
+    # Centralized Model Imports
+    from models import (
+        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
+        User, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
+    )
+except ImportError as e:
+    print(f"Error importing models from backend-core: {e}")
+    # Fallback or Exit? For now let it crash to be visible.
+    raise e
+
+# ==========================================
 # Database Connection
-# Use psycopg (v3) driver for PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:1234@db:5432/interview_db")
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
 
 # Enums (Matching Backend)
@@ -148,6 +174,8 @@ class AnswerBank(SQLModel, table=True):
     reference_count: int = Field(default=0)
 
 # Helper Functions
+# ==========================================
+
 def get_best_questions_by_position(position: str, limit: int = 10):
     with Session(engine) as session:
         stmt = select(Question).where(
