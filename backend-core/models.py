@@ -76,7 +76,7 @@ class Resume(SQLModel, table=True):
     # 벡터 임베딩 (768차원 - 이력서 전체 내용)
     embedding: Any = Field(
         default=None,
-        sa_column=Column(Vector(768)),
+        sa_column=Column(Vector(1024)),
         description="이력서 내용 벡터 (유사 이력서 검색용)"
     )
     
@@ -108,7 +108,7 @@ class Company(SQLModel, table=True):
     # 벡터 임베딩 (768차원 - ideal + description 통합 임베딩)
     embedding: Any = Field(
         default=None,
-        sa_column=Column(Vector(768)),
+        sa_column=Column(Vector(1024)),
         description="회사 특성 벡터 (유사 회사 검색 및 문화 적합성 평가용)"
     )
     
@@ -176,7 +176,7 @@ class Question(SQLModel, table=True):
     # 벡터 임베딩 (768차원 - 질문 유사도 검색용)
     embedding: Optional[List[float]] = Field(
         default=None,
-        sa_column=Column(Vector(768))
+        sa_column=Column(Vector(1024))
     )
     
     # 메타데이터 (계층적 분류)
@@ -257,7 +257,7 @@ class AnswerBank(SQLModel, table=True):
     # 벡터 임베딩 (768차원 - Question과 동일한 모델 사용)
     embedding: Optional[List[float]] = Field(
         default=None,
-        sa_column=Column(Vector(768))
+        sa_column=Column(Vector(1024))
     )
     
     # 평가 점수 및 피드백

@@ -47,7 +47,7 @@ class Company(SQLModel, table=True):
     company_name: str
     ideal: Optional[str] = None
     description: Optional[str] = None
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -62,7 +62,7 @@ class Resume(SQLModel, table=True):
     file_size: int
     extracted_text: Optional[str] = None
     structured_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = None
     is_active: bool = Field(default=True)
@@ -94,7 +94,7 @@ class Question(SQLModel, table=True):
     parent_question_id: Optional[int] = None
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
     # Using Any for embedding to bypass SQLModel type inference bug with List[float]
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
     company: Optional[str] = None
     industry: Optional[str] = None
     position: Optional[str] = None
@@ -134,7 +134,7 @@ class AnswerBank(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     question_id: int
     answer_text: str
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
     score: float
     evaluator_feedback: Optional[str] = None
     company: Optional[str] = None

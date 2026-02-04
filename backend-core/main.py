@@ -424,6 +424,40 @@ async def upload_resume(
             file_path.unlink()
         raise HTTPException(status_code=500, detail="File upload failed")
 
+# 이력서 조회 (상태 및 분석 결과)
+@app.get("/resumes/{resume_id}")
+async def get_resume(
+    resume_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """이력서 조회 및 파싱 결과 확인"""
+    resume = db.get(Resume, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+        
+    # 권한 체크: 본인 또는 관리자만 접근 가능
+    if resume.candidate_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to access this resume")
+        
+    # 모든 기술 스택 통합
+    all_skills = []
+    if resume.structured_data and "skills" in resume.structured_data:
+        for cat, skills_list in resume.structured_data["skills"].items():
+            if isinstance(skills_list, list):
+                all_skills.extend(skills_list)
+                
+    return {
+        "id": resume.id,
+        "file_name": resume.file_name,
+        "processing_status": resume.processing_status,
+        "processed_at": resume.processed_at,
+        "structured_data": resume.structured_data,
+        "position": resume.structured_data.get("target_position", {}).get("position") if resume.structured_data else None,
+        "skills": list(set(all_skills))  # 중복 제거
+    }
+
+
 # ==================== Recruiter Endpoints ====================
 
 # 전체 인터뷰 목록 조회
