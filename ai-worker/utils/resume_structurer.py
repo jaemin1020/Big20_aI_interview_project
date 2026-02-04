@@ -86,7 +86,7 @@ class ResumeStructurer:
         """경력 추출"""
         experiences = []
         
-        # "경력" 섹션 찾기
+        # "경력" 섹션 찾기 (조금 더 유연하게)
         exp_section = re.search(
             r'경력\s*\n(.+?)(?:\n학력|\n자격증|\n프로젝트|$)',
             text,
@@ -96,14 +96,18 @@ class ResumeStructurer:
         if exp_section:
             exp_text = exp_section.group(1)
             
-            # 회사명 및 직책 패턴
-            # 예: "한국인터넷진흥원(KISA), 서울 — 인턴"
-            company_pattern = r'([가-힣()A-Za-z\s]+),\s*([가-힣]+)\s*—\s*(.+?)(?:\n|$)'
+            # 회사명 및 직책 패턴 개선
+            # 예: "회사명, 지역 — 직책" 또는 "회사명 — 직책"
+            # 구분자를 (—, -, :) 등으로 다양하게 처리
+            company_pattern = r'([가-힣()A-Za-z\s]+?)(?:,\s*[가-힣]+)?\s*[—\-:]+\s*(.+?)(?:\n|$)'
             companies = re.findall(company_pattern, exp_text)
             
-            for company, location, position in companies:
-                # 기간 찾기
-                period_match = re.search(r'(\d{4}년\s*\d{1,2}월)\s*-\s*(\d{4}년\s*\d{1,2}월)', exp_text)
+            for company_match in companies:
+                company = company_match[0].strip()
+                position = company_match[1].strip()
+                
+                # 기간 찾기 (YYYY년 MM월 - YYYY년 MM월)
+                period_match = re.search(r'(\d{4}년\s*\d{1,2}월)\s*-\s*(\d{4}년\s*\d{1,2}월|현재)', exp_text)
                 period = f"{period_match.group(1)} ~ {period_match.group(2)}" if period_match else "N/A"
                 
                 # 업무 내용 추출 (다음 줄들)
@@ -113,20 +117,26 @@ class ResumeStructurer:
                 
                 for line in lines:
                     line = line.strip()
-                    if company.strip() in line:
+                    if not line:
+                        continue
+                    if company in line:
                         in_description = True
                         continue
-                    if in_description and line and not re.match(r'^\d{4}년', line):
-                        if re.match(r'^[가-힣()A-Za-z\s]+,', line):  # 다음 회사 시작
+                    if in_description:
+                        # 날짜 라인은 건너뜀
+                        if re.match(r'^\d{4}년', line):
+                            continue
+                        # 다음 회사 시작 패턴이면 중단
+                        if re.search(r'[—\-:]', line) and len(line) < 50:
                             break
                         description_lines.append(line)
                 
-                description = ' '.join(description_lines[:3])  # 최대 3줄
+                description = ' '.join(description_lines[:5])  # 최대 5줄
                 
                 experiences.append({
-                    "company": company.strip(),
-                    "location": location.strip(),
-                    "position": position.strip(),
+                    "company": company,
+                    "location": None,  # 지역 정보는 선택적
+                    "position": position,
                     "duration": period,
                     "description": description,
                     "achievements": [],
@@ -150,9 +160,8 @@ class ResumeStructurer:
         if edu_section:
             edu_text = edu_section.group(1)
             
-            # 대학교 패턴
-            # 예: "세종대학교 — 정보보호학 학사"
-            univ_pattern = r'([가-힣]+대학교)\s*—\s*(.+?)\s*(학사|석사|박사)'
+            # 대학교/대학원 패턴 (—, - 구분자 유연하게)
+            univ_pattern = r'([가-힣]+대\s*학\s*교|KAIST|POSTECH)\s*[—\-:]+\s*(.+?)\s*(학사|석사|박사)'
             universities = re.findall(univ_pattern, edu_text)
             
             for school, major, degree in universities:
@@ -169,7 +178,7 @@ class ResumeStructurer:
                 })
             
             # 고등학교 패턴
-            hs_pattern = r'([가-힣]+고등학교)\s*—\s*(.+)'
+            hs_pattern = r'([가-힣]+고\s*등\s*학\s*교)\s*[—\-:]+\s*(.+)'
             high_schools = re.findall(hs_pattern, edu_text)
             
             for school, type_info in high_schools:
@@ -182,6 +191,7 @@ class ResumeStructurer:
                 })
         
         return education
+
     
     @staticmethod
     def _extract_certifications(text: str) -> List[Dict]:
@@ -227,19 +237,29 @@ class ResumeStructurer:
         if proj_section:
             proj_text = proj_section.group(1)
             
-            # 프로젝트명 (첫 줄)
+            # 프로젝트명 추출 (줄바꿈이나 구분자로 프로젝트 분리)
+            # 예: "프로젝트명"으로 시작하는 줄을 찾아서 분할
             lines = [line.strip() for line in proj_text.split('\n') if line.strip()]
             
             if lines:
-                project_name = lines[0]
-                description = ' '.join(lines[1:]) if len(lines) > 1 else ""
+                # 첫 줄을 프로젝트명으로 가정하고, 나머지를 설명으로 (단순화)
+                # 실제로는 여러 프로젝트가 있을 수 있으므로 날짜나 불릿을 기준으로 나눌 수 있음
+                current_project = {"name": "", "description": []}
+                
+                for line in lines:
+                    # 프로젝트 제목으로 추정되는 라인 (길이가 짧고, 특수문자가 적음)
+                    # 여기서는 단순하게 첫 줄 또는 빈 줄 다음 줄을 제목으로 봅니다.
+                    if not current_project["name"]:
+                        current_project["name"] = line
+                    else:
+                        current_project["description"].append(line)
                 
                 projects.append({
-                    "name": project_name,
+                    "name": current_project["name"],
                     "duration": None,
-                    "description": description,
+                    "description": ' '.join(current_project["description"]),
                     "role": None,
-                    "tech_stack": ResumeStructurer._extract_tech_from_text(description),
+                    "tech_stack": ResumeStructurer._extract_tech_from_text(' '.join(current_project["description"])),
                     "achievements": []
                 })
         

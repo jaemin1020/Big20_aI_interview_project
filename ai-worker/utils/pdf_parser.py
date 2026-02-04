@@ -155,14 +155,11 @@ class ResumePDFParser:
         Returns:
             str: 정제된 텍스트
         """
-        # 여러 개의 공백을 하나로
-        text = re.sub(r'\s+', ' ', text)
+        # 1. 수평 공백(스페이스, 탭 등)만 하나로 축소 (줄바꿈 \n 제외)
+        text = re.sub(r'[ \t\r\f\v]+', ' ', text)
         
-        # 여러 개의 줄바꿈을 최대 2개로
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        
-        # 특수문자 정리 (선택적)
-        # text = re.sub(r'[^\w\s가-힣.,!?@\-():/]', '', text)
+        # 2. 여러 줄의 빈 줄을 최대 2줄로 압축
+        text = re.sub(r'\n\s*\n+', '\n\n', text)
         
         return text.strip()
 

@@ -84,6 +84,7 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
+      - ./backend-core/uploads:/app/uploads
     networks:
       - interview_network
 

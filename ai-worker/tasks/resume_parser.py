@@ -60,7 +60,7 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
         logger.info(f"[Resume {resume_id}] 이력서 구조화 중...")
         try:
             structurer = ResumeStructurer()  # LLM 없이 규칙 기반
-            structured_data = structurer.structure_with_rules(cleaned_text)
+            structured_data = structurer.structure_resume(cleaned_text)
             logger.info(f"[Resume {resume_id}] 구조화 완료")
         except Exception as e:
             logger.error(f"[Resume {resume_id}] 구조화 실패: {e}")
