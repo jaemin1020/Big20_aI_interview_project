@@ -62,6 +62,16 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
             structurer = ResumeStructurer()  # LLM 없이 규칙 기반
             structured_data = structurer.structure_with_rules(cleaned_text)
             logger.info(f"[Resume {resume_id}] 구조화 완료")
+            
+            # 구조화 결과 로깅 (요약)
+            logger.info("=" * 40)
+            logger.info(f"[Resume {resume_id}] 파싱 결과 요약:")
+            for key, val in structured_data.items():
+                if isinstance(val, list):
+                    logger.info(f" - {key}: {len(val)} items")
+                else:
+                    logger.info(f" - {key}: {str(val)[:50]}...")
+            logger.info("=" * 40)
         except Exception as e:
             logger.error(f"[Resume {resume_id}] 구조화 실패: {e}")
             structured_data = {}
