@@ -3,10 +3,6 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
 const LandingPage = ({ 
-  userName, 
-  setUserName, 
-  position, 
-  setPosition, 
   startInterview, 
   handleLogout 
 }) => {
@@ -51,7 +47,7 @@ const LandingPage = ({
 
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <PremiumButton 
-            onClick={() => startInterview(userName, 'General')}
+            onClick={() => startInterview()}
             style={{ padding: '16px 60px', fontSize: '1.2rem' }}
           >
             면접 시작
