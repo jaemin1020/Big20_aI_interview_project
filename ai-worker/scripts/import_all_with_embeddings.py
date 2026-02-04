@@ -22,7 +22,7 @@ from utils.vector_utils import get_embedding_generator
 from datetime import datetime
 
 # 실행 예시
-# docker exec -it interview_worker //bin/bash python import_data.py
+# docker exec -it interview_worker python scripts/import_all_with_embeddings.py
 
 # ==========================================
 # Configuration
