@@ -226,7 +226,16 @@ async def get_interview_questions(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """면접의 질문 목록 조회 (Transcript에서 AI 발화만 필터링)"""
+    """면접의 질문 목록 조회 (Transcript에서 AI 발화만 필터링) - Redis 캐싱 적용"""
+    from utils.redis_cache import get_cached_interview_questions, cache_interview_questions
+    
+    # 1. 캐시 조회
+    cached_questions = get_cached_interview_questions(interview_id)
+    if cached_questions is not None:
+        logger.info(f"✅ Returning cached questions for interview {interview_id}")
+        return cached_questions
+    
+    # 2. 캐시 미스 - DB 조회
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
@@ -234,15 +243,21 @@ async def get_interview_questions(
     
     transcripts = db.exec(stmt).all()
     
-    return [
+    questions = [
         {
             "id": t.question_id,
             "content": t.text,
             "order": t.order,
-            "timestamp": t.timestamp
+            "timestamp": t.timestamp.isoformat() if t.timestamp else None
         }
         for t in transcripts
     ]
+    
+    # 3. 캐시 저장
+    cache_interview_questions(interview_id, questions)
+    logger.info(f"💾 Cached {len(questions)} questions for interview {interview_id}")
+    
+    return questions
 
 # ==================== Transcript Endpoints ====================
 
