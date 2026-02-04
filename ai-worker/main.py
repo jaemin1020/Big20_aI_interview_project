@@ -18,7 +18,7 @@ app = Celery(
     "ai_worker",
     broker="redis://redis:6379/0",
     backend="redis://redis:6379/0",
-    include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator']
+    include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator', 'tasks.resume_parser', 'tasks.answer_collector']
 )
 
 # 3. 성능 최적화 설정
