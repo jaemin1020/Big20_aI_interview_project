@@ -47,6 +47,7 @@ function App() {
   const isRecordingRef = useRef(false);
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
+  const canvasRef = useRef(null);
   const [subtitle, setSubtitle] = useState(''); // 실시간 자막용
 
   // 자동 로그인 확인
@@ -186,6 +187,8 @@ function App() {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
           
           setTranscript(prev => prev + ' ' + data.text);
+        } else if (data.type === 'eye_tracking') {
+             drawTracking(data.data);
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -312,6 +315,55 @@ function App() {
       setIsRecording(true);
       isRecordingRef.current = true;
     }
+  };
+
+  const drawTracking = (trackingData) => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video || video.videoWidth === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    
+    // Canvas 크기를 비디오 표시 크기에 맞춤 (한 번만 설정하거나 리사이즈 이벤트 처리 필요하지만 여기선 매번 체크)
+    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+    }
+    
+    // Clear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Scale Factors
+    const scaleX = video.clientWidth / video.videoWidth;
+    const scaleY = video.clientHeight / video.videoHeight;
+
+    trackingData.forEach(item => {
+        // Face (Green)
+        if (item.face) {
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                item.face.x * scaleX, 
+                item.face.y * scaleY, 
+                item.face.w * scaleX, 
+                item.face.h * scaleY
+            );
+        }
+
+        // Eyes (Red)
+        if (item.eyes) {
+            item.eyes.forEach(eye => {
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    eye.x * scaleX, 
+                    eye.y * scaleY, 
+                    eye.w * scaleX, 
+                    eye.h * scaleY
+                );
+            });
+        }
+    });
   };
 
   const nextQuestion = async () => {
@@ -560,7 +612,20 @@ function App() {
       {step === 'interview' && (
         <div className="card">
           <h2>실시간 면접</h2>
-          <video ref={videoRef} autoPlay playsInline muted />
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <video ref={videoRef} autoPlay playsInline muted style={{ display: 'block', maxWidth: '100%' }} />
+            <canvas 
+                ref={canvasRef} 
+                style={{ 
+                    position: 'absolute', 
+                    top: 0, 
+                    left: 0, 
+                    pointerEvents: 'none',
+                    width: '100%',
+                    height: '100%'
+                }} 
+            />
+          </div>
           
           {/* 실시간 자막 오버레이 */}
           {subtitle && (
