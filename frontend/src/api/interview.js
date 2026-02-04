@@ -114,6 +114,11 @@ export const uploadResume = async (file) => {
     return response.data;
 };
 
+export const getResume = async (resumeId) => {
+    const response = await api.get(`/resumes/${resumeId}`);
+    return response.data;
+};
+
 export const getAllInterviews = async () => {
     const response = await api.get('/interviews');
     return response.data;

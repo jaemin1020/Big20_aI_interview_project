@@ -36,6 +36,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
+  const [parsedResumeData, setParsedResumeData] = useState(null);
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -90,6 +91,23 @@ function App() {
         setUser(u);
         setStep('landing');
       } else {
+        // 회원가입 검증
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(account.email)) {
+          setAuthError('올바른 이메일 형식이 아닙니다.');
+          return;
+        }
+
+        if (account.password !== account.passwordConfirm) {
+          setAuthError('비밀번호가 일치하지 않습니다.');
+          return;
+        }
+        if (!account.termsAgreed) {
+          setAuthError('이용약관에 동의해야 합니다.');
+          return;
+        }
+
+        // 실제 API 호출
         await apiRegister(account.email, account.username, account.password, account.fullName);
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
