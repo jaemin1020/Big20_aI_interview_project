@@ -349,18 +349,36 @@ function App() {
       });
 
       connection.on(LiveTranscriptionEvents.Error, (err) => {
-        console.error("Deepgram Error:", err);
+        console.error("🎤 [STT] Deepgram Error:", {
+          message: err.message,
+          type: err.type,
+          description: err.description,
+          code: err.code,
+          fullError: err
+        });
         setSubtitle("⚠️ 음성 인식 오류 발생");
         setTimeout(() => setSubtitle(''), 3000);
         
         // 심각한 에러인 경우 사용자에게 알림
         if (err.message && err.message.includes('401')) {
-          alert("음성 인식 인증에 실패했습니다. 다시 로그인해주세요.");
+          alert("음성 인식 인증에 실패했습니다. API 키를 확인해주세요.");
+        } else if (err.message) {
+          console.error("🎤 [STT] Error details:", err.message);
         }
       });
 
-      connection.on(LiveTranscriptionEvents.Close, () => {
-        console.log("Deepgram WebSocket Closed");
+      connection.on(LiveTranscriptionEvents.Close, (event) => {
+        console.log("🎤 [STT] Deepgram WebSocket Closed", {
+          code: event?.code,
+          reason: event?.reason,
+          wasClean: event?.wasClean,
+          timestamp: new Date().toISOString()
+        });
+        
+        // 비정상 종료인 경우 경고
+        if (event && !event.wasClean) {
+          console.warn("🎤 [STT] Connection closed unexpectedly!");
+        }
       });
       
       // Clean up function injection
@@ -561,6 +579,7 @@ function App() {
     }
   };
 
+  // 면접 화면 초기화 (WebRTC, WebSocket)
   useEffect(() => {
     if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
       const initMedia = async () => {
@@ -574,6 +593,15 @@ function App() {
       initMedia();
     }
   }, [step, interview]);
+
+  // 면접 시작 시 자동으로 녹음 시작 (Deepgram 타임아웃 방지)
+  useEffect(() => {
+    if (step === 'interview' && questions.length > 0 && !isRecording) {
+      console.log('🎤 [AUTO] Starting recording automatically...');
+      setIsRecording(true);
+      isRecordingRef.current = true;
+    }
+  }, [step, questions]);
 
   useEffect(() => {
     return () => {
