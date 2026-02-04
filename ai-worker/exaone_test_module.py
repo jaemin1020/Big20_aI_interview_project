@@ -1,4 +1,4 @@
-
+import os
 import json
 import time
 from typing import List, Dict, Optional
@@ -23,9 +23,9 @@ class ExaoneTestModule:
         """
         self.model_name = model_name
         
-        # Docker 내부에서 호스트의 Ollama에 접속하려면 'http://host.docker.internal:11434' 필요
-        # 환경 변수 OLLAMA_HOST가 있으면 그걸 쓰고, 없으면 기본값 사용
-        self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")
+        # 로컬 환경에서는 localhost, Docker 내부에서 호스트의 Ollama에 접속하려면 'http://host.docker.internal:11434' 필요
+        # 기본값을 http://localhost:11434로 변경하여 로컬 테스트를 원활하게 함
+        self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
         
         print(f"[Init] Ollama 연결 시도: {self.base_url} (Model: {self.model_name})")
 
