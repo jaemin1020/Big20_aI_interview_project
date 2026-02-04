@@ -21,6 +21,8 @@ services:
     image: redis:7-alpine
     container_name: interview_redis
     restart: always
+    ports:
+      - "6379:6379"
     networks:
       - interview_network
 
@@ -71,8 +73,13 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
+
       # - MODEL_PATH=/app/models/solar-10.7b-instruct-v1.0.Q8_0.gguf
       - MODEL_PATH=/app/models/EXAONE-3.5-2.4B-Instruct
+
+      # - EVALUATOR_MODEL_PATH=/app/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+      # - GENERATOR_MODEL_ID=meta-llama/Meta-Llama-3.1-8B-Instruct
+
       - N_GPU_LAYERS=0 # Solar 모델은 순수 CPU 연산
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN} # 질문 생성용
     depends_on:
@@ -81,6 +88,7 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
+      - ./backend-core:/backend-core # Shared Code Access
     networks:
       - interview_network
 
@@ -93,8 +101,10 @@ services:
     environment:
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - backend
+      - redis
     volumes:
       - ./media-server:/app
     networks:
@@ -112,6 +122,7 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8000
+      - VITE_DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     depends_on:
       - backend
     networks:

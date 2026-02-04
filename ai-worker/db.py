@@ -1,12 +1,41 @@
-from sqlmodel import SQLModel, create_engine, Session, Field, select
-from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSONB
-from pgvector.sqlalchemy import Vector
+
+from sqlmodel import SQLModel, create_engine, Session, select
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from enum import Enum
 import os
+import sys
+from pathlib import Path
 
+# ==========================================
+# Path Setup for Shared Models
+# ==========================================
+# Try to find backend-core to import central models
+current_dir = Path(__file__).parent.resolve()
+
+# 1. Docker Path (/backend-core)
+backend_core_docker = Path("/backend-core")
+# 2. Local Path relative to this file (../backend-core)
+backend_core_local = current_dir.parent / "backend-core"
+
+if backend_core_docker.exists():
+    sys.path.append(str(backend_core_docker))
+elif backend_core_local.exists():
+    sys.path.append(str(backend_core_local))
+else:
+    print("Warning: backend-core not found. Model imports may fail.")
+
+try:
+    # Centralized Model Imports
+    from models import (
+        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
+        User, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
+    )
+except ImportError as e:
+    print(f"Error importing models from backend-core: {e}")
+    # Fallback or Exit? For now let it crash to be visible.
+    raise e
+
+# ==========================================
 # Database Connection
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
@@ -42,7 +71,7 @@ class Speaker(str, Enum):
 class Company(SQLModel, table=True):
     """회사 정보 테이블 (벡터 검색 지원)"""
     __tablename__ = "companies"
-    
+
     id: str = Field(primary_key=True, max_length=50)
     company_name: str
     ideal: Optional[str] = None
@@ -54,7 +83,7 @@ class Company(SQLModel, table=True):
 class Resume(SQLModel, table=True):
     """이력서 테이블"""
     __tablename__ = "resumes"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int
     file_name: str
@@ -145,6 +174,8 @@ class AnswerBank(SQLModel, table=True):
     reference_count: int = Field(default=0)
 
 # Helper Functions
+# ==========================================
+
 def get_best_questions_by_position(position: str, limit: int = 10):
     with Session(engine) as session:
         stmt = select(Question).where(
@@ -187,16 +218,16 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
         report = session.exec(stmt).first()
-        
+
         if report:
             for key, value in kwargs.items():
                 if hasattr(report, key):
-                     setattr(report, key, value)
+                    setattr(report, key, value)
         else:
             valid_keys = EvaluationReport.__fields__.keys()
             filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
             report = EvaluationReport(interview_id=interview_id, **filtered_kwargs)
-        
+
         session.add(report)
         session.commit()
         session.refresh(report)
@@ -263,5 +294,5 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         ).order_by(
             Company.embedding.cosine_distance(embedding)
         ).limit(limit)
-        
+
         return session.exec(stmt).all()

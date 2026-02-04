@@ -13,12 +13,13 @@ import {
 =======
   uploadResume,
   getAllInterviews,
-  login as apiLogin, 
-  register as apiRegister, 
-  logout as apiLogout, 
-  getCurrentUser 
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  getCurrentUser
 >>>>>>> b182f94287306aeafee00576932b7aef7b472b2a
 } from './api/interview';
+import { createClient } from "@deepgram/sdk";
 
 function App() {
   const [step, setStep] = useState('auth');
@@ -49,12 +50,15 @@ function App() {
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
-  
+
 >>>>>>> b182f94287306aeafee00576932b7aef7b472b2a
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
+  const [subtitle, setSubtitle] = useState(''); // 실시간 자막용
 
   // 자동 로그인 확인
   useEffect(() => {
@@ -74,20 +78,20 @@ function App() {
 
   const handleAuth = async () => {
     setAuthError('');
-    
+
     // 클라이언트 사이드 유효성 검사
     if (authMode === 'register') {
-        const usernameRegex = /^[a-z0-9_]{4,12}$/;
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const usernameRegex = /^[a-z0-9_]{4,12}$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-        if (!usernameRegex.test(account.username)) {
-            setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
-            return;
-        }
-        if (!emailRegex.test(account.email)) {
-            setAuthError("유효한 이메일 주소를 입력해주세요.");
-            return;
-        }
+      if (!usernameRegex.test(account.username)) {
+        setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+        return;
+      }
+      if (!emailRegex.test(account.email)) {
+        setAuthError("유효한 이메일 주소를 입력해주세요.");
+        return;
+      }
     }
 
     try {
@@ -138,15 +142,15 @@ function App() {
       let resumeId = null;
       if (resumeFile) {
         try {
-            console.log("Uploading resume...", resumeFile.name);
-            const resumeRes = await uploadResume(resumeFile);
-            resumeId = resumeRes.id; // 가정: ID 반환
-            console.log("Resume uploaded, ID:", resumeId);
+          console.log("Uploading resume...", resumeFile.name);
+          const resumeRes = await uploadResume(resumeFile);
+          resumeId = resumeRes.id; // 가정: ID 반환
+          console.log("Resume uploaded, ID:", resumeId);
         } catch (e) {
-            if(!confirm("이력서 업로드에 실패했습니다. 이력서 없이 진행하시겠습니까?")) {
-                setStep('landing'); // 취소 시 랜딩으로 복귀
-                return;
-            }
+          if (!confirm("이력서 업로드에 실패했습니다. 이력서 없이 진행하시겠습니까?")) {
+            setStep('landing'); // 취소 시 랜딩으로 복귀
+            return;
+          }
         }
       }
 
@@ -168,14 +172,14 @@ function App() {
   };
 
   const handleRecruiterDashboard = async () => {
-      try {
-          const list = await getAllInterviews();
-          setAllInterviews(list);
-          setStep('recruiter');
-      } catch (err) {
-          console.error(err);
-          alert("인터뷰 목록을 불러오는데 실패했습니다.");
-      }
+    try {
+      const list = await getAllInterviews();
+      setAllInterviews(list);
+      setStep('recruiter');
+    } catch (err) {
+      console.error(err);
+      alert("인터뷰 목록을 불러오는데 실패했습니다.");
+    }
   };
 
   const setupWebSocket = (interviewId) => {
@@ -191,7 +195,7 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-          
+
           setTranscript(prev => prev + ' ' + data.text);
         }
       } catch (err) {
@@ -201,6 +205,59 @@ function App() {
 
     ws.onerror = (error) => console.error('[WebSocket] Error:', error);
     ws.onclose = () => console.log('[WebSocket] Closed');
+  };
+
+  const setupDeepgram = (stream) => {
+    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      console.warn("Deepgram API Key not found");
+      return;
+    }
+
+    const deepgram = createClient(apiKey);
+    const connection = deepgram.listen.live({
+      model: "nova-2",
+      language: "ko",
+      smart_format: true,
+      encoding: "linear16",
+      sample_rate: 16000,
+    });
+
+    connection.on("Open", () => {
+      console.log("Deepgram WebSocket Connected");
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0 && connection.getReadyState() === 1) {
+          connection.send(event.data);
+        }
+      });
+      mediaRecorder.start(250);
+      mediaRecorderRef.current = mediaRecorder;
+    });
+
+    connection.on("Results", (result) => {
+      const channel = result.channel;
+      if (channel && channel.alternatives && channel.alternatives[0]) {
+        const transcriptText = channel.alternatives[0].transcript;
+        const isFinal = result.is_final;
+
+        if (transcriptText) {
+          if (isFinal) {
+            setTranscript(prev => prev + ' ' + transcriptText);
+            setSubtitle('');
+          } else {
+            setSubtitle(transcriptText);
+          }
+        }
+      }
+    });
+
+    connection.on("Error", (err) => {
+      console.error("Deepgram Error:", err);
+    });
+
+    deepgramConnectionRef.current = connection;
   };
 
   const setupWebRTC = async (interviewId) => {
@@ -215,6 +272,9 @@ function App() {
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
+
+      setupDeepgram(stream);
+
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track:', track.kind, track.label);
@@ -327,6 +387,8 @@ function App() {
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
+      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
     };
   }, []);
 
@@ -392,8 +454,8 @@ function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h1>AI Interview System v2.0</h1>
             <div>
-                <button onClick={handleRecruiterDashboard} style={{ fontSize: '0.8em', marginRight: '10px', backgroundColor: '#6366f1' }}>면접결과 확인</button>
-                <button onClick={handleLogout} style={{ fontSize: '0.8em' }}>로그아웃</button>
+              <button onClick={handleRecruiterDashboard} style={{ fontSize: '0.8em', marginRight: '10px', backgroundColor: '#6366f1' }}>면접결과 확인</button>
+              <button onClick={handleLogout} style={{ fontSize: '0.8em' }}>로그아웃</button>
             </div>
           </div>
           <p>지원 직무를 입력하고 면접을 시작하세요.</p>
@@ -408,15 +470,15 @@ function App() {
               />
             </div>
             <div style={{ marginTop: '15px' }}>
-                <label>이력서 (PDF/Word):</label>
-                <input 
-                    type="file" 
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => setResumeFile(e.target.files[0])}
-                />
-                <p style={{ fontSize: '0.8em', color: '#666' }}>
-                    * 이력서를 제출하면 맞춤형 면접 질문이 생성됩니다.
-                </p>
+              <label>이력서 (PDF/Word):</label>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => setResumeFile(e.target.files[0])}
+              />
+              <p style={{ fontSize: '0.8em', color: '#666' }}>
+                * 이력서를 제출하면 맞춤형 면접 질문이 생성됩니다.
+              </p>
             </div>
           </div>
           <button onClick={startInterview}>면접 시작</button>
@@ -424,92 +486,110 @@ function App() {
       )}
 
       {step === 'recruiter' && (
-          <div className="card" style={{ maxWidth: '800px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h2>Recruiter Dashboard</h2>
-                <button onClick={() => setStep('landing')}>뒤로가기</button>
-              </div>
-              
-              {!selectedInterviewForReview ? (
-                  <div className="interview-list">
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                              <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
-                                  <th style={{ padding: '10px' }}>ID</th>
-                                  <th style={{ padding: '10px' }}>지원 직무</th>
-                                  <th style={{ padding: '10px' }}>상태</th>
-                                  <th style={{ padding: '10px' }}>날짜</th>
-                                  <th style={{ padding: '10px' }}>작업</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              {allInterviews.map((iv) => (
-                                  <tr key={iv.id} style={{ borderBottom: '1px solid #eee' }}>
-                                      <td style={{ padding: '10px' }}>{iv.id}</td>
-                                      <td style={{ padding: '10px' }}>{iv.position}</td>
-                                      <td style={{ padding: '10px' }}>
-                                          <span style={{ 
-                                              padding: '4px 8px', 
-                                              borderRadius: '12px',
-                                              fontSize: '0.8em',
-                                              backgroundColor: iv.status === 'completed' ? '#d1fae5' : '#f3f4f6',
-                                              color: iv.status === 'completed' ? '#065f46' : '#374151'
-                                          }}>
-                                              {iv.status}
-                                          </span>
-                                      </td>
-                                      <td style={{ padding: '10px' }}>{new Date(iv.created_at).toLocaleDateString()}</td>
-                                      <td style={{ padding: '10px' }}>
-                                          {iv.status === 'completed' && (
-                                              <button 
-                                                  style={{ padding: '5px 10px', fontSize: '0.8em' }}
-                                                  onClick={async () => {
-                                                      const rep = await getEvaluationReport(iv.id);
-                                                      setReport(rep);
-                                                      setSelectedInterviewForReview(iv);
-                                                  }}
-                                              >
-                                                  결과 보기
-                                              </button>
-                                          )}
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              ) : (
-                  <div>
-                      <button 
-                        onClick={() => {
-                            setSelectedInterviewForReview(null);
-                            setReport(null);
-                        }}
-                        style={{ marginBottom: '15px', backgroundColor: '#9ca3af' }}
-                      >
-                          목록으로 돌아가기
-                      </button>
-                      
-                      {/* Reuse Result View Logic roughly */}
-                      {report && (
-                        <div className="question-box">
-                            <h3>면접 결과: {selectedInterviewForReview.position} (ID: {selectedInterviewForReview.id})</h3>
-                            <p>종합 점수: <strong>{report.overall_score?.toFixed(1)}/100</strong></p>
-                            <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                                <h4>종합 평가</h4>
-                                <p>{report.summary_text}</p>
-                            </div>
-                        </div>
-                      )}
-                  </div>
-              )}
+        <div className="card" style={{ maxWidth: '800px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h2>Recruiter Dashboard</h2>
+            <button onClick={() => setStep('landing')}>뒤로가기</button>
           </div>
+
+          {!selectedInterviewForReview ? (
+            <div className="interview-list">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
+                    <th style={{ padding: '10px' }}>ID</th>
+                    <th style={{ padding: '10px' }}>지원 직무</th>
+                    <th style={{ padding: '10px' }}>상태</th>
+                    <th style={{ padding: '10px' }}>날짜</th>
+                    <th style={{ padding: '10px' }}>작업</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allInterviews.map((iv) => (
+                    <tr key={iv.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: '10px' }}>{iv.id}</td>
+                      <td style={{ padding: '10px' }}>{iv.position}</td>
+                      <td style={{ padding: '10px' }}>
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8em',
+                          backgroundColor: iv.status === 'completed' ? '#d1fae5' : '#f3f4f6',
+                          color: iv.status === 'completed' ? '#065f46' : '#374151'
+                        }}>
+                          {iv.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px' }}>{new Date(iv.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '10px' }}>
+                        {iv.status === 'completed' && (
+                          <button
+                            style={{ padding: '5px 10px', fontSize: '0.8em' }}
+                            onClick={async () => {
+                              const rep = await getEvaluationReport(iv.id);
+                              setReport(rep);
+                              setSelectedInterviewForReview(iv);
+                            }}
+                          >
+                            결과 보기
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={() => {
+                  setSelectedInterviewForReview(null);
+                  setReport(null);
+                }}
+                style={{ marginBottom: '15px', backgroundColor: '#9ca3af' }}
+              >
+                목록으로 돌아가기
+              </button>
+
+              {/* Reuse Result View Logic roughly */}
+              {report && (
+                <div className="question-box">
+                  <h3>면접 결과: {selectedInterviewForReview.position} (ID: {selectedInterviewForReview.id})</h3>
+                  <p>종합 점수: <strong>{report.overall_score?.toFixed(1)}/100</strong></p>
+                  <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                    <h4>종합 평가</h4>
+                    <p>{report.summary_text}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {step === 'interview' && (
         <div className="card">
           <h2>실시간 면접</h2>
           <video ref={videoRef} autoPlay playsInline muted />
+
+          {/* 실시간 자막 오버레이 */}
+          {subtitle && (
+            <div style={{
+              marginTop: '-45px',
+              padding: '8px 15px',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              borderRadius: '20px',
+              position: 'relative',
+              textAlign: 'center',
+              zIndex: 10,
+              display: 'inline-block',
+              maxWidth: '90%'
+            }}>
+              {subtitle}
+            </div>
+          )}
 
           {questions.length > 0 && (
             <div className="question-box">
