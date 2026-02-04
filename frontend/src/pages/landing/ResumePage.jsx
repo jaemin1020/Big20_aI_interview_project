@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
-const ResumePage = ({ onNext }) => {
+const ResumePage = ({ onNext, onFileSelect }) => {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [step, setStep] = useState('upload'); // upload, confirm
 
   const handleFileChange = (e) => {
     if (e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      if (onFileSelect) {
+        onFileSelect(selectedFile);
+      }
     }
   };
 
