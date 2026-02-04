@@ -5,7 +5,9 @@ import PremiumButton from '../../components/ui/PremiumButton';
 const MainPage = ({ 
   onStartInterview, 
   onLogin, 
-  onRegister 
+  onRegister,
+  user,
+  onLogout
 }) => {
   return (
     <div className="main-container animate-fade-in" style={{ 
@@ -20,12 +22,20 @@ const MainPage = ({
     }}>
       {/* Auth Buttons - Absolute Position Top Right */}
       <div style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: '1rem' }}>
-        <PremiumButton variant="secondary" onClick={onLogin} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
-          로그인
-        </PremiumButton>
-        <PremiumButton onClick={onRegister} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
-          회원가입
-        </PremiumButton>
+        {user ? (
+          <PremiumButton variant="secondary" onClick={onLogout} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
+            로그아웃
+          </PremiumButton>
+        ) : (
+          <>
+            <PremiumButton variant="secondary" onClick={onLogin} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
+              로그인
+            </PremiumButton>
+            <PremiumButton onClick={onRegister} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
+              회원가입
+            </PremiumButton>
+          </>
+        )}
       </div>
 
       <div style={{ textAlign: 'center', padding: '4rem 3rem', maxWidth: '800px' }}>

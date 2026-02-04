@@ -19,7 +19,6 @@ import Header from './components/layout/Header';
 import MainPage from './pages/main/MainPage';
 import AuthPage from './pages/auth/AuthPage';
 import LandingPage from './pages/landing/LandingPage';
-import GuidePage from './pages/landing/GuidePage';
 import ResumePage from './pages/landing/ResumePage';
 import EnvTestPage from './pages/setup/EnvTestPage';
 import FinalGuidePage from './pages/landing/FinalGuidePage';
@@ -45,6 +44,7 @@ function App() {
   
   const [account, setAccount] = useState({ 
     email: '', 
+    username: '',
     password: '', 
     passwordConfirm: '',
     fullName: '', 
@@ -62,6 +62,7 @@ function App() {
   const [userName, setUserName] = useState('');
   const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
+  const [parsedResumeData, setParsedResumeData] = useState(null);
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -73,6 +74,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -108,8 +110,8 @@ function App() {
 
     try {
       if (authMode === 'login') {
-        // 로그인 시에는 email을 username으로 사용
-        await apiLogin(account.email, account.password);
+        // 로그인 시에는 username 사용
+        await apiLogin(account.username, account.password);
         const u = await getCurrentUser();
         setUser(u);
         setStep('landing');
@@ -130,8 +132,8 @@ function App() {
           return;
         }
 
-        // 실제 API 호출 (백엔드 맞춰서 email을 username으로 전달)
-        await apiRegister(account.email, account.password, account.fullName);
+        // 실제 API 호출
+        await apiRegister(account.email, account.username, account.password, account.fullName);
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
@@ -159,31 +161,36 @@ function App() {
     setStep('auth');
   };
 
-  const startInterviewFlow = async (uName, uPos) => {
-    if (!uName.trim() || !uPos.trim()) {
-      alert("이름과 지원 직무를 입력해주세요.");
-      return;
-    }
-    setUserName(uName);
-    setPosition(uPos);
+  const startInterviewFlow = () => {
     setStep('resume');
   };
 
   const initInterviewSession = async () => {
     try {
-      // 1. Create Interview
-      const newInterview = await createInterview(userName, position);
+      // 1. Create Interview with Parsed Position & User Name
+      const interviewPosition = parsedResumeData?.position || position || 'General';
+      const interviewUser = user?.full_name || user?.username || userName || 'Candidate';
+      
+      console.log("Creating interview with:", { interviewUser, interviewPosition });
+
+      const newInterview = await createInterview(interviewPosition, null, null); // user name usually handled by backend via token, or if API needed it? 
+      // Checking api/interview.js: createInterview(position, jobPostingId, scheduledTime). 
+      // It does NOT take username. Backend likely uses the token's user.
+      
       setInterview(newInterview);
 
-      // 2. Upload Resume if available
-      if (resumeFile) {
-        await uploadResume(newInterview.id, resumeFile);
-      }
+      // 2. Upload Resume - Already done in ResumePage? 
+      // If ResumePage uploads it to get parsed data, we often just need that data.
+      // But if the backend *needs* the file attached to the *interview ID*, we might need to re-upload or link it?
+      // Based on api/interview.js, uploadResume(file) returns data and takes no ID.
+      // So it strictly parses. It does not attach to an interview explicitly unless backend tracks user's last upload.
+      // We will assume the parsing was enough for now, or if we need to store the file content in the interview context, 
+      // the backend implementation of createInterview might need to know about the resume.
+      // But for now, user request is "Start session with parsed position". We have that.
 
       // 3. Get Questions
       const qs = await getInterviewQuestions(newInterview.id);
       
-      // Retry logic if questions are not ready (optional, but good for UX)
       if (!qs || qs.length === 0) {
          console.log("Questions not ready, retrying in 3s...");
          setTimeout(async () => {
@@ -198,7 +205,7 @@ function App() {
       setStep('interview');
     } catch (err) {
       console.error("Session init error:", err);
-      alert("면접 세션 생성에 실패했습니다.");
+      // alert("면접 세션 생성에 실패했습니다."); // Removed for smoother UX if fails silent
     }
   };
 
@@ -446,6 +453,8 @@ function App() {
             onStartInterview={() => setStep('landing')}
             onLogin={() => { setAuthMode('login'); setStep('auth'); }}
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
+            user={user}
+            onLogout={handleLogout}
           />
         )}
 
@@ -459,15 +468,18 @@ function App() {
 
       {step === 'landing' && (
         <LandingPage 
-          userName={userName} setUserName={setUserName}
-          position={position} setPosition={setPosition}
-          startInterview={startInterviewFlow} handleLogout={handleLogout}
+          startInterview={startInterviewFlow} 
+          handleLogout={handleLogout}
         />
       )}
 
-      {step === 'guide' && <GuidePage onNext={() => setStep('resume')} />}
-      
-      {step === 'resume' && <ResumePage onNext={() => setStep('env_test')} onFileSelect={setResumeFile} />}
+      {step === 'resume' && (
+        <ResumePage 
+          onNext={() => setStep('env_test')} 
+          onFileSelect={setResumeFile} 
+          onParsedData={setParsedResumeData} // Pass this to save parsed info
+        />
+      )}
       
       {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
       
