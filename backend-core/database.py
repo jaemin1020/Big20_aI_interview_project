@@ -4,15 +4,8 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session, text
 from sqlalchemy.exc import OperationalError
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-from models import User, JobPosting, Interview, Question, Transcript, EvaluationReport
-=======
-from models import User, Interview, Transcript, EvaluationReport, Question, JobPosting
->>>>>>> 40311f7866fdbacf997e1b7a4412c3d641518527
-=======
 from models import User, Interview, Transcript, EvaluationReport, Question
->>>>>>> b182f94287306aeafee00576932b7aef7b472b2a
+
 
 # 로깅 설정
 logger = logging.getLogger("Database")
