@@ -14,12 +14,12 @@ from pathlib import Path
 from database import init_db, get_session
 # DB 테이블 모듈 임포트
 from models import (
-    User, UserCreate, UserLogin, Company,
+    User, UserCreate, UserLogin, UserRole, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
     EvaluationReport, EvaluationReportResponse,
-    Resume
+    Resume, ResumeChunk
 )
 # 인증 관련 모듈 임포트
 # 인증 관련 모듈 임포트
@@ -423,6 +423,204 @@ async def upload_resume(
         if file_path.exists():
             file_path.unlink()
         raise HTTPException(status_code=500, detail="File upload failed")
+
+
+# 🧪 테스트용 엔드포인트들 (인증 불필요)
+# 주의: 구체적인 경로를 먼저 정의해야 FastAPI 라우팅이 제대로 작동함
+
+# 🧪 테스트용: 인증 없는 이력서 상태 조회
+@app.get("/test/resumes/{resume_id}")
+async def test_get_resume_status(
+    resume_id: int,
+    db: Session = Depends(get_session)
+):
+    """
+    테스트용 이력서 상태 조회 (인증 불필요)
+    
+    - 임베딩 처리 상태 및 청크 정보 확인
+    """
+    resume = db.get(Resume, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # ResumeChunk 개수 확인
+    from sqlmodel import select
+    stmt = select(ResumeChunk).where(ResumeChunk.resume_id == resume_id)
+    chunks = db.exec(stmt).all()
+    
+    return {
+        "resume_id": resume.id,
+        "file_name": resume.file_name,
+        "file_size": resume.file_size,
+        "processing_status": resume.processing_status,
+        "uploaded_at": resume.uploaded_at,
+        "processed_at": resume.processed_at,
+        "chunks_count": len(chunks),
+        "chunks_info": [
+            {
+                "chunk_index": chunk.chunk_index,
+                "content_length": len(chunk.content),
+                "has_embedding": chunk.embedding is not None,
+                "embedding_dimension": len(chunk.embedding) if chunk.embedding is not None else 0,
+                "content_preview": chunk.content[:100] + "..." if len(chunk.content) > 100 else chunk.content
+            }
+            for chunk in chunks
+        ],
+        "structured_data": resume.structured_data if resume.structured_data else {},
+        "note": "⚠️ 이 엔드포인트는 테스트용입니다."
+    }
+
+
+# 🧪 테스트용: 인증 없는 이력서 업로드 (개발/디버깅용)
+@app.post("/test/upload-resume")
+async def test_upload_resume(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_session)
+):
+    """
+    테스트용 이력서 업로드 (인증 불필요)
+    
+    - 개발 및 디버깅 목적으로만 사용
+    - 임베딩 처리 결과를 바로 확인 가능
+    """
+    # 파일 검증
+    if not file.filename.lower().endswith(('.pdf', '.doc', '.docx')):
+        raise HTTPException(status_code=400, detail="Only PDF, DOC, DOCX files are allowed")
+    
+    # 테스트 사용자가 없으면 자동 생성
+    from sqlmodel import select
+    stmt = select(User).where(User.username == "test_user")
+    test_user = db.exec(stmt).first()
+    
+    if not test_user:
+        from auth import get_password_hash
+        test_user = User(
+            username="test_user",
+            email="test@example.com",
+            password_hash=get_password_hash("test1234"),
+            full_name="테스트 사용자",
+            role=UserRole.CANDIDATE
+        )
+        db.add(test_user)
+        db.commit()
+        db.refresh(test_user)
+        logger.info(f"✅ 테스트용 더미 사용자 생성 완료 (ID: {test_user.id})")
+    
+    test_user_id = test_user.id
+    
+    try:
+        # 파일 저장
+        upload_dir = Path("./uploads/resumes")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_filename = f"{timestamp}_{file.filename}"
+        file_path = upload_dir / safe_filename
+        
+        with file_path.open("wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        file_size = file_path.stat().st_size
+        
+        # Resume 레코드 생성
+        resume = Resume(
+            candidate_id=test_user_id,
+            file_name=file.filename,
+            file_path=str(file_path),
+            file_size=file_size,
+            processing_status="pending"
+        )
+        
+        db.add(resume)
+        db.commit()
+        db.refresh(resume)
+        
+        logger.info(f"✅ [TEST] Resume uploaded: {resume.id} by test_user")
+        
+        # Celery Task 전송 (ai-worker로 전달)
+        task = celery_app.send_task(
+            "parse_resume_pdf",  # Worker에 등록된 task 이름
+            args=[resume.id, str(file_path)]
+        )
+        
+        return {
+            "message": "✅ 테스트 업로드 성공! 임베딩 처리 중...",
+            "resume_id": resume.id,
+            "file_name": file.filename,
+            "file_size": file_size,
+            "task_id": task.id,
+            "status_check_url": f"/test/resumes/{resume.id}",
+            "note": "⚠️ 이 엔드포인트는 테스트용입니다. 운영 환경에서는 /resumes/upload를 사용하세요."
+        }
+        
+    except Exception as e:
+        logger.error(f"Test resume upload failed: {e}")
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+
+
+# 이력서 상태 조회 (단일)
+@app.get("/resumes/{resume_id}")
+async def get_resume_status(
+    resume_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """이력서 처리 상태 및 정보 조회"""
+    resume = db.get(Resume, resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # 권한 확인: 본인 또는 recruiter/admin만 조회 가능
+    if resume.candidate_id != current_user.id and current_user.role not in ["recruiter", "admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    logger.info(f"Resume {resume_id} status requested by {current_user.username}")
+    
+    return {
+        "id": resume.id,
+        "file_name": resume.file_name,
+        "file_size": resume.file_size,
+        "processing_status": resume.processing_status,
+        "uploaded_at": resume.uploaded_at,
+        "processed_at": resume.processed_at,
+        "has_embedding": resume.embedding is not None,
+        "has_structured_data": resume.structured_data is not None,
+        "structured_data": resume.structured_data if resume.structured_data else {}
+    }
+
+# 이력서 목록 조회
+@app.get("/resumes")
+async def get_user_resumes(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """현재 사용자의 이력서 목록 조회"""
+    stmt = select(Resume).where(
+        Resume.candidate_id == current_user.id
+    ).order_by(Resume.uploaded_at.desc())
+    
+    resumes = db.exec(stmt).all()
+    
+    logger.info(f"Resume list requested by {current_user.username}: {len(resumes)} resumes")
+    
+    return [
+        {
+            "id": r.id,
+            "file_name": r.file_name,
+            "file_size": r.file_size,
+            "processing_status": r.processing_status,
+            "uploaded_at": r.uploaded_at,
+            "processed_at": r.processed_at,
+            "has_embedding": r.embedding is not None
+        }
+        for r in resumes
+    ]
+
 
 # ==================== Recruiter Endpoints ====================
 

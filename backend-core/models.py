@@ -89,6 +89,32 @@ class Resume(SQLModel, table=True):
     # Relationships
     candidate: User = Relationship(back_populates="resumes")
     interviews: List["Interview"] = Relationship(back_populates="resume")
+    chunks: List["ResumeChunk"] = Relationship(back_populates="resume")
+
+
+class ResumeChunk(SQLModel, table=True):
+    """이력서 청크 테이블 (RAG용 - 문맥 기반 검색)"""
+    __tablename__ = "resume_chunks"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    resume_id: int = Field(foreign_key="resumes.id", index=True)
+    
+    # 청크 내용
+    content: str = Field(description="잘게 쪼개진 이력서 텍스트 조각")
+    chunk_index: int = Field(description="청크 순서 (0부터 시작)")
+    
+    # 벡터 임베딩 (1024차원 - KURE-v1)
+    embedding: Any = Field(
+        default=None,
+        sa_column=Column(Vector(1024)),
+        description="청크의 벡터 임베딩 (유사도 검색용)"
+    )
+    
+    # 메타데이터
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationship
+    resume: Resume = Relationship(back_populates="chunks")
 
 
 class Company(SQLModel, table=True):
