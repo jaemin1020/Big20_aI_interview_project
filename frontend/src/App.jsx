@@ -162,6 +162,12 @@ function App() {
   };
 
   const startInterviewFlow = () => {
+    if (!user) {
+      alert("로그인이 필요한 서비스입니다.");
+      setAuthMode('login');
+      setStep('auth');
+      return;
+    }
     setStep('resume');
   };
 
@@ -450,7 +456,16 @@ function App() {
       <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
         {step === 'main' && (
           <MainPage 
-            onStartInterview={() => setStep('landing')}
+            onStartInterview={() => {
+              if (user) {
+                setStep('landing');
+              } else {
+                if (confirm("면접을 시작하려면 로그인이 필요합니다.\n로그인 페이지로 이동하시겠습니까?")) {
+                  setAuthMode('login');
+                  setStep('auth');
+                }
+              }
+            }}
             onLogin={() => { setAuthMode('login'); setStep('auth'); }}
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
