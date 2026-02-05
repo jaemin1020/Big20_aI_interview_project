@@ -166,8 +166,8 @@ const EnvTestPage = ({ onNext }) => {
 
   if (step === 'audio') {
     return (
-      <div className="audio-test animate-fade-in">
-        <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+      <div className="audio-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
+        <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
             <div className="logo-wrapper" style={{ width: '160px' }}>
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
@@ -236,8 +236,8 @@ const EnvTestPage = ({ onNext }) => {
   }
 
   return (
-    <div className="video-test animate-fade-in">
-      <GlassCard style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+    <div className="video-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
+      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '160px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
