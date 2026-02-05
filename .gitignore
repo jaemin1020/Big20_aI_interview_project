@@ -221,3 +221,5 @@ uploads/
 # Quality reports (keep only final version)
 docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
+
+.agent/*
