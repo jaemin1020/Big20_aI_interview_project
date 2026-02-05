@@ -7,8 +7,15 @@ const LandingPage = ({
   handleLogout 
 }) => {
   return (
-    <div className="landing-container animate-fade-in">
-      <GlassCard style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
+    <div className="landing-container animate-fade-in" style={{ 
+      flex: 1, 
+      display: 'flex', 
+      flexDirection: 'column', 
+      justifyContent: 'center', 
+      alignItems: 'center',
+      width: '100%'
+    }}>
+      <GlassCard style={{ textAlign: 'center', maxWidth: '800px', width: '100%' }}>
         <div style={{ marginBottom: '3rem' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
             <div className="logo-wrapper" style={{ width: '200px' }}>
