@@ -6,6 +6,11 @@ const FinalGuidePage = ({ onNext, onPrev }) => {
   return (
     <div className="final-guide animate-fade-in">
       <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '180px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
         <h1 className="text-gradient">환경 테스트 완료</h1>
         <p style={{ marginBottom: '2rem' }}>모든 준비가 완료되었습니다. 이제 본격적으로 면접을 시작합니다.</p>
 

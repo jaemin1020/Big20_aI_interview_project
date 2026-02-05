@@ -50,6 +50,11 @@ const EnvTestPage = ({ onNext }) => {
     return (
       <div className="audio-test animate-fade-in">
         <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <div className="logo-wrapper" style={{ width: '160px' }}>
+              <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+            </div>
+          </div>
           <h1 className="text-gradient">환경 테스트 - 오디오</h1>
           <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
           
@@ -81,6 +86,11 @@ const EnvTestPage = ({ onNext }) => {
   return (
     <div className="video-test animate-fade-in">
       <GlassCard style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '160px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
         <h1 className="text-gradient">환경 테스트 - 영상</h1>
         <p style={{ marginBottom: '2rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
 
