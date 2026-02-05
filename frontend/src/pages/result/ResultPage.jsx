@@ -4,74 +4,10 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const ResultPage = ({ results, onReset }) => {
   return (
-<<<<<<< HEAD
     <div className="result-container animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
         <h1 className="text-gradient" style={{ fontSize: '3rem' }}>면접 분석 결과</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>AI가 분석한 귀하의 역량 및 피드백 리포트입니다.</p>
-=======
-    <div className="result-container animate-fade-in" style={{ 
-      flex: 1,
-      width: '100%', 
-      maxWidth: '1200px', 
-      margin: '0 auto', 
-      padding: '6rem 0 4rem',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center'
-    }}>
-      {/* Overview Section: SCR-25 Style */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem', marginBottom: '3rem' }}>
-        <GlassCard style={{ padding: '2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem' }}>종합 분석 점수</h2>
-          <div style={{ 
-            width: '180px', 
-            height: '180px', 
-            borderRadius: '50%', 
-            border: '8px solid rgba(var(--primary-rgb, 59, 130, 246), 0.1)',
-            borderTopColor: 'var(--primary)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: '1.5rem',
-            position: 'relative'
-          }}>
-            <span style={{ fontSize: '3.5rem', fontWeight: '900', color: 'var(--text-main)' }}>{averageScore}</span>
-            <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ 100</span>
-          </div>
-          <p style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary)' }}>우수한 실무 역량 보유</p>
-        </GlassCard>
-
-        <GlassCard style={{ padding: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '2rem' }}>역량 지표 상세</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {[
-              { label: '기술 전문성', score: 85, color: '#3b82f6' },
-              { label: '문제 해결 능력', score: 92, color: '#10b981' },
-              { label: '의사소통', score: 78, color: '#f59e0b' },
-              { label: '성장 가능성', score: 88, color: '#8b5cf6' }
-            ].map((trait, i) => (
-              <div key={i}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.9rem' }}>
-                  <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{trait.label}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{trait.score}%</span>
-                </div>
-                <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
-                  <div style={{ 
-                    width: `${trait.score}%`, 
-                    height: '100%', 
-                    background: trait.color, 
-                    borderRadius: '10px',
-                    boxShadow: `0 0 10px ${trait.color}44`
-                  }}></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
->>>>>>> fcf5dd1 (fix 박스 중앙 위치 fix)
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
