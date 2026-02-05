@@ -47,11 +47,84 @@ class VideoAnalysisTrack(MediaStreamTrack):
         self.session_id = session_id
         self.last_frame_time = 0
 
+        # Haar Cascade Load
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+
+
+
+    async def process_eye_tracking(self, frame):
+        """WebRTC 프레임에서 눈/얼굴 추적 후 WebSocket 전송"""
+        try:
+            # OpenCV 형식으로 변환
+            img = frame.to_ndarray(format="bgr24")
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
+            
+            tracking_data = []
+            
+            for (x, y, w, h) in faces:
+                roi_gray = gray[y:y+h, x:x+w]
+                eyes = self.eye_cascade.detectMultiScale(roi_gray)
+                
+                eyes_coords = []
+                for (ex, ey, ew, eh) in eyes:
+                    eyes_coords.append({
+                        "x": int(x + ex),
+                        "y": int(y + ey),
+                        "w": int(ew),
+                        "h": int(eh)
+                    })
+                
+                tracking_data.append({
+                    "face": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)},
+                    "eyes": eyes_coords
+                })
+
+            # Status determination
+            status = "not_detected"
+            if len(tracking_data) > 0:
+                face = tracking_data[0] # Assuming first face
+                num_eyes = len(face["eyes"])
+                
+                if num_eyes >= 2:
+                    status = "focused"
+                elif num_eyes == 1:
+                    status = "partially_detected"
+                else:
+                    status = "eyes_not_visible"
+            
+            # Log status (throttled)
+            current_time = time.time()
+            if current_time - getattr(self, 'last_log_time', 0) > 2.0: # Log every 2 seconds
+                self.last_log_time = current_time
+                logger.info(f"[{self.session_id}] Eye Tracking Status: {status} (Faces: {len(faces)})")
+
+            # WebSocket으로 전송
+            ws = active_websockets.get(self.session_id)
+            if ws:
+                await send_to_websocket(ws, {
+                    "type": "eye_tracking",
+                    "data": tracking_data,
+                    "status": status  # Send status to frontend as well
+                })
+
+        except Exception as e:
+            logger.error(f"Eye tracking frame failed: {e}")
+
     async def recv(self):
         frame = await self.track.recv()
         current_time = time.time()
 
-        # 2초마다 한 번씩 프레임 추출
+        # 1. 눈 추적 (실시간성 중요 - 0.1초마다 수행)
+        # 모든 프레임을 하면 부하가 클 수 있으므로 간격 조절
+        if current_time - getattr(self, 'last_tracking_time', 0) > 0.1:
+            self.last_tracking_time = current_time
+            # 비동기로 실행하여 메인 스트림 지연 방지
+            asyncio.create_task(self.process_eye_tracking(frame))
+
+        # 2. 감정 분석 (무거운 작업 - 2초마다 수행)
         if current_time - self.last_frame_time > 2.0:
             self.last_frame_time = current_time
             
@@ -65,7 +138,8 @@ class VideoAnalysisTrack(MediaStreamTrack):
                 "tasks.vision.analyze_emotion",
                 args=[self.session_id, base64_img]
             )
-            logger.info(f"[{self.session_id}] 감정 분석 프레임 전송 완료")
+            # 눈 추적 Task도 호출하여 데이터 저장 (선택적)
+            # celery_app.send_task("tasks.vision.track_eyes", args=[self.session_id, base64_img])
 
         return frame
 

@@ -84,6 +84,8 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
+      - ./backend-core/uploads:/app/uploads
+      - ./backend-core:/backend-core  # Shared Code Access
     networks:
       - interview_network
 
