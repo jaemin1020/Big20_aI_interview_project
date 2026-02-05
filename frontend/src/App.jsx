@@ -73,6 +73,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -85,7 +86,11 @@ function App() {
         .catch(() => {
           localStorage.removeItem('token');
           setStep('main');
+          isInitialized.current = true;
         });
+    } else {
+      setStep('main');
+      isInitialized.current = true;
     }
   }, []);
 
@@ -156,6 +161,7 @@ function App() {
 
   const handleLogout = () => {
     apiLogout();
+    sessionStorage.clear();
     setUser(null);
     setStep('auth');
   };
