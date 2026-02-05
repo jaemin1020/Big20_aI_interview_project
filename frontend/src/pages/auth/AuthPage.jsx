@@ -28,6 +28,7 @@ const AuthPage = ({
       flex: 1, 
       width: '100%', 
       display: 'flex', 
+      flexDirection: 'column',
       justifyContent: 'center', 
       alignItems: 'center', 
       padding: '4rem 0' 
