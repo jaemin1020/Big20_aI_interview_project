@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import { createClient } from "@deepgram/sdk";
 
 const EnvTestPage = ({ onNext }) => {
   const [step, setStep] = useState('audio'); // audio, video
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
+  const [transcript, setTranscript] = useState('');
   const [videoStream, setVideoStream] = useState(null);
+  
   const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
 
-  // Real Audio Level Visualization
+  // Real Audio Level Visualization & Deepgram STT
   useEffect(() => {
     let audioContext;
     let analyser;
@@ -22,6 +27,8 @@ const EnvTestPage = ({ onNext }) => {
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // 1. Audio Level Visualization
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
@@ -45,11 +52,55 @@ const EnvTestPage = ({ onNext }) => {
           }
 
           const average = values / length;
-          // Scale average to percentage (0-100)
-          // Usually average is low, so we might need to scale it up
           const level = Math.min(100, Math.max(0, average * 2)); 
           setAudioLevel(level);
         };
+
+        // 2. Deepgram STT Setup
+        const apiKey = import.meta.env.DEEPGRAM_API_KEY;
+        if (apiKey) {
+          const deepgram = createClient(apiKey);
+          const connection = deepgram.listen.live({
+            model: "nova-2",
+            language: "ko",
+            smart_format: true,
+            encoding: "linear16", 
+            sample_rate: 16000,
+            interim_results: true,
+          });
+
+          connection.on("Open", () => {
+             console.log("Deepgram Connected for Test");
+             
+             const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+             mediaRecorder.addEventListener('dataavailable', (event) => {
+               if (event.data.size > 0 && connection.getReadyState() === 1) {
+                 connection.send(event.data);
+               }
+             });
+             mediaRecorder.start(250);
+             mediaRecorderRef.current = mediaRecorder;
+          });
+
+          connection.on("Results", (result) => {
+            const channel = result.channel;
+            if (channel && channel.alternatives && channel.alternatives[0]) {
+              const text = channel.alternatives[0].transcript;
+              if (text && text.trim().length > 0) {
+                 setTranscript(prev => {
+                    // 간단한 이어붙이기 (실제로는 interim 처리 등 더 복잡할 수 있음)
+                    if (result.is_final) return prev + ' ' + text;
+                    return prev; 
+                 });
+                 // 텍스트가 조금이라도 인식되면 성공으로 간주
+                 if (result.is_final) setIsRecognitionOk(true);
+              }
+            }
+          });
+
+          deepgramConnectionRef.current = connection;
+        }
+
       } catch (err) {
         console.error("Microphone access failed:", err);
         alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
@@ -61,10 +112,17 @@ const EnvTestPage = ({ onNext }) => {
     }
 
     return () => {
+      // Clean up Audio Context
       if (javascriptNode) javascriptNode.disconnect();
       if (microphone) microphone.disconnect();
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
+      
+      // Clean up Deepgram & MediaRecorder
+      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
+
+      // Stop Tracks
       if (stream) stream.getTracks().forEach(track => track.stop());
     };
   }, [step]);
@@ -91,9 +149,13 @@ const EnvTestPage = ({ onNext }) => {
     };
   }, [step]);
 
-  const handleAudioDone = () => {
-    setIsRecognitionOk(true);
-    setTimeout(() => setStep('video'), 1000);
+  const handleRetry = () => {
+    setTranscript('');
+    setIsRecognitionOk(false);
+  };
+
+  const handleNext = () => {
+    setStep('video');
   };
 
   if (step === 'audio') {
@@ -105,19 +167,29 @@ const EnvTestPage = ({ onNext }) => {
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
             </div>
           </div>
-          <h1 className="text-gradient">환경 테스트 - 오디오</h1>
+          <h1 className="text-gradient">음성테스트를 시작합니다.</h1>
           <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
           
           <div style={{ margin: '2rem 0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>🎙️</div>
+            <img 
+              src="/mic_icon.png" 
+              alt="Microphone" 
+              style={{ 
+                width: '64px', 
+                height: '64px', 
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
+                marginBottom: '1.5rem'
+              }} 
+            />
             <p style={{ fontSize: '1.4rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '12px' }}>
-              "AI 모의면접 진행할 준비가 되었습니다."
+              "AI 모의면접 진행할 준비가 되었습니다. "
             </p>
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              <span>마이크 입력 레벨</span>
+              <span>마이크 입력 레벨 {audioLevel > 5 ? '(입력 중...)' : ''}</span>
               <span>{Math.round(audioLevel)}%</span>
             </div>
             <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -125,9 +197,34 @@ const EnvTestPage = ({ onNext }) => {
             </div>
           </div>
 
-          <PremiumButton onClick={handleAudioDone} style={{ width: '100%' }}>
-            {isRecognitionOk ? '✅ 분석 완료' : '문장 읽기 완료'}
-          </PremiumButton>
+          {/* Transcript Box */}
+          <div style={{ 
+            minHeight: '80px', 
+            background: 'var(--bg-darker)', 
+            borderRadius: '12px', 
+            padding: '1rem', 
+            marginBottom: '2rem',
+            border: '1px solid var(--glass-border)',
+            textAlign: 'left'
+          }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>인식된 텍스트:</span>
+            <span style={{ color: transcript ? 'var(--text-main)' : 'var(--text-muted)' }}>
+              {transcript || "말씀하시면 이곳에 텍스트가 표시됩니다..."}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+             <PremiumButton onClick={handleRetry} variant="secondary" style={{ flex: 1 }}>
+               테스트 다시 진행
+             </PremiumButton>
+             <PremiumButton 
+               onClick={handleNext} 
+               disabled={!isRecognitionOk} 
+               style={{ flex: 1 }}
+             >
+               다음 진행
+             </PremiumButton>
+          </div>
         </GlassCard>
       </div>
     );
