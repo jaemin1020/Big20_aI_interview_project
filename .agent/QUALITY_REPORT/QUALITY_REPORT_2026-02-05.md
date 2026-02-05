@@ -157,7 +157,7 @@ frontend/src/
 ```env
 # ❌ 위험: Git에 커밋된 민감 정보
 POSTGRES_PASSWORD=1234
-SECRET_KEY=secret_key_0000_0000_0000
+SECRET_KEY=/
 HUGGINGFACE_API_KEY=/
 DEEPGRAM_API_KEY=/
 ```

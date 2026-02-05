@@ -124,8 +124,8 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
                     resume.processing_status = "failed"
                     session.add(resume)
                     session.commit()
-        except:
-            pass
+        except Exception as db_error:
+            logger.error(f"Failed to update resume status to 'failed': {db_error}")
         
         return {"status": "error", "message": str(e)}
 
