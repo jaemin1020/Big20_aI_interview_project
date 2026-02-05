@@ -166,3 +166,27 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         ).limit(limit)
         
         return session.exec(stmt).all()
+
+def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
+    """면접 세션의 감정 분석 결과 업데이트"""
+    with Session(engine) as session:
+        interview = session.get(Interview, interview_id)
+        if interview:
+            current_summary = interview.emotion_summary or {}
+            
+            # 이력 관리를 위해 history 리스트에 추가
+            if "history" not in current_summary:
+                current_summary["history"] = []
+            
+            # 타임스탬프 추가
+            emotion_data["timestamp"] = datetime.utcnow().isoformat()
+            current_summary["history"].append(emotion_data)
+            
+            # 최신 상태 업데이트
+            current_summary["latest"] = emotion_data
+            
+            # SQLModel에서 JSON 필드 변경 감지를 위해 재할당
+            interview.emotion_summary = dict(current_summary)
+            
+            session.add(interview)
+            session.commit()
