@@ -71,7 +71,7 @@ def seed_initial_data():
         # 1. Admin 계정 생성
         admin_user = session.exec(select(User).where(User.username == "admin")).first()
         if not admin_user:
-            logger.info(" Creating default Admin account...")
+            logger.info("Creating default Admin account...")
             session.add(User(
                 username="admin",
                 email="admin@big20.com",
@@ -83,7 +83,7 @@ def seed_initial_data():
         # 2. Recruiter 계정 생성
         recruiter_user = session.exec(select(User).where(User.username == "recruiter")).first()
         if not recruiter_user:
-            logger.info(" Creating default Recruiter account...")
+            logger.info("Creating default Recruiter account...")
             session.add(User(
                 username="recruiter",
                 email="recruiter@big20.com",
