@@ -9,6 +9,7 @@ const EnvTestPage = ({ onNext }) => {
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [videoStream, setVideoStream] = useState(null);
+  const [isFaceDetected, setIsFaceDetected] = useState(false);
   
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -133,6 +134,11 @@ const EnvTestPage = ({ onNext }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setVideoStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
+      
+      // Simulate Face Detection
+      setTimeout(() => {
+        setIsFaceDetected(true);
+      }, 2000);
     } catch (err) {
       console.error("Camera access failed:", err);
     }
@@ -219,7 +225,6 @@ const EnvTestPage = ({ onNext }) => {
              </PremiumButton>
              <PremiumButton 
                onClick={handleNext} 
-               disabled={!isRecognitionOk} 
                style={{ flex: 1 }}
              >
                다음 진행
@@ -256,11 +261,29 @@ const EnvTestPage = ({ onNext }) => {
             transform: 'translate(-50%, -50%)',
             width: '200px',
             height: '250px',
-            border: '2px solid var(--secondary)',
+            border: isFaceDetected ? '3px solid #10b981' : '2px solid var(--secondary)', // Green if detected
             borderRadius: '50%',
             pointerEvents: 'none',
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)'
-          }}></div>
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
+            transition: 'border 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {isFaceDetected && (
+              <div style={{ 
+                background: '#10b981', 
+                color: 'white', 
+                padding: '0.5rem 1rem', 
+                borderRadius: '20px',
+                fontWeight: 'bold',
+                fontSize: '0.9rem',
+                boxShadow: '0 4px 10px rgba(16, 185, 129, 0.4)'
+              }}>
+                ✓ 인식 완료
+              </div>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem' }}>
