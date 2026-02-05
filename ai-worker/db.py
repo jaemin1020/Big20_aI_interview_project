@@ -1,7 +1,10 @@
-
-from sqlmodel import SQLModel, create_engine, Session, select
+from sqlmodel import SQLModel, create_engine, Session, select, Field
+from sqlalchemy import Column
+from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from enum import Enum
 import os
 import sys
 from pathlib import Path
@@ -39,139 +42,6 @@ except ImportError as e:
 # Database Connection
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
-
-# Enums (Matching Backend)
-class UserRole(str, Enum):
-    CANDIDATE = "candidate"
-    RECRUITER = "recruiter"
-    ADMIN = "admin"
-
-class InterviewStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-class QuestionCategory(str, Enum):
-    TECHNICAL = "technical"
-    BEHAVIORAL = "behavioral"
-    SITUATIONAL = "situational"
-    CULTURAL_FIT = "cultural_fit"
-
-class QuestionDifficulty(str, Enum):
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
-
-class Speaker(str, Enum):
-    AI = "AI"
-    USER = "User"
-
-# Models (Matching Backend)
-class Company(SQLModel, table=True):
-    """회사 정보 테이블 (벡터 검색 지원)"""
-    __tablename__ = "companies"
-
-    id: str = Field(primary_key=True, max_length=50)
-    company_name: str
-    ideal: Optional[str] = None
-    description: Optional[str] = None
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-class Resume(SQLModel, table=True):
-    """이력서 테이블"""
-    __tablename__ = "resumes"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    candidate_id: int
-    file_name: str
-    file_path: str
-    file_size: int
-    extracted_text: Optional[str] = None
-    structured_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
-    processed_at: Optional[datetime] = None
-    is_active: bool = Field(default=True)
-    processing_status: str = Field(default="pending")
-
-class Interview(SQLModel, table=True):
-    __tablename__ = "interviews"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    candidate_id: int
-    company_id: Optional[str] = None
-    resume_id: Optional[int] = None
-    position: str
-    status: InterviewStatus = Field(default=InterviewStatus.SCHEDULED)
-    scheduled_time: Optional[datetime] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    overall_score: Optional[float] = None
-    emotion_summary: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-
-class Question(SQLModel, table=True):
-    __tablename__ = "questions"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    content: str
-    category: QuestionCategory
-    difficulty: QuestionDifficulty
-    question_type: Optional[str] = None
-    is_follow_up: bool = Field(default=False)
-    parent_question_id: Optional[int] = None
-    rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
-    # Using Any for embedding to bypass SQLModel type inference bug with List[float]
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
-    company: Optional[str] = None
-    industry: Optional[str] = None
-    position: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = Field(default=True)
-    usage_count: int = Field(default=0)
-    avg_score: Optional[float] = None
-
-
-class Transcript(SQLModel, table=True):
-    __tablename__ = "transcripts"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    speaker: Speaker
-    text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    sentiment_score: Optional[float] = None
-    emotion: Optional[str] = None
-    question_id: Optional[int] = None
-    order: Optional[int] = None
-
-class EvaluationReport(SQLModel, table=True):
-    __tablename__ = "evaluation_reports"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    technical_score: Optional[float] = None
-    communication_score: Optional[float] = None
-    cultural_fit_score: Optional[float] = None
-    summary_text: Optional[str] = None
-    details_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    evaluator_model: Optional[str] = None
-
-class AnswerBank(SQLModel, table=True):
-    __tablename__ = "answer_bank"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    question_id: int
-    answer_text: str
-    embedding: Any = Field(default=None, sa_column=Column(Vector(768)))
-    score: float
-    evaluator_feedback: Optional[str] = None
-    company: Optional[str] = None
-    industry: Optional[str] = None
-    position: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = Field(default=True)
-    reference_count: int = Field(default=0)
 
 # Helper Functions
 # ==========================================

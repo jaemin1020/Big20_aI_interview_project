@@ -19,7 +19,7 @@ def test_pdf_question_generation(pdf_filename: str):
     resume_text = extract_text_from_pdf(pdf_path)
 
     if not resume_text:
-        print("❌ PDF에서 텍스트를 읽어오지 못했습니다. 파일 경로를 확인하거나 pypdf가 설치되었는지 확인하십시오.")
+        print("❌ PDF에서 텍스트를 읽어오지 못했습니다. 파일 경로를 확인하거나 PyPDF2가 설치되었는지 확인하십시오.")
         return
 
     print(f"✅ 추출된 텍스트 일부 (5000자): \n{resume_text[:5000]}...")

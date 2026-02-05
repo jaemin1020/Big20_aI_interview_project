@@ -16,7 +16,7 @@ def test_task1_basic():
     gen = QuestionGenerator()
 
     # 테스트 질문
-    original_question = "본인의 부족한 점을 보완하기 위해 현재 노력하고 있는 부분이 있습니까?"
+    original_question = "최근 가장 관심 있게 지켜보는 보안 트렌드나 기술은 무엇입니까?"
 
     print(f"\n❓ [Original Question]: {original_question}")
     print("\n" + "-"*40)
