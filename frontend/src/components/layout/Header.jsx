@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false }) => {
+const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false }) => {
   return (
     <header style={{ 
       display: 'flex', 
@@ -12,9 +12,9 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
       left: 0,
       right: 0,
       zIndex: 1000,
-      background: isInterviewing ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
+      background: (isInterviewing || isComplete) ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
       backdropFilter: 'blur(10px)',
-      borderBottom: isInterviewing ? '1px solid var(--glass-border)' : 'none'
+      borderBottom: (isInterviewing || isComplete) ? '1px solid var(--glass-border)' : 'none'
     }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div 
@@ -52,9 +52,44 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
             </div>
           </div>
         )}
+
+        {isComplete && (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px', 
+            marginLeft: '1.5rem', 
+            paddingLeft: '1.5rem', 
+            borderLeft: '1px solid var(--glass-border)' 
+          }}>
+            <span style={{ 
+              color: '#64748b', 
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '14px',
+              height: '14px',
+              background: '#64748b',
+              borderRadius: '2px'
+            }}></span>
+            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>면접종료</span>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              background: 'rgba(100, 116, 139, 0.1)', 
+              padding: '2px 10px', 
+              borderRadius: '6px',
+              border: '1px solid rgba(100, 116, 139, 0.2)'
+            }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>CLOSED</span>
+            </div>
+          </div>
+        )}
       </div>
       
-      {showLogout && !isInterviewing && (
+      {showLogout && !isInterviewing && !isComplete && (
         <button 
           onClick={onLogout}
           style={{ 
