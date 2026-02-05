@@ -170,32 +170,25 @@ function App() {
     setStep('resume');
   };
 
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ... (existing states)
+
   const initInterviewSession = async () => {
+    setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & User Name
       const interviewPosition = parsedResumeData?.position || position || 'General';
-      const interviewUser = user?.full_name || user?.username || userName || 'Candidate';
       
-      console.log("Creating interview with:", { interviewUser, interviewPosition });
+      console.log("Creating interview with:", { interviewPosition });
 
-      const newInterview = await createInterview(interviewPosition, null, null); // user name usually handled by backend via token, or if API needed it? 
-      // Checking api/interview.js: createInterview(position, jobPostingId, scheduledTime). 
-      // It does NOT take username. Backend likely uses the token's user.
-      
+      const newInterview = await createInterview(interviewPosition, null, null); 
       setInterview(newInterview);
 
-      // 2. Upload Resume - Already done in ResumePage? 
-      // If ResumePage uploads it to get parsed data, we often just need that data.
-      // But if the backend *needs* the file attached to the *interview ID*, we might need to re-upload or link it?
-      // Based on api/interview.js, uploadResume(file) returns data and takes no ID.
-      // So it strictly parses. It does not attach to an interview explicitly unless backend tracks user's last upload.
-      // We will assume the parsing was enough for now, or if we need to store the file content in the interview context, 
-      // the backend implementation of createInterview might need to know about the resume.
-      // But for now, user request is "Start session with parsed position". We have that.
-
-      // 3. Get Questions
-      const qs = await getInterviewQuestions(newInterview.id);
+      // 2. Get Questions
+      let qs = await getInterviewQuestions(newInterview.id);
       
+      // Simple retry logic
       if (!qs || qs.length === 0) {
          setTimeout(async () => {
              const retryQs = await getInterviewQuestions(newInterview.id);
@@ -209,7 +202,17 @@ function App() {
       setStep('interview');
     } catch (err) {
       console.error("Session init error:", err);
-      // alert("면접 세션 생성에 실패했습니다."); // Removed for smoother UX if fails silent
+      // 구체적인 에러 메시지 표시
+      if (err.response?.status === 401) {
+          alert("세션이 만료되었습니다. 다시 로그인해주세요.");
+          localStorage.removeItem('token');
+          setUser(null);
+          setStep('auth');
+      } else {
+          alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -361,7 +364,8 @@ function App() {
     try {
       await submitAnswer(questions[currentIdx].id, answerText);
       if (currentIdx < questions.length - 1) {
-        setCurrentIdx(currentIdx + 1);
+        console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
+        setCurrentIdx(prev => prev + 1);
         setTranscript('');
         setIsRecording(false);
       } else {
@@ -401,6 +405,7 @@ function App() {
           onLogout={handleLogout} 
           showLogout={!!user} 
           onLogoClick={() => setStep('main')} 
+          isInterviewing={step === 'interview'}
         />
       )}
 
@@ -473,17 +478,18 @@ function App() {
       
       {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
       
-      {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} />}
+      {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
       {step === 'interview' && (
         <InterviewPage 
           currentIdx={currentIdx}
           totalQuestions={questions.length}
-          question={questions[currentIdx]?.question_text}
+          question={questions[currentIdx]?.content}
           isRecording={isRecording}
           transcript={transcript}
           toggleRecording={toggleRecording}
           nextQuestion={nextQuestion}
+          onFinish={finishInterview}
           videoRef={videoRef}
         />
       )}
