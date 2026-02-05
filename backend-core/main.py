@@ -10,6 +10,7 @@ from routes.companies import router as companies_router
 from routes.interviews import router as interviews_router
 from routes.transcripts import router as transcripts_router
 from routes.resumes import router as resumes_router
+from routes.users import router as users_router
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,7 @@ app.include_router(companies_router)  # /companies
 app.include_router(interviews_router) # /interviews
 app.include_router(transcripts_router)# /transcripts
 app.include_router(resumes_router)    # /api/resumes
+app.include_router(users_router)      # /users
 
 # Health Check
 @app.get("/")
