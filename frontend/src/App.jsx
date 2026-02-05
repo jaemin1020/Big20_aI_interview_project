@@ -35,7 +35,6 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
 
   useEffect(() => {
-    console.log("Theme changed to:", isDarkMode ? "DARK" : "LIGHT");
     if (isDarkMode) {
       document.body.classList.add('dark-theme');
     } else {
@@ -185,7 +184,6 @@ function App() {
       
       // Retry logic if questions are not ready (optional, but good for UX)
       if (!qs || qs.length === 0) {
-         console.log("Questions not ready, retrying in 3s...");
          setTimeout(async () => {
              const retryQs = await getInterviewQuestions(newInterview.id);
              setQuestions(retryQs);
@@ -232,7 +230,6 @@ function App() {
     });
 
     connection.on("Open", () => {
-      console.log("Deepgram WebSocket Connected");
       
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorder.addEventListener('dataavailable', (event) => {
@@ -269,7 +266,6 @@ function App() {
   };
 
   const setupWebRTC = async (interviewId) => {
-    console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
     try {
@@ -287,7 +283,6 @@ function App() {
     });
     const answer = await response.json();
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('[WebRTC] Connection established successfully');
   };
 
   const toggleRecording = () => {
