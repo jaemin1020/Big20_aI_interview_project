@@ -13,12 +13,23 @@ const Header = ({ onLogout, showLogout = false, onLogoClick }) => {
       right: 0,
       zIndex: 1000,
     }}>
+<<<<<<< HEAD
       <div 
         onClick={onLogoClick} 
         style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer' }}
       >
         <div className="logo-wrapper" style={{ width: '32px' }}>
           <img src="/logo.png" alt="Logo" className="theme-logo" />
+=======
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div 
+          onClick={onLogoClick} 
+          style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+        >
+          <div className="logo-wrapper" style={{ width: '32px' }}>
+            <img src="/logo.png" alt="Logo" className="theme-logo" />
+          </div>
+>>>>>>> fcf5dd1 (fix 박스 중앙 위치 fix)
         </div>
         <span style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.1em' }}>BIGVIEW</span>
       </div>
