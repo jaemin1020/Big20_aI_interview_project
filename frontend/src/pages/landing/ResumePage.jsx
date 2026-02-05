@@ -73,6 +73,11 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     return (
       <div className="resume-confirm animate-fade-in">
         <GlassCard style={{ maxWidth: '700px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <div className="logo-wrapper" style={{ width: '200px' }}>
+              <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+            </div>
+          </div>
           <h1 className="text-gradient" style={{ textAlign: 'center', marginBottom: '2rem' }}>지원 정보 확인</h1>
           <p style={{ textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)' }}>
             업로드하신 이력서에서 추출된 정보입니다. 내용이 맞다면 면접 진행을 눌러주세요.
@@ -117,6 +122,11 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   return (
     <div className="resume-upload animate-fade-in">
       <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '240px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
         <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
         <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
