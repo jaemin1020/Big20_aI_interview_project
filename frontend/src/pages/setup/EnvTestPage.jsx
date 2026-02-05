@@ -9,14 +9,64 @@ const EnvTestPage = ({ onNext }) => {
   const [videoStream, setVideoStream] = useState(null);
   const videoRef = useRef(null);
 
-  // Audio Level Simulation
+  // Real Audio Level Visualization
   useEffect(() => {
+    let audioContext;
+    let analyser;
+    let microphone;
+    let javascriptNode;
+    let stream;
+
+    const startAudioAnalysis = async () => {
+      if (step !== 'audio') return;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 1024;
+
+        microphone.connect(analyser);
+        analyser.connect(javascriptNode);
+        javascriptNode.connect(audioContext.destination);
+
+        javascriptNode.onaudioprocess = () => {
+          const array = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(array);
+          let values = 0;
+
+          const length = array.length;
+          for (let i = 0; i < length; i++) {
+            values += array[i];
+          }
+
+          const average = values / length;
+          // Scale average to percentage (0-100)
+          // Usually average is low, so we might need to scale it up
+          const level = Math.min(100, Math.max(0, average * 2)); 
+          setAudioLevel(level);
+        };
+      } catch (err) {
+        console.error("Microphone access failed:", err);
+        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
+      }
+    };
+
     if (step === 'audio') {
-      const interval = setInterval(() => {
-        setAudioLevel(Math.random() * 100);
-      }, 100);
-      return () => clearInterval(interval);
+      startAudioAnalysis();
     }
+
+    return () => {
+      if (javascriptNode) javascriptNode.disconnect();
+      if (microphone) microphone.disconnect();
+      if (analyser) analyser.disconnect();
+      if (audioContext) audioContext.close();
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
   }, [step]);
 
   // Video Stream Start

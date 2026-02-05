@@ -31,7 +31,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
       
       // 2. 폴링 (분석 완료 대기)
       let pollCount = 0;
-      const maxPolls = 30; // 최대 60초 (2초 * 30)
+      const maxPolls = 90; // 최대 180초 (2초 * 90) - 첫 실행 시 모델 로딩으로 인해 오래 걸릴 수 있음
       
       const poll = async () => {
         try {
@@ -51,7 +51,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
-            throw new Error("분석 시간 초과");
+            throw new Error("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
           }
         } catch (err) {
           console.error('Polling error:', err);
