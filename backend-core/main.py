@@ -9,6 +9,8 @@ import logging
 import os
 import shutil
 from pathlib import Path
+from sqlalchemy import text
+from pydantic import BaseModel
 
 # DB 설정
 from database import init_db, get_session
@@ -561,6 +563,127 @@ async def test_upload_resume(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+# 🧪 테스트용: 인증 없는 이력서 검색
+@app.post("/test/resumes/search")
+async def test_search_resumes(
+    query: str,
+    top_k: int = 10,
+    min_score: float = 0.5,
+    db: Session = Depends(get_session)
+):
+    """
+    테스트용 이력서 검색 (인증 불필요)
+    
+    Args:
+        query: 검색 쿼리 (예: "Python 백엔드 개발자")
+        top_k: 반환할 최대 결과 수 (기본: 10)
+        min_score: 최소 유사도 점수 (0~1, 기본: 0.5)
+    """
+    logger.info(f"🔍 [TEST] Resume search: query='{query}', top_k={top_k}")
+    
+    try:
+        # 1. 쿼리를 임베딩으로 변환 (Celery Task 사용)
+        task = celery_app.send_task(
+            "generate_query_embedding",
+            args=[query]
+        )
+        
+        # 결과 대기 (최대 10초)
+        query_embedding = task.get(timeout=10)
+        logger.info(f"✅ Query embedding generated (dim: {len(query_embedding)})")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to generate query embedding: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate embedding: {str(e)}"
+        )
+    
+    # 2. pgvector로 유사도 검색
+    sql_query = text("""
+        SELECT 
+            rc.id as chunk_id,
+            rc.resume_id,
+            rc.content,
+            rc.chunk_index,
+            1 - (rc.embedding <=> CAST(:query_embedding AS vector)) as similarity_score,
+            r.file_name,
+            r.candidate_id,
+            u.full_name as candidate_name,
+            u.email as candidate_email
+        FROM resume_chunks rc
+        JOIN resumes r ON rc.resume_id = r.id
+        JOIN users u ON r.candidate_id = u.id
+        WHERE 
+            r.processing_status = 'completed'
+            AND rc.embedding IS NOT NULL
+            AND 1 - (rc.embedding <=> CAST(:query_embedding AS vector)) >= :min_score
+        ORDER BY rc.embedding <=> CAST(:query_embedding AS vector)
+        LIMIT :top_k
+    """)
+    
+    try:
+        result = db.execute(
+            sql_query,
+            {
+                "query_embedding": str(query_embedding),
+                "min_score": min_score,
+                "top_k": top_k
+            }
+        )
+        
+        chunks = result.fetchall()
+        logger.info(f"📊 Found {len(chunks)} matching chunks")
+        
+    except Exception as e:
+        logger.error(f"❌ Database search failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Search failed: {str(e)}"
+        )
+    
+    # 3. Resume별로 그룹화 (중복 제거)
+    resume_map = {}
+    for chunk in chunks:
+        resume_id = chunk.resume_id
+        
+        if resume_id not in resume_map:
+            resume_map[resume_id] = {
+                "resume_id": resume_id,
+                "file_name": chunk.file_name,
+                "candidate_name": chunk.candidate_name,
+                "candidate_email": chunk.candidate_email,
+                "max_similarity": float(chunk.similarity_score),
+                "matched_chunks": []
+            }
+        
+        resume_map[resume_id]["matched_chunks"].append({
+            "chunk_index": chunk.chunk_index,
+            "content": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+            "similarity_score": float(chunk.similarity_score)
+        })
+        
+        # 최고 유사도 업데이트
+        if chunk.similarity_score > resume_map[resume_id]["max_similarity"]:
+            resume_map[resume_id]["max_similarity"] = float(chunk.similarity_score)
+    
+    # 4. 유사도 순으로 정렬
+    results = sorted(
+        resume_map.values(),
+        key=lambda x: x["max_similarity"],
+        reverse=True
+    )
+    
+    logger.info(f"✅ [TEST] Found {len(results)} resumes matching query")
+    
+    return {
+        "query": query,
+        "total_results": len(results),
+        "results": results,
+        "note": "⚠️ 이 엔드포인트는 테스트용입니다."
+    }
+
+
 
 
 # 이력서 상태 조회 (단일)
@@ -620,6 +743,138 @@ async def get_user_resumes(
         }
         for r in resumes
     ]
+
+
+# ==================== Resume Search Endpoints (Phase 2) ====================
+
+class ResumeSearchRequest(BaseModel):
+    """이력서 검색 요청"""
+    query: str
+    top_k: int = 10
+    min_score: float = 0.5
+
+
+@app.post("/resumes/search")
+async def search_resumes(
+    request: ResumeSearchRequest,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    벡터 유사도 기반 이력서 검색
+    
+    Args:
+        query: 검색 쿼리 (예: "Python 백엔드 개발자")
+        top_k: 반환할 최대 결과 수 (기본: 10)
+        min_score: 최소 유사도 점수 (0~1, 기본: 0.5)
+        
+    Returns:
+        검색 결과 리스트 (유사도 순 정렬)
+    """
+    logger.info(f"🔍 Resume search: query='{request.query}', top_k={request.top_k}, user={current_user.id}")
+    
+    try:
+        # 1. 쿼리를 임베딩으로 변환 (Celery Task 사용)
+        task = celery_app.send_task(
+            "generate_query_embedding",
+            args=[request.query]
+        )
+        
+        # 결과 대기 (최대 10초)
+        query_embedding = task.get(timeout=10)
+        logger.info(f"✅ Query embedding generated (dim: {len(query_embedding)})")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to generate query embedding: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate embedding: {str(e)}"
+        )
+    
+    # 2. pgvector로 유사도 검색
+    # <=> 연산자: 코사인 거리 (0에 가까울수록 유사)
+    # 1 - 코사인 거리 = 코사인 유사도
+    sql_query = text("""
+        SELECT 
+            rc.id as chunk_id,
+            rc.resume_id,
+            rc.content,
+            rc.chunk_index,
+            1 - (rc.embedding <=> CAST(:query_embedding AS vector)) as similarity_score,
+            r.file_name,
+            r.candidate_id,
+            u.full_name as candidate_name,
+            u.email as candidate_email
+        FROM resume_chunks rc
+        JOIN resumes r ON rc.resume_id = r.id
+        JOIN users u ON r.candidate_id = u.id
+        WHERE 
+            r.processing_status = 'completed'
+            AND rc.embedding IS NOT NULL
+            AND 1 - (rc.embedding <=> CAST(:query_embedding AS vector)) >= :min_score
+        ORDER BY rc.embedding <=> CAST(:query_embedding AS vector)
+        LIMIT :top_k
+    """)
+    
+    try:
+        result = db.execute(
+            sql_query,
+            {
+                "query_embedding": str(query_embedding),
+                "min_score": request.min_score,
+                "top_k": request.top_k
+            }
+        )
+        
+        chunks = result.fetchall()
+        logger.info(f"📊 Found {len(chunks)} matching chunks")
+        
+    except Exception as e:
+        logger.error(f"❌ Database search failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Search failed: {str(e)}"
+        )
+    
+    # 3. Resume별로 그룹화 (중복 제거)
+    resume_map = {}
+    for chunk in chunks:
+        resume_id = chunk.resume_id
+        
+        if resume_id not in resume_map:
+            resume_map[resume_id] = {
+                "resume_id": resume_id,
+                "file_name": chunk.file_name,
+                "candidate_name": chunk.candidate_name,
+                "candidate_email": chunk.candidate_email,
+                "max_similarity": float(chunk.similarity_score),
+                "matched_chunks": []
+            }
+        
+        resume_map[resume_id]["matched_chunks"].append({
+            "chunk_index": chunk.chunk_index,
+            "content": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+            "similarity_score": float(chunk.similarity_score)
+        })
+        
+        # 최고 유사도 업데이트
+        if chunk.similarity_score > resume_map[resume_id]["max_similarity"]:
+            resume_map[resume_id]["max_similarity"] = float(chunk.similarity_score)
+    
+    # 4. 유사도 순으로 정렬
+    results = sorted(
+        resume_map.values(),
+        key=lambda x: x["max_similarity"],
+        reverse=True
+    )
+    
+    logger.info(f"✅ Found {len(results)} resumes matching query")
+    
+    return {
+        "query": request.query,
+        "total_results": len(results),
+        "results": results
+    }
 
 
 # ==================== Recruiter Endpoints ====================

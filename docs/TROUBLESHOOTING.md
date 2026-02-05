@@ -1,6 +1,6 @@
 # 🔧 PDF 이력서 임베딩 시스템 트러블슈팅 가이드
 
-> **작성일**: 2026-02-04  
+> **작성일**: 2026-02-04
 > **목적**: 구현 과정에서 발생한 모든 오류와 해결 방법 기록
 
 ---
@@ -29,6 +29,7 @@ docker-compose up -d
 ```
 
 **에러 로그**:
+
 ```
 initdb: error: directory "/var/lib/postgresql/data" exists but is not empty
 ```
@@ -36,6 +37,7 @@ initdb: error: directory "/var/lib/postgresql/data" exists but is not empty
 ### 🔍 **원인**
 
 PostgreSQL 18 버전은 데이터 디렉토리 경로가 변경되었습니다:
+
 - **PostgreSQL 17 이하**: `/var/lib/postgresql/data`
 - **PostgreSQL 18**: `/var/lib/postgresql` (data 제거)
 
@@ -62,6 +64,7 @@ services:
 ```
 
 **추가 조치**:
+
 ```bash
 # 기존 볼륨 삭제 (데이터 손실 주의!)
 docker-compose down -v
@@ -83,6 +86,7 @@ POST /test/upload-resume
 ```
 
 **에러 로그**:
+
 ```
 psycopg.errors.ForeignKeyViolation: insert or update on table "resumes" 
 violates foreign key constraint "resumes_candidate_id_fkey"
@@ -107,7 +111,7 @@ async def test_upload_resume(
     test_user = session.exec(
         select(User).where(User.username == "test_user")
     ).first()
-    
+  
     if not test_user:
         test_user = User(
             username="test_user",
@@ -119,7 +123,7 @@ async def test_upload_resume(
         session.add(test_user)
         session.commit()
         session.refresh(test_user)
-    
+  
     # Resume 생성 시 실제 user ID 사용
     resume = Resume(
         candidate_id=test_user.id,  # ✅ 실제 존재하는 ID
@@ -247,6 +251,7 @@ ModuleNotFoundError: No module named 'langchain.text_splitter'
 ```
 
 **Worker 로그**:
+
 ```
 File "/app/tasks/resume_parser.py", line 15, in <module>
     from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -256,6 +261,7 @@ ModuleNotFoundError: No module named 'langchain.text_splitter'
 ### 🔍 **원인**
 
 LangChain 최신 버전(0.2.0+)에서 import 경로가 변경되었습니다:
+
 - **구버전**: `langchain.text_splitter`
 - **신버전**: `langchain_text_splitters` (별도 패키지)
 
@@ -272,6 +278,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter  # ✅
 ```
 
 **필요한 패키지**: `ai-worker/requirements.txt`에 이미 포함됨
+
 ```txt
 langchain-text-splitters>=1.1.0
 ```
@@ -322,6 +329,7 @@ task = celery_app.send_task(
 ```
 
 **확인 방법**: Worker 로그에서 등록된 task 목록 확인
+
 ```
 [tasks]
   . parse_resume_pdf  ← 이 이름 사용
@@ -346,6 +354,7 @@ task = celery_app.send_task(
 `backend-core` 컨테이너에서 업로드한 파일을 `ai-worker` 컨테이너가 접근할 수 없습니다.
 
 **파일 위치**:
+
 - Backend: `/app/uploads/resumes/이력서.pdf`
 - Worker: 접근 불가 (볼륨 공유 안 됨)
 
@@ -372,6 +381,7 @@ ai-worker:
 ```
 
 **재시작 필요**:
+
 ```bash
 docker-compose up -d ai-worker
 ```
@@ -389,6 +399,7 @@ Use a.any() or a.all()
 ```
 
 **에러 발생 코드**:
+
 ```python
 "embedding_dimension": len(chunk.embedding) if chunk.embedding else 0  # ❌
 ```
@@ -423,11 +434,13 @@ if arr:  # ❌ ValueError!
 ## 🔄 전체 해결 순서
 
 ### **1단계: 인프라 수정**
+
 1. ✅ PostgreSQL 볼륨 경로 수정 (`/var/lib/postgresql`)
 2. ✅ Docker 볼륨 삭제 및 재생성
 3. ✅ uploads 디렉토리 볼륨 공유 추가
 
 ### **2단계: Backend 수정**
+
 4. ✅ UserRole import 추가
 5. ✅ 테스트 사용자 자동 생성 로직 추가
 6. ✅ FastAPI 라우팅 순서 수정
@@ -436,10 +449,12 @@ if arr:  # ❌ ValueError!
 9. ✅ numpy array 체크 로직 수정
 
 ### **3단계: AI Worker 수정**
+
 10. ✅ LangChain import 경로 수정
 11. ✅ Docker 이미지 재빌드
 
 ### **4단계: 테스트**
+
 12. ✅ PDF 업로드 테스트
 13. ✅ 임베딩 생성 확인
 14. ✅ 데이터베이스 저장 확인
@@ -511,12 +526,14 @@ docker exec -it interview_worker ls -lh /app/uploads/resumes/
 ## 📚 참고 자료
 
 ### **공식 문서**
+
 - [PostgreSQL 18 Release Notes](https://www.postgresql.org/docs/18/release-18.html)
 - [FastAPI Routing](https://fastapi.tiangolo.com/tutorial/path-params/)
 - [Celery send_task](https://docs.celeryq.dev/en/stable/userguide/calling.html#send-task)
 - [LangChain Text Splitters](https://python.langchain.com/docs/modules/data_connection/document_transformers/)
 
 ### **관련 이슈**
+
 - [pgvector/pgvector#123](https://github.com/pgvector/pgvector/issues/123) - PostgreSQL 18 볼륨 경로
 - [langchain-ai/langchain#15234](https://github.com/langchain-ai/langchain/issues/15234) - import 경로 변경
 
@@ -539,6 +556,6 @@ docker exec -it interview_worker ls -lh /app/uploads/resumes/
 
 ---
 
-**작성자**: AI Assistant  
-**최종 수정**: 2026-02-04  
+**작성자**: AI Assistant
+**최종 수정**: 2026-02-04
 **상태**: ✅ 모든 오류 해결 완료
