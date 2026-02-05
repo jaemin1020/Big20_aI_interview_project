@@ -10,7 +10,8 @@ import {
   login as apiLogin, 
   register as apiRegister, 
   logout as apiLogout, 
-  getCurrentUser 
+  getCurrentUser,
+  getDeepgramToken
 } from './api/interview';
 import { createClient } from "@deepgram/sdk";
 
@@ -220,21 +221,22 @@ function App() {
     };
   };
 
-  const setupDeepgram = (stream) => {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.warn("Deepgram API Key not found");
-      return;
-    }
+  const setupDeepgram = async (stream) => {
+    try {
+      const apiKey = await getDeepgramToken();
+      if (!apiKey) {
+        console.warn("Deepgram API Key generation failed");
+        return;
+      }
 
-    const deepgram = createClient(apiKey);
-    const connection = deepgram.listen.live({
-      model: "nova-2",
-      language: "ko",
-      smart_format: true,
-      encoding: "linear16", 
-      sample_rate: 16000,
-    });
+      const deepgram = createClient(apiKey);
+      const connection = deepgram.listen.live({
+        model: "nova-2",
+        language: "ko",
+        smart_format: true,
+        encoding: "linear16", 
+        sample_rate: 16000,
+      });
 
     connection.on("Open", () => {
       
@@ -270,6 +272,9 @@ function App() {
     });
 
     deepgramConnectionRef.current = connection;
+    } catch (err) {
+      console.error("Deepgram setup failed:", err);
+    }
   };
 
   const setupWebRTC = async (interviewId) => {
