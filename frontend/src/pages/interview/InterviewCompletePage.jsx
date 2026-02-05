@@ -38,7 +38,6 @@ const InterviewCompletePage = ({ isReportLoading, onCheckResult, onExit }) => {
               이제 AI 분석 리포트를 통해 면접 답변의 핵심 키워드, 역량 지표, 그리고 맞춤형 피드백을 확인하실 수 있습니다.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--primary)', fontWeight: '600' }}>
-              <span>🚀</span>
               <span>결과 확인 화면으로 이동하여 상세 리포트를 확인하세요.</span>
             </div>
           </div>
@@ -82,9 +81,28 @@ const InterviewCompletePage = ({ isReportLoading, onCheckResult, onExit }) => {
             <p style={{ fontWeight: '800', color: isReportLoading ? 'var(--primary)' : '#10b981', fontSize: '1.1rem', marginBottom: '0.5rem' }}>
               {isReportLoading ? 'AI 분석 리포트 생성 중' : '리포트 생성 완료'}
             </p>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
               {isReportLoading ? '답변 데이터를 심층 분석하고 있습니다...' : '지금 바로 분석 결과를 확인해보세요.'}
             </p>
+
+            <div style={{ textAlign: 'left', display: 'inline-block', width: 'fit-content' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#10b981', fontSize: '0.9rem', fontWeight: '600' }}>
+                <span>●</span>
+                <span>면접 결과 전송 완료</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                color: isReportLoading ? 'var(--text-muted)' : '#10b981', 
+                fontSize: '0.9rem',
+                fontWeight: '600',
+                opacity: isReportLoading ? 0.6 : 1
+              }}>
+                <span>●</span>
+                <span>결과 분석 {isReportLoading ? '진행 중' : '완료'}</span>
+              </div>
+            </div>
           </div>
         </div>
       </GlassCard>

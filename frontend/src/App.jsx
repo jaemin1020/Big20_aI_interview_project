@@ -76,6 +76,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -89,36 +90,51 @@ function App() {
           const savedQuestions = sessionStorage.getItem('app_questions');
           const savedCurrentIdx = sessionStorage.getItem('app_currentIdx');
           const savedReport = sessionStorage.getItem('app_report');
+          const savedPosition = sessionStorage.getItem('app_position');
+          const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
-          if (savedStep) setStep(savedStep);
           if (savedInterview) setInterview(JSON.parse(savedInterview));
           if (savedQuestions) setQuestions(JSON.parse(savedQuestions));
           if (savedCurrentIdx) setCurrentIdx(parseInt(savedCurrentIdx));
           if (savedReport) setReport(JSON.parse(savedReport));
+          if (savedPosition) setPosition(savedPosition);
+          if (savedParsedResume) setParsedResumeData(JSON.parse(savedParsedResume));
           
-          if (!savedStep) setStep('main');
+          if (savedStep) {
+            setStep(savedStep);
+            if (savedStep === 'complete' && !savedReport && savedInterview) {
+              const interviewData = JSON.parse(savedInterview);
+              pollReport(interviewData.id);
+            }
+          } else {
+            setStep('main');
+          }
+          isInitialized.current = true;
         })
         .catch(() => {
           localStorage.removeItem('token');
           sessionStorage.clear();
           setStep('main');
+          isInitialized.current = true;
         });
+    } else {
+      setStep('main');
+      isInitialized.current = true;
     }
   }, []);
 
   // 상태 변화 시마다 sessionStorage에 저장
   useEffect(() => {
-    if (user) {
-      sessionStorage.setItem('app_step', step);
-      if (interview) sessionStorage.setItem('app_interview', JSON.stringify(interview));
-      if (questions.length > 0) sessionStorage.setItem('app_questions', JSON.stringify(questions));
-      sessionStorage.setItem('app_currentIdx', currentIdx.toString());
-      if (report) sessionStorage.setItem('app_report', JSON.stringify(report));
-    } else {
-      // 로그아웃 상태면 클리어
-      sessionStorage.clear();
-    }
-  }, [step, user, interview, questions, currentIdx, report]);
+    if (!isInitialized.current || !user) return;
+
+    sessionStorage.setItem('app_step', step);
+    if (interview) sessionStorage.setItem('app_interview', JSON.stringify(interview));
+    if (questions.length > 0) sessionStorage.setItem('app_questions', JSON.stringify(questions));
+    sessionStorage.setItem('app_currentIdx', currentIdx.toString());
+    if (report) sessionStorage.setItem('app_report', JSON.stringify(report));
+    if (position) sessionStorage.setItem('app_position', position);
+    if (parsedResumeData) sessionStorage.setItem('app_parsedResume', JSON.stringify(parsedResumeData));
+  }, [step, user, interview, questions, currentIdx, report, position, parsedResumeData]);
 
   const handleAuth = async () => {
     setAuthError('');
@@ -187,6 +203,7 @@ function App() {
 
   const handleLogout = () => {
     apiLogout();
+    sessionStorage.clear();
     setUser(null);
     setStep('auth');
   };
