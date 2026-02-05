@@ -23,6 +23,7 @@ import ResumePage from './pages/landing/ResumePage';
 import EnvTestPage from './pages/setup/EnvTestPage';
 import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
+import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [report, setReport] = useState(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
   
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -81,14 +83,42 @@ function App() {
       getCurrentUser()
         .then(u => {
           setUser(u);
-          setStep('landing');
+          // 새로고침 시 저장된 상태 복구
+          const savedStep = sessionStorage.getItem('app_step');
+          const savedInterview = sessionStorage.getItem('app_interview');
+          const savedQuestions = sessionStorage.getItem('app_questions');
+          const savedCurrentIdx = sessionStorage.getItem('app_currentIdx');
+          const savedReport = sessionStorage.getItem('app_report');
+
+          if (savedStep) setStep(savedStep);
+          if (savedInterview) setInterview(JSON.parse(savedInterview));
+          if (savedQuestions) setQuestions(JSON.parse(savedQuestions));
+          if (savedCurrentIdx) setCurrentIdx(parseInt(savedCurrentIdx));
+          if (savedReport) setReport(JSON.parse(savedReport));
+          
+          if (!savedStep) setStep('main');
         })
         .catch(() => {
           localStorage.removeItem('token');
+          sessionStorage.clear();
           setStep('main');
         });
     }
   }, []);
+
+  // 상태 변화 시마다 sessionStorage에 저장
+  useEffect(() => {
+    if (user) {
+      sessionStorage.setItem('app_step', step);
+      if (interview) sessionStorage.setItem('app_interview', JSON.stringify(interview));
+      if (questions.length > 0) sessionStorage.setItem('app_questions', JSON.stringify(questions));
+      sessionStorage.setItem('app_currentIdx', currentIdx.toString());
+      if (report) sessionStorage.setItem('app_report', JSON.stringify(report));
+    } else {
+      // 로그아웃 상태면 클리어
+      sessionStorage.clear();
+    }
+  }, [step, user, interview, questions, currentIdx, report]);
 
   const handleAuth = async () => {
     setAuthError('');
@@ -114,7 +144,7 @@ function App() {
         await apiLogin(account.username, account.password);
         const u = await getCurrentUser();
         setUser(u);
-        setStep('landing');
+        setStep('main');
       } else {
         // 회원가입 검증
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -355,25 +385,40 @@ function App() {
     }
   };
 
+  const pollReport = async (interviewId) => {
+    setIsReportLoading(true);
+    const maxRetries = 20; // 약 1분간 시도 (3초 * 20)
+    let retries = 0;
+
+    const interval = setInterval(async () => {
+      try {
+        const finalReport = await getEvaluationReport(interviewId);
+        if (finalReport && finalReport.length > 0) {
+          setReport(finalReport);
+          setIsReportLoading(false);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.log("Report still generating...");
+      }
+
+      retries++;
+      if (retries >= maxRetries) {
+        setIsReportLoading(false);
+        clearInterval(interval);
+        // alert('리포트 생성 시간이 너무 오래 걸립니다. 나중에 다시 확인해주세요.');
+      }
+    }, 3000);
+  };
+
   const finishInterview = async () => {
-    setStep('loading');
     if (wsRef.current) wsRef.current.close();
     if (pcRef.current) pcRef.current.close();
 
     try {
       await completeInterview(interview.id);
-      
-      // 평가 리포트 대기
-      setTimeout(async () => {
-        try {
-          const finalReport = await getEvaluationReport(interview.id);
-          setReport(finalReport);
-          setStep('result');
-        } catch (err) {
-          alert('평가 리포트 생성 중입니다. 잠시 후 다시 확인해주세요.');
-          setStep('landing');
-        }
-      }, 10000);
+      setStep('complete'); // SCR-025(면접 종료 안내 화면)으로 즉시 이동
+      pollReport(interview.id); // 백그라운드에서 리포트 폴링 시작
     } catch (err) {
       console.error('[Finish Error]:', err);
       alert('면접 종료 처리 중 오류가 발생했습니다.');
@@ -449,6 +494,7 @@ function App() {
           showLogout={!!user} 
           onLogoClick={() => setStep('main')} 
           isInterviewing={step === 'interview'}
+          isComplete={step === 'complete'}
         />
       )}
 
@@ -537,6 +583,18 @@ function App() {
         />
       )}
 
+      {step === 'complete' && (
+        <InterviewCompletePage 
+          isReportLoading={isReportLoading} 
+          onCheckResult={() => setStep('result')} 
+          onExit={() => {
+            setStep('main');
+            setReport(null);
+            setIsReportLoading(false);
+          }}
+        />
+      )}
+
       {step === 'loading' && (
         <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
           <h2 className="text-gradient">AI 분석 리포트 생성 중...</h2>
@@ -548,10 +606,12 @@ function App() {
       {step === 'result' && (
         <ResultPage 
           results={report || []} 
+          isReportLoading={isReportLoading}
           onReset={() => {
-            setStep('landing');
+            setStep('main');
             setCurrentIdx(0);
             setReport(null);
+            setIsReportLoading(false);
           }} 
         />
       )}
