@@ -26,14 +26,15 @@ import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
-  const [step, setStep] = useState('main'); 
+  const [step, setStep] = useState(() => sessionStorage.getItem('current_step') || 'main'); 
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
   
-  const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('isDarkMode') === 'true'); // 기본: 라이트모드
 
   useEffect(() => {
+    localStorage.setItem('isDarkMode', isDarkMode);
     if (isDarkMode) {
       document.body.classList.add('dark-theme');
     } else {
@@ -51,23 +52,51 @@ function App() {
     profileImage: null,
     termsAgreed: false
   });
-  const [interview, setInterview] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [report, setReport] = useState(null);
+  const [interview, setInterview] = useState(() => {
+    const saved = sessionStorage.getItem('current_interview');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [questions, setQuestions] = useState(() => {
+    const saved = sessionStorage.getItem('current_questions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [currentIdx, setCurrentIdx] = useState(() => {
+    const saved = sessionStorage.getItem('current_idx');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [report, setReport] = useState(() => {
+    const saved = sessionStorage.getItem('current_report');
+    return saved ? JSON.parse(saved) : null;
+  });
   
   const [transcript, setTranscript] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
-  const [position, setPosition] = useState('');
+  const [position, setPosition] = useState(() => sessionStorage.getItem('current_position') || '');
   const [resumeFile, setResumeFile] = useState(null);
-  const [parsedResumeData, setParsedResumeData] = useState(null);
+  const [parsedResumeData, setParsedResumeData] = useState(() => {
+    const saved = sessionStorage.getItem('current_parsed_resume');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
+
+  // Persistence Effect
+  useEffect(() => {
+    sessionStorage.setItem('current_step', step);
+    sessionStorage.setItem('current_interview', JSON.stringify(interview));
+    sessionStorage.setItem('current_questions', JSON.stringify(questions));
+    sessionStorage.setItem('current_idx', currentIdx);
+    sessionStorage.setItem('current_report', JSON.stringify(report));
+    sessionStorage.setItem('current_position', position);
+    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
+  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
   
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -81,7 +110,12 @@ function App() {
       getCurrentUser()
         .then(u => {
           setUser(u);
-          setStep('landing');
+          // Restore the step from sessionStorage or respect the current step.
+          // Only force-redirect to 'landing' if the user is on the 'auth' page while already logged in.
+          const savedStep = sessionStorage.getItem('current_step');
+          if (savedStep === 'auth') {
+            setStep('landing');
+          }
         })
         .catch(() => {
           localStorage.removeItem('token');
@@ -89,7 +123,11 @@ function App() {
           isInitialized.current = true;
         });
     } else {
-      setStep('main');
+      // If no token, only allow 'main' or 'auth'
+      const publicSteps = ['main', 'auth'];
+      if (!publicSteps.includes(step)) {
+        setStep('main');
+      }
       isInitialized.current = true;
     }
   }, []);
@@ -300,7 +338,7 @@ function App() {
     await pc.setLocalDescription(offer);
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
-      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: sessionId }),
+      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: interviewId }),
       headers: { 'Content-Type': 'application/json' }
     });
     const answer = await response.json();
@@ -365,24 +403,34 @@ function App() {
     });
   };
 
+  const finishInterview = async () => {
+    setStep('loading');
+    try {
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+      
+      await completeInterview(interview.id);
+      const res = await getEvaluationReport(interview.id);
+      setReport(res);
+      setStep('result');
+    } catch (err) {
+      console.error("Finish error:", err);
+      alert('면접 종료 처리 중 오류가 발생했습니다.');
+      setStep('interview');
+    }
+  };
+
   const nextQuestion = async () => {
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
-      await submitAnswer(questions[currentIdx].id, answerText);
+      await createTranscript(interview.id, 'candidate', answerText, questions[currentIdx].id);
       if (currentIdx < questions.length - 1) {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
         setIsRecording(false);
       } else {
-        setStep('loading');
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-        if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-        setTimeout(async () => {
-          const res = await getResults(session.id);
-          setResults(res);
-          setStep('result');
-        }, 5000);
+        await finishInterview();
       }
     } catch (err) {
       alert('답변 제출에 실패했습니다.');
@@ -390,9 +438,9 @@ function App() {
   };
 
   useEffect(() => {
-    if (step === 'interview' && session && videoRef.current && !pcRef.current) {
-      setupWebRTC(session.id);
-      setupWebSocket(session.id);
+    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
+      setupWebRTC(interview.id);
+      setupWebSocket(interview.id);
     }
   }, [step, interview]);
 
