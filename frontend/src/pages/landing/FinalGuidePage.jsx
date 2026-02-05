@@ -4,18 +4,8 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev }) => {
   return (
-<<<<<<< HEAD
     <div className="final-guide animate-fade-in">
       <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
-=======
-    <div className="final-guide animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-          <div className="logo-wrapper" style={{ width: '180px' }}>
-            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
-          </div>
-        </div>
->>>>>>> fcf5dd1 (fix 박스 중앙 위치 fix)
         <h1 className="text-gradient">환경 테스트 완료</h1>
         <p style={{ marginBottom: '2rem' }}>모든 준비가 완료되었습니다. 이제 본격적으로 면접을 시작합니다.</p>
 
