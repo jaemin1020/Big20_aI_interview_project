@@ -71,8 +71,8 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
   if (step === 'confirm') {
     return (
-      <div className="resume-confirm animate-fade-in">
-        <GlassCard style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <div className="resume-confirm animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+        <GlassCard style={{ maxWidth: '700px', width: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
             <div className="logo-wrapper" style={{ width: '200px' }}>
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
@@ -120,8 +120,8 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   }
 
   return (
-    <div className="resume-upload animate-fade-in">
-      <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+    <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '240px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />

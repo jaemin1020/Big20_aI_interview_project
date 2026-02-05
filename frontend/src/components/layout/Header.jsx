@@ -19,12 +19,11 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div 
           onClick={onLogoClick} 
-          style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
         >
           <div className="logo-wrapper" style={{ width: '32px' }}>
             <img src="/logo.png" alt="Logo" className="theme-logo" />
           </div>
-          <span style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.1em' }}>BIGVIEW</span>
         </div>
 
         {isInterviewing && (
