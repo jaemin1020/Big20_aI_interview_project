@@ -5,13 +5,15 @@ import PremiumButton from '../../components/ui/PremiumButton';
 const InterviewCompletePage = ({ isReportLoading, onCheckResult, onExit }) => {
   return (
     <div className="complete-container animate-fade-in" style={{ 
+      flex: 1,
       width: '100%',
       maxWidth: '900px',
       margin: '0 auto',
-      paddingTop: '8rem',
-      paddingBottom: '4rem',
+      padding: '4rem 0',
       display: 'flex',
       flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
       gap: '2rem'
     }}>
       {/* 1. 면접 종료 헤더 영역 */}

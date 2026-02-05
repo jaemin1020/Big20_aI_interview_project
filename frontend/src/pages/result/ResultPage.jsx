@@ -10,11 +10,15 @@ const ResultPage = ({ results, onReset }) => {
 
   return (
     <div className="result-container animate-fade-in" style={{ 
+      flex: 1,
       width: '100%', 
       maxWidth: '1200px', 
       margin: '0 auto', 
-      paddingTop: '6rem', 
-      paddingBottom: '4rem' 
+      padding: '6rem 0 4rem',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center'
     }}>
       {/* Overview Section: SCR-25 Style */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem', marginBottom: '3rem' }}>
