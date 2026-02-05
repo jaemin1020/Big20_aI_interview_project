@@ -49,6 +49,9 @@ def init_db():
                 session.exec(text("SELECT 1"))
 
             logger.info("✅ 데이터베이스 테이블 생성 및 연결 성공")
+            
+            # 초기 데이터 시딩
+            seed_initial_data()
             return
         except OperationalError as e:
             if i < max_retries - 1:
@@ -57,6 +60,40 @@ def init_db():
             else:
                 logger.error(f"❌ DB 연결 실패: {str(e)}")
                 raise e
+
+def seed_initial_data():
+    """관리자 및 리크루터 초기 계정 생성"""
+    from models import User, UserRole
+    from utils.auth_utils import get_password_hash
+    from sqlmodel import select
+
+    with Session(engine) as session:
+        # 1. Admin 계정 생성
+        admin_user = session.exec(select(User).where(User.username == "admin")).first()
+        if not admin_user:
+            logger.info("Creating default Admin account...")
+            session.add(User(
+                username="admin",
+                email="admin@big20.com",
+                password_hash=get_password_hash("admin1234"),
+                full_name="System Administrator",
+                role=UserRole.ADMIN
+            ))
+        
+        # 2. Recruiter 계정 생성
+        recruiter_user = session.exec(select(User).where(User.username == "recruiter")).first()
+        if not recruiter_user:
+            logger.info("Creating default Recruiter account...")
+            session.add(User(
+                username="recruiter",
+                email="recruiter@big20.com",
+                password_hash=get_password_hash("recruiter1234"),
+                full_name="Lead Recruiter",
+                role=UserRole.RECRUITER
+            ))
+        
+        session.commit()
+        logger.info("✅ Initial data seeding completed.")
 
 def get_session():
     """FastAPI Dependency Injection용 세션 생성기"""

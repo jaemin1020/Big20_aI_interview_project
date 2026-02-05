@@ -211,6 +211,9 @@ __marimo__/
 model/
 models/
 
+<<<<<<< HEAD
+lsj/
+=======
 # Project-specific temporary files
 resume_text.txt
 structured_resume.json
@@ -223,3 +226,4 @@ docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
 .agent/
+>>>>>>> ac6c31d8d8a1426dd4130e33ae8dc9524f7982da

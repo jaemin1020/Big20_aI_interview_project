@@ -12,6 +12,12 @@
   --secondary-l: 48%;
   --secondary: hsl(var(--secondary-h), var(--secondary-s), var(--secondary-l));
 
+  --bg-gradient: radial-gradient(circle at top left, #f8fafc, #e2e8f0);
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.1);
   --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
 
   --bg-darker: #e2e8f0;
@@ -157,14 +163,15 @@ video {
   object-fit: contain;
 }
 
-/* 라이트 모드 (기본): 배경 제거(Multiply) */
-body:not(.dark-theme) .theme-logo {
-  mix-blend-mode: multiply; /* 흰색 배경을 투명하게 */
+/* 로고 스타일: 블렌드 모드 제거 (투명 PNG 권장) */
+.theme-logo {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  transition: filter 0.3s ease;
 }
 
-/* 다크 모드: 배경 제거(Screen) 또는 반전 */
 body.dark-theme .theme-logo {
-  mix-blend-mode: screen; /* 어두운 배경을 투명하게 */
   filter: brightness(1.2); /* 다크모드에서 좀 더 선명하게 */
 }
 
@@ -192,4 +199,14 @@ body.dark-theme .theme-logo {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.blink {
+  animation: blink 1.5s ease-in-out infinite;
 }

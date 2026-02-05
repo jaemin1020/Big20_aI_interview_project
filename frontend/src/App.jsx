@@ -10,7 +10,8 @@ import {
   login as apiLogin, 
   register as apiRegister, 
   logout as apiLogout, 
-  getCurrentUser 
+  getCurrentUser,
+  getDeepgramToken
 } from './api/interview';
 import { createClient } from "@deepgram/sdk";
 
@@ -26,14 +27,15 @@ import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
-  const [step, setStep] = useState('main'); 
+  const [step, setStep] = useState(() => sessionStorage.getItem('current_step') || 'main'); 
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
   
-  const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('isDarkMode') === 'true'); // 기본: 라이트모드
 
   useEffect(() => {
+    localStorage.setItem('isDarkMode', isDarkMode);
     if (isDarkMode) {
       document.body.classList.add('dark-theme');
     } else {
@@ -51,28 +53,57 @@ function App() {
     profileImage: null,
     termsAgreed: false
   });
-  const [interview, setInterview] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [report, setReport] = useState(null);
+  const [interview, setInterview] = useState(() => {
+    const saved = sessionStorage.getItem('current_interview');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [questions, setQuestions] = useState(() => {
+    const saved = sessionStorage.getItem('current_questions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [currentIdx, setCurrentIdx] = useState(() => {
+    const saved = sessionStorage.getItem('current_idx');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [report, setReport] = useState(() => {
+    const saved = sessionStorage.getItem('current_report');
+    return saved ? JSON.parse(saved) : null;
+  });
   
   const [transcript, setTranscript] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
-  const [position, setPosition] = useState('');
+  const [position, setPosition] = useState(() => sessionStorage.getItem('current_position') || '');
   const [resumeFile, setResumeFile] = useState(null);
-  const [parsedResumeData, setParsedResumeData] = useState(null);
+  const [parsedResumeData, setParsedResumeData] = useState(() => {
+    const saved = sessionStorage.getItem('current_parsed_resume');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
+
+  // Persistence Effect
+  useEffect(() => {
+    sessionStorage.setItem('current_step', step);
+    sessionStorage.setItem('current_interview', JSON.stringify(interview));
+    sessionStorage.setItem('current_questions', JSON.stringify(questions));
+    sessionStorage.setItem('current_idx', currentIdx);
+    sessionStorage.setItem('current_report', JSON.stringify(report));
+    sessionStorage.setItem('current_position', position);
+    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
+  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
   
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -80,12 +111,25 @@ function App() {
       getCurrentUser()
         .then(u => {
           setUser(u);
-          setStep('landing');
+          // Restore the step from sessionStorage or respect the current step.
+          // Only force-redirect to 'landing' if the user is on the 'auth' page while already logged in.
+          const savedStep = sessionStorage.getItem('current_step');
+          if (savedStep === 'auth') {
+            setStep('landing');
+          }
         })
         .catch(() => {
           localStorage.removeItem('token');
           setStep('main');
+          isInitialized.current = true;
         });
+    } else {
+      // If no token, only allow 'main' or 'auth'
+      const publicSteps = ['main', 'auth'];
+      if (!publicSteps.includes(step)) {
+        setStep('main');
+      }
+      isInitialized.current = true;
     }
   }, []);
 
@@ -156,40 +200,40 @@ function App() {
 
   const handleLogout = () => {
     apiLogout();
+    sessionStorage.clear();
     setUser(null);
     setStep('auth');
   };
 
   const startInterviewFlow = () => {
+    if (!user) {
+      alert("로그인이 필요한 서비스입니다.");
+      setAuthMode('login');
+      setStep('auth');
+      return;
+    }
     setStep('resume');
   };
 
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ... (existing states)
+
   const initInterviewSession = async () => {
+    setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & User Name
       const interviewPosition = parsedResumeData?.position || position || 'General';
-      const interviewUser = user?.full_name || user?.username || userName || 'Candidate';
       
-      console.log("Creating interview with:", { interviewUser, interviewPosition });
+      console.log("Creating interview with:", { interviewPosition });
 
-      const newInterview = await createInterview(interviewPosition, null, null); // user name usually handled by backend via token, or if API needed it? 
-      // Checking api/interview.js: createInterview(position, jobPostingId, scheduledTime). 
-      // It does NOT take username. Backend likely uses the token's user.
-      
+      const newInterview = await createInterview(interviewPosition, null, null); 
       setInterview(newInterview);
 
-      // 2. Upload Resume - Already done in ResumePage? 
-      // If ResumePage uploads it to get parsed data, we often just need that data.
-      // But if the backend *needs* the file attached to the *interview ID*, we might need to re-upload or link it?
-      // Based on api/interview.js, uploadResume(file) returns data and takes no ID.
-      // So it strictly parses. It does not attach to an interview explicitly unless backend tracks user's last upload.
-      // We will assume the parsing was enough for now, or if we need to store the file content in the interview context, 
-      // the backend implementation of createInterview might need to know about the resume.
-      // But for now, user request is "Start session with parsed position". We have that.
-
-      // 3. Get Questions
-      const qs = await getInterviewQuestions(newInterview.id);
+      // 2. Get Questions
+      let qs = await getInterviewQuestions(newInterview.id);
       
+      // Simple retry logic
       if (!qs || qs.length === 0) {
          setTimeout(async () => {
              const retryQs = await getInterviewQuestions(newInterview.id);
@@ -203,7 +247,17 @@ function App() {
       setStep('interview');
     } catch (err) {
       console.error("Session init error:", err);
-      // alert("면접 세션 생성에 실패했습니다."); // Removed for smoother UX if fails silent
+      // 구체적인 에러 메시지 표시
+      if (err.response?.status === 401) {
+          alert("세션이 만료되었습니다. 다시 로그인해주세요.");
+          localStorage.removeItem('token');
+          setUser(null);
+          setStep('auth');
+      } else {
+          alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -220,21 +274,22 @@ function App() {
     };
   };
 
-  const setupDeepgram = (stream) => {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.warn("Deepgram API Key not found");
-      return;
-    }
+  const setupDeepgram = async (stream) => {
+    try {
+      const apiKey = await getDeepgramToken();
+      if (!apiKey) {
+        console.warn("Deepgram API Key generation failed");
+        return;
+      }
 
-    const deepgram = createClient(apiKey);
-    const connection = deepgram.listen.live({
-      model: "nova-2",
-      language: "ko",
-      smart_format: true,
-      encoding: "linear16", 
-      sample_rate: 16000,
-    });
+      const deepgram = createClient(apiKey);
+      const connection = deepgram.listen.live({
+        model: "nova-2",
+        language: "ko",
+        smart_format: true,
+        encoding: "linear16", 
+        sample_rate: 16000,
+      });
 
     connection.on("Open", () => {
       
@@ -270,6 +325,9 @@ function App() {
     });
 
     deepgramConnectionRef.current = connection;
+    } catch (err) {
+      console.error("Deepgram setup failed:", err);
+    }
   };
 
   const setupWebRTC = async (interviewId) => {
@@ -285,7 +343,7 @@ function App() {
     await pc.setLocalDescription(offer);
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
-      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: sessionId }),
+      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: interviewId }),
       headers: { 'Content-Type': 'application/json' }
     });
     const answer = await response.json();
@@ -350,23 +408,34 @@ function App() {
     });
   };
 
+  const finishInterview = async () => {
+    setStep('loading');
+    try {
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+      
+      await completeInterview(interview.id);
+      const res = await getEvaluationReport(interview.id);
+      setReport(res);
+      setStep('result');
+    } catch (err) {
+      console.error("Finish error:", err);
+      alert('면접 종료 처리 중 오류가 발생했습니다.');
+      setStep('interview');
+    }
+  };
+
   const nextQuestion = async () => {
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
-      await submitAnswer(questions[currentIdx].id, answerText);
+      await createTranscript(interview.id, 'candidate', answerText, questions[currentIdx].id);
       if (currentIdx < questions.length - 1) {
-        setCurrentIdx(currentIdx + 1);
+        console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
+        setCurrentIdx(prev => prev + 1);
         setTranscript('');
         setIsRecording(false);
       } else {
-        setStep('loading');
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-        if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-        setTimeout(async () => {
-          const res = await getResults(session.id);
-          setResults(res);
-          setStep('result');
-        }, 5000);
+        await finishInterview();
       }
     } catch (err) {
       alert('답변 제출에 실패했습니다.');
@@ -374,9 +443,9 @@ function App() {
   };
 
   useEffect(() => {
-    if (step === 'interview' && session && videoRef.current && !pcRef.current) {
-      setupWebRTC(session.id);
-      setupWebSocket(session.id);
+    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
+      setupWebRTC(interview.id);
+      setupWebSocket(interview.id);
     }
   }, [step, interview]);
 
@@ -395,6 +464,7 @@ function App() {
           onLogout={handleLogout} 
           showLogout={!!user} 
           onLogoClick={() => setStep('main')} 
+          isInterviewing={step === 'interview'}
         />
       )}
 
@@ -425,7 +495,16 @@ function App() {
       <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
         {step === 'main' && (
           <MainPage 
-            onStartInterview={() => setStep('landing')}
+            onStartInterview={() => {
+              if (user) {
+                setStep('landing');
+              } else {
+                if (confirm("면접을 시작하려면 로그인이 필요합니다.\n로그인 페이지로 이동하시겠습니까?")) {
+                  setAuthMode('login');
+                  setStep('auth');
+                }
+              }
+            }}
             onLogin={() => { setAuthMode('login'); setStep('auth'); }}
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
@@ -458,17 +537,18 @@ function App() {
       
       {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
       
-      {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} />}
+      {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
       {step === 'interview' && (
         <InterviewPage 
           currentIdx={currentIdx}
           totalQuestions={questions.length}
-          question={questions[currentIdx]?.question_text}
+          question={questions[currentIdx]?.content}
           isRecording={isRecording}
           transcript={transcript}
           toggleRecording={toggleRecording}
           nextQuestion={nextQuestion}
+          onFinish={finishInterview}
           videoRef={videoRef}
         />
       )}
