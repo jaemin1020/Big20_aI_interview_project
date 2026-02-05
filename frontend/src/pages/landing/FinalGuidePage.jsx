@@ -4,8 +4,8 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
   return (
-    <div className="final-guide animate-fade-in">
-      <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+    <div className="final-guide animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '180px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
