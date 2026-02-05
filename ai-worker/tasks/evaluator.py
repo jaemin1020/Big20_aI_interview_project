@@ -4,7 +4,7 @@ import json
 from celery import shared_task
 from langchain_community.llms import LlamaCpp
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 # DB Helper Functions
 from db import (
@@ -53,6 +53,15 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         return {"error": "Model not loaded"}
 
     logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
+    
+    # 예외 처리: 답변이 없는 경우 LLM 호출 생략
+    if not answer_text or not answer_text.strip():
+        logger.warning(f"Empty answer for transcript {transcript_id}. Skipping LLM evaluation.")
+        return {
+            "technical_score": 0,
+            "communication_score": 0,
+            "feedback": "No answer provided."
+        }
     
     start_ts = time.time()
     
