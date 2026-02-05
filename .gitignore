@@ -222,4 +222,4 @@ uploads/
 docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
-.agent/*
+.agent/
