@@ -25,6 +25,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.dll
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -210,4 +211,19 @@ __marimo__/
 model/
 models/
 
+<<<<<<< HEAD
 lsj/
+=======
+# Project-specific temporary files
+resume_text.txt
+structured_resume.json
+uploads/
+*.pdf
+*.docx
+
+# Quality reports (keep only final version)
+docs/QUALITY_REPORT_*.md
+docs/QUALITY_FINAL_SUMMARY.md
+
+.agent/
+>>>>>>> ac6c31d8d8a1426dd4130e33ae8dc9524f7982da

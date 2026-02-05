@@ -23,6 +23,8 @@ services:
     image: redis:7-alpine
     container_name: interview_redis
     restart: always
+    ports:
+      - "6379:6379"
     networks:
       - interview_network
 
@@ -82,6 +84,8 @@ services:
     volumes:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
+      - ./backend-core/uploads:/app/uploads
+      - ./backend-core:/backend-core  # Shared Code Access
     networks:
       - interview_network
 
@@ -94,8 +98,10 @@ services:
     environment:
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - backend
+      - redis
     volumes:
       - ./media-server:/app
     networks:
@@ -113,6 +119,7 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8000
+      - VITE_DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     depends_on:
       - backend
     networks:
