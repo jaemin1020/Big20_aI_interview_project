@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
-from auth import get_current_user
+from utils.auth_utils import get_current_user
 from models import User
 from database import get_session
 import os

@@ -133,7 +133,7 @@ export const uploadResume = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await api.post('/resumes/upload', formData, {
+    const response = await api.post('/api/resumes/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data'
         }
@@ -142,7 +142,7 @@ export const uploadResume = async (file) => {
 };
 
 export const getResume = async (resumeId) => {
-    const response = await api.get(`/resumes/${resumeId}`);
+    const response = await api.get(`/api/resumes/${resumeId}`);
     return response.data;
 };
 
