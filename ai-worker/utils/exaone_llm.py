@@ -43,7 +43,7 @@ class ExaoneLLM:
                 n_gpu_layers=-1,      # 가능한 모든 레이어를 GPU로 오프로드
                 n_ctx=4096,           # 컨텍스트 윈도우 크기
                 n_batch=512,          # 배치 크기
-                verbose=True          # 로딩 로그 출력
+                verbose=False          # 로딩 로그 출력
             )
             logger.info("✅ EXAONE GGUF Model Initialized")
         except Exception as e:
