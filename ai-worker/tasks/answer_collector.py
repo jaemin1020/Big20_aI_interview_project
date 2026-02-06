@@ -57,12 +57,35 @@ def collect_excellent_answer(transcript_id: int, evaluation_score: float):
                 logger.error(f"Question {transcript.question_id} not found")
                 return {"status": "error", "reason": "question_not_found"}
             
-            # 3. 중복 체크 (같은 질문에 대한 동일 답변이 이미 있는지)
-            # TODO: 벡터 유사도로 중복 체크 (현재는 생략)
-            
-            # 4. 벡터 생성
+            # 3. 벡터 생성
             logger.info(f"Generating embedding for answer: {transcript.text[:50]}...")
             embedding = generate_answer_embedding(transcript.text)
+            
+            # 4. 중복 체크 (벡터 유사도 기반) - TODO 해결
+            from sqlmodel import select
+            stmt = select(AnswerBank).where(
+                AnswerBank.question_id == question.id
+            )
+            existing_answers = session.exec(stmt).all()
+            
+            # 유사도 임계값 (0.95 이상이면 중복으로 간주)
+            SIMILARITY_THRESHOLD = 0.95
+            
+            for existing in existing_answers:
+                if existing.embedding:
+                    # 코사인 유사도 계산 (간단한 방법)
+                    import numpy as np
+                    emb1 = np.array(embedding)
+                    emb2 = np.array(existing.embedding)
+                    similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
+                    
+                    if similarity > SIMILARITY_THRESHOLD:
+                        logger.info(f"⚠️ Duplicate answer detected (similarity={similarity:.3f}), skipping")
+                        return {
+                            "status": "skipped", 
+                            "reason": "duplicate_answer",
+                            "similarity": float(similarity)
+                        }
             
             # 5. AnswerBank에 저장
             answer_bank = AnswerBank(

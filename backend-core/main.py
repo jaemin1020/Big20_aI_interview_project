@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from celery import Celery
 import logging
 import os
 
@@ -11,6 +12,7 @@ from routes.interviews import router as interviews_router
 from routes.transcripts import router as transcripts_router
 from routes.resumes import router as resumes_router
 from routes.users import router as users_router
+from routes.stt import router as stt_router
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -41,16 +43,16 @@ app.include_router(interviews_router) # /interviews
 app.include_router(transcripts_router)# /transcripts
 app.include_router(resumes_router)    # /api/resumes
 app.include_router(users_router)      # /users
+app.include_router(stt_router)        # /stt
+
+# Celery 설정
+celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to AI Interview Backend v2.0"}
 
 # Health Check
-@app.get("/")
-async def root():
-    return {
-        "service": "AI Interview Backend v2.0",
-        "status": "running",
-        "doc": "/docs"
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
