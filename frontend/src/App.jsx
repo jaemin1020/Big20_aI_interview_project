@@ -13,7 +13,7 @@ import {
   getCurrentUser,
   getDeepgramToken
 } from './api/interview';
-import { createClient } from "@deepgram/sdk";
+
 
 // Layout & UI
 import Header from './components/layout/Header';
@@ -36,10 +36,13 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('isDarkMode', isDarkMode);
+    console.log("Theme changed to:", isDarkMode ? "DARK" : "LIGHT");
     if (isDarkMode) {
       document.body.classList.add('dark-theme');
+      document.documentElement.classList.add('dark-theme'); // html 태그에도 추가
     } else {
       document.body.classList.remove('dark-theme');
+      document.documentElement.classList.remove('dark-theme');
     }
   }, [isDarkMode]);
   
@@ -71,7 +74,6 @@ function App() {
   });
   
   const [transcript, setTranscript] = useState('');
-  const [subtitle, setSubtitle] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
   const [position, setPosition] = useState(() => sessionStorage.getItem('current_position') || '');
@@ -96,12 +98,9 @@ function App() {
     sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
   }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
   
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const videoRef = useRef(null)
   const pcRef = useRef(null);
   const wsRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
 
@@ -274,61 +273,7 @@ function App() {
     };
   };
 
-  const setupDeepgram = async (stream) => {
-    try {
-      const apiKey = await getDeepgramToken();
-      if (!apiKey) {
-        console.warn("Deepgram API Key generation failed");
-        return;
-      }
 
-      const deepgram = createClient(apiKey);
-      const connection = deepgram.listen.live({
-        model: "nova-2",
-        language: "ko",
-        smart_format: true,
-        encoding: "linear16", 
-        sample_rate: 16000,
-      });
-
-    connection.on("Open", () => {
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0 && connection.getReadyState() === 1) {
-          connection.send(event.data);
-        }
-      });
-      mediaRecorder.start(250);
-      mediaRecorderRef.current = mediaRecorder;
-    });
-
-    connection.on("Results", (result) => {
-      const channel = result.channel;
-      if (channel && channel.alternatives && channel.alternatives[0]) {
-        const transcriptText = channel.alternatives[0].transcript;
-        const isFinal = result.is_final;
-        
-        if (transcriptText) {
-          if (isFinal) {
-             setTranscript(prev => prev + ' ' + transcriptText);
-             setSubtitle(''); 
-          } else {
-             setSubtitle(transcriptText);
-          }
-        }
-      }
-    });
-
-    connection.on("Error", (err) => {
-      console.error("Deepgram Error:", err);
-    });
-
-    deepgramConnectionRef.current = connection;
-    } catch (err) {
-      console.error("Deepgram setup failed:", err);
-    }
-  };
 
   const setupWebRTC = async (interviewId) => {
     const pc = new RTCPeerConnection();
@@ -357,55 +302,6 @@ function App() {
       setTranscript('');
       setIsRecording(true);
     }
-  };
-
-  const drawTracking = (trackingData) => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video || video.videoWidth === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    
-    // Canvas 크기를 비디오 표시 크기에 맞춤 (한 번만 설정하거나 리사이즈 이벤트 처리 필요하지만 여기선 매번 체크)
-    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
-    }
-    
-    // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Scale Factors
-    const scaleX = video.clientWidth / video.videoWidth;
-    const scaleY = video.clientHeight / video.videoHeight;
-
-    trackingData.forEach(item => {
-        // Face (Green)
-        if (item.face) {
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(
-                item.face.x * scaleX, 
-                item.face.y * scaleY, 
-                item.face.w * scaleX, 
-                item.face.h * scaleY
-            );
-        }
-
-        // Eyes (Red)
-        if (item.eyes) {
-            item.eyes.forEach(eye => {
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                    eye.x * scaleX, 
-                    eye.y * scaleY, 
-                    eye.w * scaleX, 
-                    eye.h * scaleY
-                );
-            });
-        }
-    });
   };
 
   const finishInterview = async () => {

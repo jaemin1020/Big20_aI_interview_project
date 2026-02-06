@@ -23,7 +23,8 @@
   --bg-darker: #e2e8f0;
 }
 
-body.dark-theme {
+body.dark-theme,
+html.dark-theme body {
   /* Dark Theme Overlay */
   --bg-gradient: radial-gradient(circle at top left, #0f172a, #020617);
   --text-main: #f8fafc;
