@@ -690,7 +690,6 @@ async def get_resume_status(
         "processing_status": resume.processing_status,
         "uploaded_at": resume.uploaded_at,
         "processed_at": resume.processed_at,
-        "has_embedding": resume.embedding is not None,
         "has_structured_data": resume.structured_data is not None,
         "structured_data": resume.structured_data if resume.structured_data else {}
     }
@@ -717,8 +716,7 @@ async def get_user_resumes(
             "file_size": r.file_size,
             "processing_status": r.processing_status,
             "uploaded_at": r.uploaded_at,
-            "processed_at": r.processed_at,
-            "has_embedding": r.embedding is not None
+            "processed_at": r.processed_at
         }
         for r in resumes
     ]
