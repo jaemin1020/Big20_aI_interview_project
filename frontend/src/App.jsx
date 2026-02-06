@@ -577,13 +577,7 @@ function App() {
         </div>
       )}
 
-      {step === 'loading' && (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <h2>답변을 분석 중입니다</h2>
-          <div className="spinner"></div>
-        </div>
-      )}
-
+      {step === 'interview' && (
         <InterviewPage 
           currentIdx={currentIdx}
           totalQuestions={questions.length}
@@ -614,7 +608,6 @@ function App() {
             setReport(null);
           }} 
         />
-
       )}
       </div>
     </div>
