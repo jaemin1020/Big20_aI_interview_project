@@ -40,7 +40,7 @@ api.interceptors.response.use(
 // ==================== Auth ====================
 
 export const register = async (email, username, password, fullName) => {
-    const response = await api.post('/register', {
+    const response = await api.post('/auth/register', {
         email,
         username,
         password,
@@ -56,7 +56,7 @@ export const login = async (username, password) => {
     formData.append('username', username);
     formData.append('password', password);
     
-    const response = await api.post('/token', formData.toString(), {
+    const response = await api.post('/auth/token', formData.toString(), {
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
@@ -73,8 +73,13 @@ export const logout = () => {
 };
 
 export const getCurrentUser = async () => {
-    const response = await api.get('/users/me');
+    const response = await api.get('/users/me'); // users 라우터는 별도 분리 예정 또는 main에 유지
     return response.data;
+};
+
+export const getDeepgramToken = async () => {
+    const response = await api.get('/auth/deepgram-token');
+    return response.data.temp_key;
 };
 
 // ==================== Interview ====================
@@ -133,6 +138,11 @@ export const uploadResume = async (file) => {
             'Content-Type': 'multipart/form-data'
         }
     });
+    return response.data;
+};
+
+export const getResume = async (resumeId) => {
+    const response = await api.get(`/resumes/${resumeId}`);
     return response.data;
 };
 
