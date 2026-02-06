@@ -36,10 +36,10 @@ accelerate>=0.27.0
 sentence-transformers>=2.2.0
 
 # Computer Vision & Emotion Detection
-# deepface>=0.0.91
-# tensorflow>=2.16.0
-# tf-keras>=2.16.0
-# opencv-python-headless>=4.9.0.8
+deepface>=0.0.91
+tensorflow>=2.16.0
+tf-keras>=2.16.0
+opencv-python-headless>=4.9.0.8
 
 # Audio Processing (if needed)
 librosa>=0.10.1
