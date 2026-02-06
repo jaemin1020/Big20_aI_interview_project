@@ -33,6 +33,14 @@ class Speaker(str, Enum):
     AI = "AI"
     USER = "User"
 
+class SectionType(str, Enum):
+    """이력서 섹션 타입 (RAG 검색 정확도 향상용)"""
+    SKILL_CERT = "skill_cert"  # 기술 스택 + 자격증
+    CAREER_PROJECT = "career_project"  # 경력 + 프로젝트
+    COVER_LETTER = "cover_letter"  # 자기소개서 (지원동기, 성격, 포부 등)
+    TARGET_INFO = "target_info"  # 지원 정보 (희망 회사, 직무 등)
+    EDUCATION = "education"  # 학력 사항
+
 # ==================== Tables ====================
 
 class User(SQLModel, table=True):
@@ -89,6 +97,39 @@ class Resume(SQLModel, table=True):
     # Relationships
     candidate: User = Relationship(back_populates="resumes")
     interviews: List["Interview"] = Relationship(back_populates="resume")
+    chunks: List["ResumeChunk"] = Relationship(back_populates="resume")
+
+
+class ResumeChunk(SQLModel, table=True):
+    """이력서 청크 테이블 (RAG용 - 문맥 기반 검색)"""
+    __tablename__ = "resume_chunks"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    resume_id: int = Field(foreign_key="resumes.id", index=True)
+    
+    # 청크 내용
+    content: str = Field(description="잘게 쪼개진 이력서 텍스트 조각")
+    chunk_index: int = Field(description="청크 순서 (0부터 시작)")
+    
+    # 섹션 타입 (Phase 2: RAG 검색 정확도 향상)
+    section_type: Optional[str] = Field(
+        default=None,
+        index=True,
+        description="이력서 섹션 분류 (직무/인성 질문 그룹화용)"
+    )
+    
+    # 벡터 임베딩 (1024차원 - KURE-v1)
+    embedding: Any = Field(
+        default=None,
+        sa_column=Column(Vector(1024)),
+        description="청크의 벡터 임베딩 (유사도 검색용)"
+    )
+    
+    # 메타데이터
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationship
+    resume: Resume = Relationship(back_populates="chunks")
 
 
 class Company(SQLModel, table=True):
