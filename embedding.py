@@ -2,6 +2,7 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 import json
 import numpy as np
+import os
 
 MODEL_NAME = "nlpai-lab/KURE-v1"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -49,46 +50,28 @@ def embed_text(text: str) -> list:
     return embedding.cpu().numpy()[0].tolist()
 
 # =========================
-# 직렬화 함수
+# 직렬화 함수 (Text Serialization)
 # =========================
 def serialize_profile(profile):
-    return f"""
-이름: {profile.get('name','')}
-지원직무: {profile.get('target_position','')}
-지원회사: {profile.get('target_company','')}
-연락처: {profile.get('contact','')}
-""".strip()
+    return f"이름: {profile.get('name','')}\n지원직무: {profile.get('target_position','')}\n지원회사: {profile.get('target_company','')}".strip()
 
 def serialize_experience(exp):
-    return f"""
-회사: {exp.get('company','')}
-지역: {exp.get('location','')}
-직무: {exp.get('role','')}
-기간: {exp.get('period','')}
-내용: {exp.get('description','')}
-""".strip()
+    return f"회사: {exp.get('company','')}\n역할: {exp.get('role','')}\n내용: {exp.get('description','')}".strip()
 
 def serialize_project(proj):
-    return f"""
-프로젝트명: {proj.get('title','')}
-기간: {proj.get('period','')}
-내용: {proj.get('description','')}
-""".strip()
-
-def serialize_certifications(certs):
-    return "\n".join([f"{c.get('name','')} {c.get('date','')}" for c in certs])
-
-def serialize_languages(langs):
-    return "\n".join([f"{l.get('name','')} {l.get('date','')}" for l in langs])
+    return f"프로젝트명: {proj.get('title','')}\n내용: {proj.get('description','')}".strip()
 
 # =========================
-# 메인 임베딩 파이프라인
+# 메인 임베딩 파이프라인 (수정됨)
 # =========================
 def build_resume_embeddings(resume_json: dict):
-
+    # 최상단 구조에 target_company 추가
+    # resume_json["profile"] 내에 해당 정보가 있다고 가정합니다.
     output = {
         "resume_id": resume_json.get("resume_id", "res_001"),
-        "role": resume_json["profile"]["target_position"],
+        "name": resume_json["profile"].get("name", ""),
+        "role": resume_json["profile"].get("target_position", ""),
+        "target_company": resume_json["profile"].get("target_company", ""), # 필수 추가 필드
         "embeddings": {
             "profile": {},
             "experience": [],
@@ -98,6 +81,8 @@ def build_resume_embeddings(resume_json: dict):
             "languages": {}
         }
     }
+
+    print(f"[*] 분석 대상: {output['name']} / 지원회사: {output['target_company']}")
 
     # -------- profile --------
     profile_text = serialize_profile(resume_json["profile"])
@@ -121,37 +106,18 @@ def build_resume_embeddings(resume_json: dict):
 
     # -------- self introduction --------
     for si in resume_json.get("self_introduction", []):
-        si_text = f"""
-질문: {si.get('question','')}
-답변: {si.get('answer','')}
-""".strip()
-
+        si_text = f"질문: {si.get('question','')}\n답변: {si.get('answer','')}".strip()
         q = si.get("question","")
 
-        # 질문 타입 자동 분류 (룰 기반)
-        if "지원한 이유" in q or "성장계획" in q:
-            si_type = "지원동기/성장계획"
-        elif "협업" in q:
-            si_type = "협업경험"
-        elif "연구" in q or "프로젝트" in q:
-            si_type = "연구/프로젝트"
-        elif "학습" in q or "노하우" in q:
-            si_type = "학습노하우"
-        else:
-            si_type = "기타"
+        # 분류 로직 (필요 시 수정)
+        if "지원한 이유" in q or "동기" in q: si_type = "지원동기"
+        elif "협업" in q: si_type = "협업경험"
+        else: si_type = "일반"
 
         output["embeddings"]["self_introduction"].append({
             "type": si_type,
             "vector": embed_text(si_text)
         })
-
-    # -------- certifications --------
-    cert_text = serialize_certifications(resume_json.get("certifications", []))
-    output["embeddings"]["certifications"]["vector"] = embed_text(cert_text)
-
-    # -------- languages --------
-    lang_text = serialize_languages(resume_json.get("languages", []))
-    output["embeddings"]["languages"]["vector"] = embed_text(lang_text)
 
     return output
 
@@ -159,16 +125,20 @@ def build_resume_embeddings(resume_json: dict):
 # 실행부
 # =========================
 if __name__ == "__main__":
+    input_file = "resume_structured.json"
+    
+    if os.path.exists(input_file):
+        with open(input_file, "r", encoding="utf-8") as f:
+            resume_data = json.load(f)
 
-    with open("resume_structured.json", "r", encoding="utf-8") as f:
-        resume_json = json.load(f)
+        print("[*] 멀티 섹션 임베딩 생성 중...")
+        embedding_result = build_resume_embeddings(resume_data)
 
-    print("[*] 멀티 섹션 임베딩 생성 중...")
-    embedding_result = build_resume_embeddings(resume_json)
+        output_file = "resume_multi_embeddings.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(embedding_result, f, indent=2, ensure_ascii=False)
 
-    with open("resume_multi_embeddings.json", "w", encoding="utf-8") as f:
-        json.dump(embedding_result, f, indent=2, ensure_ascii=False)
-
-    print("\n[완료]")
-    print("→ resume_multi_embeddings.json 생성")
-    print("→ 멀티 벡터 RAG 구조 완성")
+        print(f"\n[완료] {output_file} 생성됨.")
+        print(f"매칭 대상 회사: {embedding_result['target_company']}")
+    else:
+        print(f"파일을 찾을 수 없습니다: {input_file}")
