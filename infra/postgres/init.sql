@@ -41,12 +41,29 @@ CREATE TRIGGER update_evaluation_reports_updated_at
 --     ('Frontend Engineer', 'Build amazing UIs', 'React, TypeScript, Vite', 'Frontend Developer')
 -- ON CONFLICT DO NOTHING;
 
--- 7. 통계 수집 (성능 최적화)
+-- 7. 벡터 검색 인덱스 생성 (Phase 2)
+-- resume_chunks 테이블의 embedding 컬럼에 HNSW 인덱스 생성
+-- HNSW (Hierarchical Navigable Small World): 고속 근사 최근접 이웃 검색
+CREATE INDEX IF NOT EXISTS idx_resume_chunks_embedding 
+ON resume_chunks 
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- 일반 인덱스 (검색 성능 향상)
+CREATE INDEX IF NOT EXISTS idx_resumes_status 
+ON resumes(processing_status);
+
+CREATE INDEX IF NOT EXISTS idx_resume_chunks_resume_id 
+ON resume_chunks(resume_id);
+
+-- 8. 통계 수집 (성능 최적화)
 ANALYZE users;
 ANALYZE interviews;
 ANALYZE questions;
 ANALYZE transcripts;
 ANALYZE evaluation_reports;
+ANALYZE resumes;
+ANALYZE resume_chunks;
 
 -- ==========================================
 -- 초기화 완료 메시지

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
-  createInterview, 
-  getInterviewQuestions, 
+import {
+  createInterview,
+  getInterviewQuestions,
   createTranscript,
   completeInterview,
   getEvaluationReport,
@@ -27,12 +27,18 @@ import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
-  const [step, setStep] = useState(() => sessionStorage.getItem('current_step') || 'main'); 
+  const [step, setStep] = useState(() => {
+    const saved = sessionStorage.getItem('current_step');
+    const token = localStorage.getItem('token');
+    if (!token && saved === 'auth') return 'main';
+    return saved || 'main';
+  });
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
-  
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('isDarkMode') === 'true'); // 기본: 라이트모드
+
+  const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
+
 
   useEffect(() => {
     localStorage.setItem('isDarkMode', isDarkMode);
@@ -56,10 +62,13 @@ function App() {
     profileImage: null,
     termsAgreed: false
   });
+
+  // Interview state
   const [interview, setInterview] = useState(() => {
     const saved = sessionStorage.getItem('current_interview');
     return saved ? JSON.parse(saved) : null;
   });
+
   const [questions, setQuestions] = useState(() => {
     const saved = sessionStorage.getItem('current_questions');
     return saved ? JSON.parse(saved) : [];
@@ -76,6 +85,7 @@ function App() {
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
+
   const [position, setPosition] = useState(() => sessionStorage.getItem('current_position') || '');
   const [resumeFile, setResumeFile] = useState(null);
   const [parsedResumeData, setParsedResumeData] = useState(() => {
@@ -98,7 +108,9 @@ function App() {
     sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
   }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
   
-  const videoRef = useRef(null)
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const isRecordingRef = useRef(false);
@@ -111,21 +123,30 @@ function App() {
         .then(u => {
           setUser(u);
           // Restore the step from sessionStorage or respect the current step.
-          // Only force-redirect to 'landing' if the user is on the 'auth' page while already logged in.
           const savedStep = sessionStorage.getItem('current_step');
+          
+          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
           if (savedStep === 'auth') {
             setStep('landing');
+          } 
+          else {
+             const hasInterviewData = sessionStorage.getItem('current_interview');
+             const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
+             
+             if (stepsRequiringInterview.includes(savedStep) && !hasInterviewData) {
+                 console.warn("Invalid step state (missing interview data). Resetting to landing.");
+                 setStep('landing');
+             }
           }
         })
         .catch(() => {
           localStorage.removeItem('token');
           setStep('main');
+          sessionStorage.clear(); // 세션 만료 시 깔끔하게 초기화
           isInitialized.current = true;
         });
     } else {
-      // If no token, only allow 'main' or 'auth'
-      const publicSteps = ['main', 'auth'];
-      if (!publicSteps.includes(step)) {
+      if (step !== 'main') {
         setStep('main');
       }
       isInitialized.current = true;
@@ -157,6 +178,7 @@ function App() {
         const u = await getCurrentUser();
         setUser(u);
         setStep('landing');
+        setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -268,11 +290,12 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
           setTranscript(prev => prev + ' ' + data.text);
+        } else if (data.type === 'eye_tracking') {
+             drawTracking(data.data);
         }
       } catch (err) { console.error('[WS] Parse error:', err); }
     };
   };
-
 
 
   const setupWebRTC = async (interviewId) => {
@@ -304,6 +327,7 @@ function App() {
     }
   };
 
+
   const finishInterview = async () => {
     setStep('loading');
     try {
@@ -321,29 +345,95 @@ function App() {
     }
   };
 
+  const drawTracking = (trackingData) => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video || video.videoWidth === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    
+    // Canvas 크기를 비디오 표시 크기에 맞춤 (한 번만 설정하거나 리사이즈 이벤트 처리 필요하지만 여기선 매번 체크)
+    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+    }
+    
+    // Clear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Scale Factors
+    const scaleX = video.clientWidth / video.videoWidth;
+    const scaleY = video.clientHeight / video.videoHeight;
+
+    trackingData.forEach(item => {
+        // Face (Green)
+        if (item.face) {
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                item.face.x * scaleX, 
+                item.face.y * scaleY, 
+                item.face.w * scaleX, 
+                item.face.h * scaleY
+            );
+        }
+
+        // Eyes (Red)
+        if (item.eyes) {
+            item.eyes.forEach(eye => {
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    eye.x * scaleX, 
+                    eye.y * scaleY, 
+                    eye.w * scaleX, 
+                    eye.h * scaleY
+                );
+            });
+        }
+    });
+  };
+
   const nextQuestion = async () => {
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
+
       await createTranscript(interview.id, 'candidate', answerText, questions[currentIdx].id);
+
       if (currentIdx < questions.length - 1) {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
         setIsRecording(false);
       } else {
+
+        setStep('loading');
+        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+        if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
         await finishInterview();
+
       }
     } catch (err) {
       alert('답변 제출에 실패했습니다.');
     }
   };
 
+  // 면접 화면 초기화 (WebRTC, WebSocket)
   useEffect(() => {
     if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
       setupWebRTC(interview.id);
       setupWebSocket(interview.id);
     }
   }, [step, interview]);
+
+  // 면접 시작 시 자동으로 녹음 시작 (Deepgram 타임아웃 방지)
+  useEffect(() => {
+    if (step === 'interview' && questions.length > 0 && !isRecording) {
+      console.log('🎤 [AUTO] Starting recording automatically...');
+      setIsRecording(true);
+      isRecordingRef.current = true;
+    }
+  }, [step, questions]);
 
   useEffect(() => {
     return () => {
@@ -409,11 +499,67 @@ function App() {
         )}
 
       {step === 'auth' && (
-        <AuthPage 
-          authMode={authMode} setAuthMode={setAuthMode}
-          account={account} setAccount={setAccount}
-          handleAuth={handleAuth} authError={authError}
-        />
+        <div className="card">
+          <h1>{authMode === 'login' ? '로그인' : '회원가입'}</h1>
+          <p style={{ marginBottom: '24px' }}>서비스를 이용하려면 로그인해주세요.</p>
+          <div className="input-group">
+            {authMode === 'register' && (
+              <div>
+                <label>성함</label>
+                <input
+                  type="text"
+                  value={account.fullName}
+                  onChange={(e) => setAccount({ ...account, fullName: e.target.value })}
+                  placeholder="이름을 입력하세요"
+                />
+              </div>
+            )}
+
+            {/* 회원가입 시 Email 입력 추가 */}
+            {authMode === 'register' && (
+              <div>
+                <label>이메일</label>
+                <input
+                  type="text"
+                  value={account.email}
+                  onChange={(e) => setAccount({ ...account, email: e.target.value })}
+                  placeholder="name@example.com"
+                />
+              </div>
+            )}
+
+            <div>
+              <label>아이디</label>
+              <input
+                type="text"
+                value={account.username}
+                onChange={(e) => setAccount({ ...account, username: e.target.value })}
+                placeholder="아이디를 입력하세요"
+              />
+            </div>
+            <div>
+              <label>비밀번호</label>
+              <input
+                type="password"
+                value={account.password}
+                maxLength={24}
+                onChange={(e) => setAccount({ ...account, password: e.target.value })}
+                placeholder="비밀번호 (최대 24자)"
+              />
+            </div>
+            {authError && <p className="error-message">{authError}</p>}
+          </div>
+          <button className="premium-button" onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
+            {authMode === 'login' ? '로그인' : '회원가입'}
+          </button>
+          <p
+            className="link-text"
+            style={{ textAlign: 'center' }}
+            onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+          >
+            {authMode === 'login' ? '회원가입' : '로그인'}
+          </p>
+        </div>
       )}
 
       {step === 'landing' && (
@@ -421,6 +567,7 @@ function App() {
           startInterview={startInterviewFlow} 
           handleLogout={handleLogout}
         />
+
       )}
 
       {step === 'resume' && (
@@ -434,6 +581,15 @@ function App() {
       {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
       
       {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
+
+
+      {step === 'loading_questions' && (
+        <div className="card">
+          <h2>AI 면접관이 질문을 준비하고 있습니다...</h2>
+          <p>지원 직무와 이력서를 분석 중입니다. (AI 모델 로딩에 따라 최대 2분 소요)</p>
+          <div className="spinner"></div>
+        </div>
+      )}
 
       {step === 'interview' && (
         <InterviewPage 
@@ -459,7 +615,7 @@ function App() {
 
       {step === 'result' && (
         <ResultPage 
-          results={report || []} 
+          results={report?.details_json || []} 
           onReset={() => {
             setStep('landing');
             setCurrentIdx(0);

@@ -27,8 +27,8 @@ else:
 try:
     # Centralized Model Imports
     from models import (
-        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
-        User, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
+        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker, ResumeSectionType,
+        User, Resume, ResumeChunk, ResumeSectionEmbedding, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
     )
 except ImportError as e:
     print(f"Error importing models from backend-core: {e}")
