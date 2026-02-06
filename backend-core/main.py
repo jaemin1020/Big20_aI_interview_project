@@ -441,36 +441,7 @@ async def test_get_resume_status(
     
     - 임베딩 처리 상태 및 청크 정보 확인
     """
-    resume = db.get(Resume, resume_id)
-    if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
-    
-    # ResumeChunk 개수 확인
-    from sqlmodel import select
-    stmt = select(ResumeChunk).where(ResumeChunk.resume_id == resume_id)
-    chunks = db.exec(stmt).all()
-    
-    return {
-        "resume_id": resume.id,
-        "file_name": resume.file_name,
-        "file_size": resume.file_size,
-        "processing_status": resume.processing_status,
-        "uploaded_at": resume.uploaded_at,
-        "processed_at": resume.processed_at,
-        "chunks_count": len(chunks),
-        "chunks_info": [
-            {
-                "chunk_index": chunk.chunk_index,
-                "content_length": len(chunk.content),
-                "has_embedding": chunk.embedding is not None,
-                "embedding_dimension": len(chunk.embedding) if chunk.embedding is not None else 0,
-                "content_preview": chunk.content[:100] + "..." if len(chunk.content) > 100 else chunk.content
-            }
-            for chunk in chunks
-        ],
-        "structured_data": resume.structured_data if resume.structured_data else {},
-        "note": "⚠️ 이 엔드포인트는 테스트용입니다."
-    }
+    return {"message": "Endpoint is ALIVE", "id": resume_id}
 
 
 # 🧪 테스트용: 인증 없는 이력서 업로드 (개발/디버깅용)
@@ -871,6 +842,184 @@ async def search_resumes(
     logger.info(f"✅ Found {len(results)} resumes matching query")
     
     return {
+        "query": request.query,
+        "total_results": len(results),
+        "results": results
+    }
+
+
+# ==================== Interview Context & RAG Search (Phase 2) ====================
+
+@app.get("/interviews/{interview_id}/context")
+async def get_interview_context(
+    interview_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    면접 컨텍스트 로드 (Phase 2: RAG 질문 생성용)
+    
+    Returns:
+        - company_id, company_name, company_ideal
+        - position (지원 직무)
+        - resume_id
+    """
+    logger.info(f"🎯 [Interview {interview_id}] 컨텍스트 로드 요청")
+    
+    # 1. Interview 조회
+    interview = db.get(Interview, interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    # 권한 체크
+    if interview.candidate_id != current_user.id and current_user.role not in ["recruiter", "admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # 2. Company 정보 조회
+    company_data = None
+    if interview.company_id:
+        company = db.get(Company, interview.company_id)
+        if company:
+            company_data = {
+                "company_id": company.id,
+                "company_name": company.company_name,
+                "company_ideal": company.ideal,
+                "company_description": company.description
+            }
+    
+    # 3. Resume 정보 조회
+    resume_data = None
+    if interview.resume_id:
+        resume = db.get(Resume, interview.resume_id)
+        if resume:
+            resume_data = {
+                "resume_id": resume.id,
+                "file_name": resume.file_name,
+                "processing_status": resume.processing_status
+            }
+    
+    context = {
+        "interview_id": interview.id,
+        "position": interview.position,
+        "company": company_data,
+        "resume": resume_data,
+        "status": interview.status
+    }
+    
+    logger.info(f"✅ [Interview {interview_id}] 컨텍스트 로드 완료")
+    return context
+
+
+class HybridSearchRequest(BaseModel):
+    """하이브리드 검색 요청 (Phase 2)"""
+    interview_id: int
+    section_type: str  # 'skill_cert', 'career_project', 'cover_letter'
+    query: str
+    top_k: int = 5
+    min_score: float = 0.5
+
+
+@app.post("/search/hybrid")
+async def hybrid_search(
+    request: HybridSearchRequest,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    하이브리드 검색 (Phase 2: 섹션 + 회사 + 직무 필터링)
+    
+    검색 전략:
+    1. Interview에서 company_id, position 가져오기
+    2. ResumeChunk에서 section_type으로 필터링
+    3. 벡터 유사도 검색
+    4. 결과 반환
+    """
+    logger.info(f"🔍 [Hybrid Search] Interview={request.interview_id}, Section={request.section_type}, Query='{request.query}'")
+    
+    # 1. Interview 정보 조회
+    interview = db.get(Interview, request.interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    # 권한 체크
+    if interview.candidate_id != current_user.id and current_user.role not in ["recruiter", "admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # 2. 쿼리 임베딩 생성
+    try:
+        task = celery_app.send_task(
+            "generate_query_embedding",
+            args=[request.query]
+        )
+        query_embedding = task.get(timeout=10)
+        logger.info(f"✅ Query embedding generated (dim: {len(query_embedding)})")
+    except Exception as e:
+        logger.error(f"❌ Failed to generate query embedding: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate embedding: {str(e)}"
+        )
+    
+    # 3. 하이브리드 검색 (섹션 타입 필터링)
+    sql_query = text("""
+        SELECT 
+            rc.id as chunk_id,
+            rc.resume_id,
+            rc.content,
+            rc.chunk_index,
+            rc.section_type,
+            1 - (rc.embedding <=> CAST(:query_embedding AS vector)) as similarity_score,
+            r.file_name
+        FROM resume_chunks rc
+        JOIN resumes r ON rc.resume_id = r.id
+        WHERE 
+            r.id = :resume_id
+            AND r.processing_status = 'completed'
+            AND rc.embedding IS NOT NULL
+            AND rc.section_type = :section_type
+            AND 1 - (rc.embedding <=> CAST(:query_embedding AS vector)) >= :min_score
+        ORDER BY rc.embedding <=> CAST(:query_embedding AS vector)
+        LIMIT :top_k
+    """)
+    
+    try:
+        result = db.execute(
+            sql_query,
+            {
+                "resume_id": interview.resume_id,
+                "section_type": request.section_type,
+                "query_embedding": str(query_embedding),
+                "min_score": request.min_score,
+                "top_k": request.top_k
+            }
+        )
+        
+        chunks = result.fetchall()
+        logger.info(f"📊 Found {len(chunks)} matching chunks (section={request.section_type})")
+        
+    except Exception as e:
+        logger.error(f"❌ Hybrid search failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Search failed: {str(e)}"
+        )
+    
+    # 4. 결과 포맷팅
+    results = [
+        {
+            "chunk_id": chunk.chunk_id,
+            "content": chunk.content[:300] + "..." if len(chunk.content) > 300 else chunk.content,
+            "section_type": chunk.section_type,
+            "similarity_score": float(chunk.similarity_score)
+        }
+        for chunk in chunks
+    ]
+    
+    logger.info(f"✅ [Hybrid Search] Returned {len(results)} results")
+    
+    return {
+        "interview_id": request.interview_id,
+        "section_type": request.section_type,
         "query": request.query,
         "total_results": len(results),
         "results": results
