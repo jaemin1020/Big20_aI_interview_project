@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir --timeout 100 --retries 10 "numpy>=1.23.0,<2.0.0"
 # CMAKE_ARGS를 통해 CPU 연산 최적화를 강제합니다.
 # requirements.txt에 해당 패키지가 있어도 여기서 먼저 설치되면 캐시를 사용하게 됩니다.
 RUN CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS" \
-    pip install --no-cache-dir llama-cpp-python==0.2.56
+    pip install --no-cache-dir llama-cpp-python>=0.3.5
 
 # 5. 나머지 Python 패키지 설치
 COPY requirements.txt .
