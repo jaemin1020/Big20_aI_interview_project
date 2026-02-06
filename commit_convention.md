@@ -2,15 +2,13 @@
  본 프로젝트는 코드 이력의 가독성과 유지보수 효율을 위해 Conventional Commits 및 Angular Commit Message Guideline을 준수합니다.
 
 1. 커밋 메시지 구조기본적인 커밋 메시지 구조는 아래와 같습니다.
-
 ```plaintext
-type(username): subject
+type(scope): subject
+```
 
 body
 
 footer
-```
-
 
 2. 제목 규칙 (Subject)
 제목은 변경 사항을 요약하며, 50자 이내로 작성합니다.
@@ -42,11 +40,11 @@ Subject 상세첫 글자는 대문자로 시작합니다.
    본문은 72자마다 줄 바꿈을 수행합니다.
    본문은 '어떻게'보다 **'무엇을', '왜'**에 집중합니다.
 5. 예시 (Example)
-
-```Plaintext
-
+```plaintext
 feat(auth): Add Google OAuth2 login functionality
+
 Implement the OAuth2 flow to allow users to sign in with Google.
-This includes updating the user schema to store provider
- IDs.Ref: #104
+This includes updating the user schema to store provider IDs.
+
+Ref: #104
 ```
