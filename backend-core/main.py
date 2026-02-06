@@ -1,12 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, select
-from celery import Celery
-from datetime import datetime, timedelta
-from typing import List
 import logging
 import os
+<<<<<<< HEAD
 import shutil
 from pathlib import Path
 from sqlalchemy import text
@@ -27,7 +23,19 @@ from models import (
 # 인증 관련 모듈 임포트
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from utils.common import validate_email, validate_username  # 유효성 검사 추가
+=======
 
+from database import init_db
+# 라우터 임포트
+from routes.auth import router as auth_router
+from routes.companies import router as companies_router
+from routes.interviews import router as interviews_router
+from routes.transcripts import router as transcripts_router
+from routes.resumes import router as resumes_router
+from routes.users import router as users_router
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
+
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
 
@@ -40,7 +48,7 @@ def on_startup():
     logger.info("✅ Database initialized with new schema")
 
 # CORS 설정
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -49,10 +57,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Company Router 등록
-from routes.companies import router as companies_router
-app.include_router(companies_router)
+# 라우터 등록
+app.include_router(auth_router)       # /auth
+app.include_router(companies_router)  # /companies
+app.include_router(interviews_router) # /interviews
+app.include_router(transcripts_router)# /transcripts
+app.include_router(resumes_router)    # /api/resumes
+app.include_router(users_router)      # /users
 
+<<<<<<< HEAD
 # Celery 설정
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
 
@@ -1070,13 +1083,15 @@ async def get_all_interviews(
 # ==================== Health Check ====================
 
 # 서버 상태 확인
+=======
+# Health Check
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
 @app.get("/")
 async def root():
     return {
         "service": "AI Interview Backend v2.0",
         "status": "running",
-        "database": "PostgreSQL with pgvector",
-        "features": ["real-time STT", "emotion analysis", "AI evaluation"]
+        "doc": "/docs"
     }
 
 if __name__ == "__main__":
