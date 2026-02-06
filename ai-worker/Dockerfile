@@ -28,11 +28,7 @@ RUN pip install --no-cache-dir "numpy>=1.23.0,<2.0.0" "Cython"
 # 4. llama-cpp-python 설치
 # 네트워크 불안정을 위해 timeout과 retries를 추가하고, CPU 최적화를 위해 OpenBLAS를 사용합니다.
 RUN CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS" \
-    CMAKE_BUILD_PARALLEL_LEVEL=4 \
-    pip install --no-cache-dir \
-    --default-timeout=100 --retries 5 \
-    llama-cpp-python==0.2.85 \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+    pip install --no-cache-dir llama-cpp-python>=0.3.5
 
 # 5. 나머지 Python 패키지 설치
 COPY requirements.txt .

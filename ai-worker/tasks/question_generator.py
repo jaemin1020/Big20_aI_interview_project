@@ -2,9 +2,6 @@ import os
 import logging
 import re
 from celery import shared_task
-from langchain_community.llms import LlamaCpp
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from typing import Optional, List
 
 # DB 헬퍼 함수 import
@@ -13,16 +10,17 @@ from db import (
     increment_question_usage,
     engine
 )
+from sqlmodel import Session, select
+
+# EXAONE LLM import
+from utils.exaone_llm import get_exaone_llm
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-# 모델 설정
-MODEL_PATH = os.getenv("EVALUATOR_MODEL_PATH", "/app/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")
-
 class QuestionGenerator:
     """
-    GGUF 기반 질문 생성기 (CPU 최적화)
-    전략: DB 재활용 및 이력서 기반 구체화
+    하이브리드 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
+    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
     """
     _instance = None
 
@@ -36,23 +34,8 @@ class QuestionGenerator:
         if self._initialized:
             return
 
-        logger.info(f"Loading Question Gen Model from: {MODEL_PATH}")
-
-        try:
-            self.llm = LlamaCpp(
-                model_path=MODEL_PATH,
-                n_ctx=4096,
-                n_threads=6,
-                n_gpu_layers=0,
-                temperature=0.7,
-                max_tokens=512,
-                verbose=False
-            )
-            logger.info("✅ Question Generator Model Loaded")
-        except Exception as e:
-            logger.error(f"Failed to Load Question Gen Model: {e}")
-            self.llm = None
-
+        logger.info("Initializing Question Generator with EXAONE model")
+        self.llm = get_exaone_llm()
         self._initialized = True
 
     def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
@@ -62,26 +45,35 @@ class QuestionGenerator:
         if interview_id:
             resume_info = ResumeTool.get_resume_by_interview(interview_id)
             if resume_info.get("has_resume"):
-                resume_summary = resume_info.get("summary", "")
+                context_parts.append(ResumeTool.format_for_llm(resume_info))
+                logger.info(f"이력서 정보 로드 완료: {resume_info.get('summary', '')[:50]}...")
 
-        base_questions = self._reuse_questions_from_db(position, count)
-        if len(base_questions) < count:
-            remaining = count - len(base_questions)
-            base_questions.extend(self._get_fallback_questions(position, remaining))
+            # 회사 정보
+            company_info = CompanyTool.get_company_by_interview(interview_id)
+            if company_info.get("has_company"):
+                context_parts.append(CompanyTool.format_for_llm(company_info))
+                logger.info(f"회사 정보 로드 완료: {company_info.get('name', '')}")
 
-        if resume_summary and self.llm:
-            final_questions = []
-            reuse_count = int(count * reuse_ratio)
-            final_questions.extend(base_questions[:reuse_count])
+        context = "\n\n".join(context_parts) if context_parts else ""
 
-            targets_to_specialize = base_questions[reuse_count:count]
-            for original_q in targets_to_specialize:
-                spec_qs = self._specialize_question(original_q, resume_summary, count=1)
-                final_questions.extend(spec_qs)
+        # 2. DB에서 기존 질문 재활용 (Reuse)
+        if reuse_count > 0:
+            reused = self._reuse_questions_from_db(position, reuse_count)
+            questions.extend(reused)
+            logger.info(f"✅ DB에서 {len(reused)}개 질문 재활용")
 
-            return final_questions[:count]
+        # 3. EXAONE LLM으로 새 질문 생성 (Create with Context)
+        if generate_count > 0:
+            generated = self.llm.generate_questions(
+                position=position,
+                context=context,
+                examples=questions,  # Few-shot 예시로 재활용된 질문 사용
+                count=generate_count
+            )
+            questions.extend(generated)
+            logger.info(f"✅ EXAONE으로 {len(generated)}개 질문 생성 (컨텍스트 포함)")
 
-        return base_questions[:count]
+        return questions[:count]  # 정확히 count개만 반환
 
     def _reuse_questions_from_db(self, position: str, count: int):
         try:
@@ -95,124 +87,6 @@ class QuestionGenerator:
         except Exception as e:
             logger.warning(f"DB 질문 조회 실패: {e}")
             return []
-
-    def generate_questions_from_resume(self, resume_summary: str, count: int = 5):
-        """[Task 4] DB 없이 이력서만으로 면접 질문 생성"""
-        prompt = f"""다음은 지원자의 이력서 요약입니다:
-
-{resume_summary}
-
-위 이력서를 바탕으로 지원자의 역량을 분석할 수 있는 질문을 {count}개 생성해주세요.
-단순한 경험 나열이 아닌, 기술적인 역량을 확인할 수 있는 질문이어야 합니다.
-
-형식:
-1. [질문]
-2. [질문]
-3. [질문]
-
-예상 질문:"""
-
-        try:
-            response = self.llm.invoke(prompt)
-            lines = response.strip().split('\n')
-            questions = []
-            for line in lines:
-                line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-')):
-                    q = line.split('.', 1)[-1].strip() if '.' in line else line.strip('- ')
-                    if q:
-                        questions.append(q)
-
-            if not questions:
-                return ["본인의 기술적 강점에 대해 설명해 주십시오."] * count
-
-            return questions[:count]
-        except Exception as e:
-            logger.error(f"이력서 기반 질문 생성 실패: {e}")
-            return ["본인의 기술적 강점에 대해 설명해 주십시오."] * count
-
-    def generate_basic_variants(self, original_question: str, count: int = 3):
-        """[Task 1] 이력서 없이 질문 하나로 유사 질문 생성 (기본 성능 테스트용)"""
-        prompt = f"""다음은 원본 면접 질문입니다:
-"{original_question}"
-
-위 질문과 주제는 동일하지만 표현이나 관점을 달리한 유사 질문을 {count}개 생성해주세요.
-
-형식:
-1. [질문]
-2. [질문]
-3. [질문]
-
-유사 질문:"""
-
-        try:
-            response = self.llm.invoke(prompt)
-            lines = response.strip().split('\n')
-            questions = []
-            for line in lines:
-                line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-')):
-                    q = line.split('.', 1)[-1].strip() if '.' in line else line.strip('- ')
-                    if q:
-                        questions.append(q)
-
-            if not questions:
-                return [original_question] * count
-
-            return questions[:count]
-        except Exception as e:
-            logger.error(f"기본 유사질문 생성 실패: {e}")
-            return [original_question] * count
-
-    def _specialize_question(self, original_question: str, resume_summary: str, count: int = 1):
-        """이력서 기반 초기 질문 생성"""
-        prompt = f"""다음은 지원자의 이력서 요약입니다:
-
-{resume_summary}
-
-다음은 참고할 원본 면접 질문입니다:
-"{original_question}"
-
-**중요**: 위 원본 질문의 주제와 의도를 반드시 유지하면서, 이 지원자의 이력서 내용에 맞게 구체화한 질문을 {count}개 생성해주세요.
-
-예시:
-- 원본: "자기소개를 해보세요" → 생성: "보안 엔지니어로서의 경력과 KISA 인턴 경험을 중심으로 자기소개를 해주세요"
-- 원본: "프로젝트 경험은?" → 생성: "Snort를 활용한 IDS 구축 프로젝트에서 어떤 역할을 맡으셨나요?"
-
-**반드시 원본 질문의 핵심 주제를 유지하면서** 이력서의 구체적인 내용(프로젝트명, 기술명, 경험 등)을 포함해주세요.
-
-형식:
-1. [질문]
-2. [질문]
-3. [질문]
-
-예상 질문:"""
-
-        try:
-            response = self.llm.invoke(prompt)
-            lines = response.strip().split('\n')
-            questions = []
-            for line in lines:
-                line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-')):
-                    q = line.split('.', 1)[-1].strip() if '.' in line else line.strip('- ')
-                    if q:
-                        questions.append(q)
-
-            return questions[:count] if questions else [original_question]
-        except Exception as e:
-            logger.error(f"질문 구체화 실패: {e}")
-            return [original_question]
-
-    def _get_fallback_questions(self, position: str, count: int) -> List[str]:
-        fallback_questions = [
-            f"{position} 직무에서 가장 중요하게 생각하는 역량은 무엇인가요?",
-            "최근 겪었던 가장 어려운 기술적 챌린지는 무엇이었나요?",
-            f"{position} 직무를 수행하는 데 필요한 핵심 기술은 무엇이라고 생각하나요?",
-            "팀 프로젝트에서 의견 충돌이 있을 때 어떻게 해결하나요?",
-            "본인의 강점을 실무에서 어떻게 활용할 수 있을까요?"
-        ]
-        return fallback_questions[:count]
 
     def generate_deep_dive_question(self, history: str, current_answer: str):
         """동적 꼬리질문(Deep-Dive) 생성 - 면접관 톤으로 생성"""
@@ -351,20 +225,10 @@ def generate_questions_task(position: str, interview_id: int = None, count: int 
         logger.error(f"Task Error: {e}")
         return []
 
-@shared_task(name="tasks.question_generator.generate_deep_dive")
-def generate_deep_dive_task(history: str, current_answer: str):
-    try:
-        generator = QuestionGenerator()
-        return generator.generate_deep_dive_question(history, current_answer)
-    except Exception as e:
-        logger.error(f"Deep-Dive Task Error: {e}")
-        return "관련하여 구체적인 기술적 근거를 말씀해 주십시오."
-
-@shared_task(name="tasks.question_generator.analyze_answer_detailed")
-def analyze_answer_detailed_task(history: str, current_answer: str):
-    try:
-        generator = QuestionGenerator()
-        return generator.generate_answer_analysis(history, current_answer)
-    except Exception as e:
-        logger.error(f"Answer Analysis Task Error: {e}")
-        return "답변 분석을 수행할 수 없습니다."
+# Eager Initialization: Worker 시작 시 모델 미리 로드
+try:
+    logger.info("🔥 Pre-loading Question Generator with EXAONE...")
+    _warmup_generator = QuestionGenerator()
+    logger.info("✅ Question Generator ready for requests")
+except Exception as e:
+    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
