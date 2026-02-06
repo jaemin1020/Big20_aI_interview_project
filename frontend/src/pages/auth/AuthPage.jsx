@@ -28,6 +28,7 @@ const AuthPage = ({
       flex: 1, 
       width: '100%', 
       display: 'flex', 
+      flexDirection: 'column',
       justifyContent: 'center', 
       alignItems: 'center', 
       padding: '4rem 0' 
@@ -102,7 +103,7 @@ const AuthPage = ({
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>아이디</label>
             <input 
               type="text" 
-              placeholder="user_id"
+              placeholder="아이디"
               value={account.username || ''}
               onChange={(e) => setAccount({ ...account, username: e.target.value })}
             />
