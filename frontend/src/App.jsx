@@ -27,7 +27,12 @@ import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
 
 function App() {
-  const [step, setStep] = useState(() => sessionStorage.getItem('current_step') || 'main'); 
+  const [step, setStep] = useState(() => {
+    const saved = sessionStorage.getItem('current_step');
+    const token = localStorage.getItem('token');
+    if (!token && saved === 'auth') return 'main';
+    return saved || 'main';
+  });
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
@@ -118,21 +123,30 @@ function App() {
         .then(u => {
           setUser(u);
           // Restore the step from sessionStorage or respect the current step.
-          // Only force-redirect to 'landing' if the user is on the 'auth' page while already logged in.
           const savedStep = sessionStorage.getItem('current_step');
+          
+          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
           if (savedStep === 'auth') {
             setStep('landing');
+          } 
+          else {
+             const hasInterviewData = sessionStorage.getItem('current_interview');
+             const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
+             
+             if (stepsRequiringInterview.includes(savedStep) && !hasInterviewData) {
+                 console.warn("Invalid step state (missing interview data). Resetting to landing.");
+                 setStep('landing');
+             }
           }
         })
         .catch(() => {
           localStorage.removeItem('token');
           setStep('main');
+          sessionStorage.clear(); // 세션 만료 시 깔끔하게 초기화
           isInitialized.current = true;
         });
     } else {
-      // If no token, only allow 'main' or 'auth'
-      const publicSteps = ['main', 'auth'];
-      if (!publicSteps.includes(step)) {
+      if (step !== 'main') {
         setStep('main');
       }
       isInitialized.current = true;
@@ -535,7 +549,7 @@ function App() {
             </div>
             {authError && <p className="error-message">{authError}</p>}
           </div>
-          <button onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
+          <button className="premium-button" onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
             {authMode === 'login' ? '로그인' : '회원가입'}
           </button>
           <p
@@ -601,7 +615,7 @@ function App() {
 
       {step === 'result' && (
         <ResultPage 
-          results={report || []} 
+          results={report?.details_json || []} 
           onReset={() => {
             setStep('landing');
             setCurrentIdx(0);
