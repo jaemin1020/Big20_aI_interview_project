@@ -165,7 +165,7 @@ class ResumeSectionEmbedding(SQLModel, table=True):
     content: str = Field(description="섹션의 텍스트 내용")
     
     # 구조화된 데이터 (JSON)
-    metadata: Optional[Dict[str, Any]] = Field(
+    section_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB),
         description="섹션별 메타데이터 (회사명, 기간, 기술스택 등)"
