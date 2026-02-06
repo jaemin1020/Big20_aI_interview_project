@@ -89,7 +89,7 @@ def generate_resume_embeddings_task(self, resume_id: int):
                     section_id="profile",
                     content=embeddings["profile"].get("text", ""),
                     embedding=embeddings["profile"]["vector"],
-                    metadata={"role": embedding_result.get("role", "")}
+                    section_metadata={"role": embedding_result.get("role", "")}
                 )
                 session.add(section_emb)
                 saved_count += 1
@@ -278,7 +278,7 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
                     "text": section.content,
                     "similarity": float(similarity),
                     "si_type": section.si_type if section.section_type == ResumeSectionType.SELF_INTRODUCTION else None,
-                    "metadata": section.metadata
+                    "section_metadata": section.section_metadata
                 })
         
         logger.info(f"Resume {resume_id} 검색 완료: {len(results)}개 결과")
