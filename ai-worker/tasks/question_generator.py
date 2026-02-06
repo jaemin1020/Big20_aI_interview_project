@@ -1,277 +1,321 @@
 import os
 import logging
 from celery import shared_task
-from langchain_huggingface import HuggingFacePipeline
+from langchain_community.llms import LlamaCpp
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
 from typing import Optional, List
-import torch
-import re
 
 # DB 헬퍼 함수 import
 from db import (
-    get_best_questions_by_position,  # 직무별 우수 질문 조회
+    get_best_questions_by_position,
     increment_question_usage,
     engine
 )
-from sqlmodel import Session, select
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-# 모델 설정
-MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
+# 모델 설정 (Evaluator와 동일하게 GGUF 사용)
+MODEL_PATH = os.getenv("EVALUATOR_MODEL_PATH", "/app/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")
 
 class QuestionGenerator:
     """
-    하이브리드 질문 생성기
-    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
+    GGUF 기반 질문 생성기 (CPU 최적화)
+    전략: DB 재활용 및 이력서 기반 구체화
     """
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-            
-        logger.info(f"Loading Question Gen Model: {MODEL_ID}")
-        token = os.getenv("HUGGINGFACE_HUB_TOKEN")
-        
-        # 4-bit 양자화 (메모리 최적화)
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4"
-        )
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=token)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            quantization_config=quantization_config,
-            device_map="cuda:0",
-            token=token
-        )
-        
-        pipe = pipeline(
-            "text-generation",
-            model=self.model,
-            tokenizer=self.tokenizer,
-            max_new_tokens=256,  # [최적화] 256토큰
-            temperature=0.5, 
-            do_sample=True,
-            pad_token_id=self.tokenizer.eos_token_id,
-            return_full_text=False  # 입력 프롬프트가 출력에 포함되지 않도록 설정
-        )
-        self.llm = HuggingFacePipeline(pipeline=pipe)
+
+        logger.info(f"Loading Question Gen Model from: {MODEL_PATH}")
+
+        try:
+            self.llm = LlamaCpp(
+                model_path=MODEL_PATH,
+                n_ctx=4096,
+                n_threads=6,
+                n_gpu_layers=0,
+                temperature=0.7, # 질문 생성은 약간의 창의성 필요
+                max_tokens=512,
+                verbose=False
+            )
+            logger.info("✅ Question Generator Model Loaded")
+        except Exception as e:
+            logger.error(f"Failed to Load Question Gen Model: {e}")
+            self.llm = None
+
         self._initialized = True
-        logger.info("✅ Question Generator Initialized")
 
     def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
-        """
-        하이브리드 질문 생성 로직 (이력서 및 회사 정보 기반)
-        1. DB에서 검증된 질문 일부 재활용 (Reuse)
-        2. 이력서 + 회사 정보로 컨텍스트 구성
-        3. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
-        
-        Args:
-            position: 지원 직무
-            interview_id: 면접 ID (이력서/회사 정보 조회용)
-            count: 생성할 총 질문 수
-            reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
-        """
         from tools import ResumeTool, CompanyTool
-        
-        questions = []
-        reuse_count = int(count * reuse_ratio)
-        generate_count = count - reuse_count
-        
-        # 1. 컨텍스트 수집 (이력서 + 회사 정보)
-        context_parts = []
-        
+
+        # 1. 이력서 요약 가져오기
+        resume_summary = ""
         if interview_id:
-            # 이력서 정보
             resume_info = ResumeTool.get_resume_by_interview(interview_id)
             if resume_info.get("has_resume"):
-                context_parts.append(ResumeTool.format_for_llm(resume_info))
-                logger.info(f"이력서 정보 로드 완료: {resume_info.get('summary', '')[:50]}...")
-            
-            # 회사 정보
-            company_info = CompanyTool.get_company_by_interview(interview_id)
-            if company_info.get("has_company"):
-                context_parts.append(CompanyTool.format_for_llm(company_info))
-                logger.info(f"회사 정보 로드 완료: {company_info.get('name', '')}")
-        
-        context = "\n\n".join(context_parts) if context_parts else ""
-        
-        # 2. DB에서 기존 질문 재활용 (Reuse)
-        if reuse_count > 0:
-            reused = self._reuse_questions_from_db(position, reuse_count)
-            questions.extend(reused)
-            logger.info(f"✅ DB에서 {len(reused)}개 질문 재활용")
-        
-        # 3. LLM으로 새 질문 생성 (Create with Context)
-        if generate_count > 0:
-            generated = self._generate_new_questions(position, generate_count, questions, context)
-            questions.extend(generated)
-            logger.info(f"✅ LLM으로 {len(generated)}개 질문 생성 (컨텍스트 포함)")
-        
-        return questions[:count]  # 정확히 count개만 반환
-    
+                resume_summary = resume_info.get("summary", "")
+
+        # 2. 베이스 질문 가져오기 (DB 또는 폴백)
+        base_questions = self._reuse_questions_from_db(position, count)
+        if len(base_questions) < count:
+            remaining = count - len(base_questions)
+            base_questions.extend(self._get_fallback_questions(position, remaining))
+
+        # 3. 이력서 기반 구체화 (Specialization)
+        # 만약 이력서 정보가 있다면, 베이스 질문들을 구체화하고
+        # 이 중 reuse_ratio에 따라 일부는 원본 그대로, 나머지는 구체화된 질문을 섞음
+        if resume_summary and self.llm:
+            specialized_questions = []
+            reuse_count = int(count * reuse_ratio)
+
+            # 원본 그대로 유지할 질문들
+            final_questions = base_questions[:reuse_count]
+
+            # 구체화할 대상 질문들
+            targets_to_specialize = base_questions[reuse_count:count]
+
+            for original_q in targets_to_specialize:
+                spec_qs = self._specialize_question(original_q, resume_summary, count=1)
+                final_questions.extend(spec_qs)
+
+            return final_questions[:count]
+
+        return base_questions[:count]
+
     def _reuse_questions_from_db(self, position: str, count: int):
-        """DB에서 검증된 질문 가져오기"""
-        
         try:
-            # db.py의 함수명에 맞춰 호출
+            # db.py에 정의된 get_best_questions_by_position 사용
             db_questions = get_best_questions_by_position(position, limit=count)
-            
+
             # 재활용 시 사용량 증가
             for q in db_questions:
                 try:
                     increment_question_usage(q.id)
-                except Exception as e:
-                    logger.warning(f"Question {q.id} 사용량 증가 실패: {e}")
-            
+                except:
+                    pass
             return [q.content for q in db_questions]
         except Exception as e:
-            logger.warning(f"DB 질문 조회 실패: {e}. 빈 리스트 반환")
+            logger.warning(f"DB 질문 조회 실패: {e}")
             return []
-    
-    def _generate_new_questions(self, position: str, count: int, examples: list, context: str = ""):
-        """LLM으로 새 질문 생성 (Few-Shot + Context)"""
-        
-        
-        # Few-Shot 예시 구성 (예시가 없으면 강력한 한국어 기본 예시 제공)
-        if examples:
-            few_shot_examples = "\n".join([f"- {q}" for q in examples[:3]])
-        else:
-            few_shot_examples = """
-- React의 Virtual DOM이 무엇이며, 이것이 성능에 어떤 영향을 미치는지 설명해주세요.
-- 비동기 프로그래밍에서 Promise와 async/await의 차이점은 무엇인가요?
-- 사용해본 상태 관리 라이브러리는 무엇이며, 그 선택 이유는 무엇인가요?
-"""
-        
-        # 컨텍스트 추가
-        context_section = f"\n\n추가 컨텍스트:\n{context}" if context else ""
-        
-        # 사용자 요청에 따른 프롬프트 구조
-        prompt = [{'role':'system','content':
-        (f"""
-        당신은 한국 기업의 면접관이자 채용 전문가입니다.
-        아래 정보를 바탕으로 {position} 직무에 적합한 '한국어 면접 질문'을 {count}개 생성하세요.
-        {context_section}
-        
-        기존 질문 예시:
-        {few_shot_examples}
-        
-        [중요 요구사항]
-        1. 모든 질문은 반드시 자연스러운 한국어로 작성해야 합니다. (영어, 태국어 등 타 언어 혼용 금지)
-        2. 기술적 깊이와 실무 경험을 구체적으로 물어보세요.
-        3. 지원자의 이력서 내용과 연관된 질문을 포함하세요. (이력서 정보가 있는 경우)
-        4. 회사의 인재상과 연결된 질문을 포함하세요. (회사 정보가 있는 경우)
-        5. 각 질문은 번호 없이 한 줄씩만 작성하세요.
-        6. 질문의 어조는 정중하고 전문적이어야 합니다.
-        7. 강조 표시(**text**) 금지
-        """)}]
-        
+
+    def generate_questions_from_resume(self, resume_summary: str, count: int = 5):
+        """[Task 4] DB 없이 이력서만으로 면접 질문 생성"""
+        import re
+
+        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+# Role
+당신은 20년 차 IT 기술 면접관이자 테크 리드입니다. 지원자의 이력서를 정밀 분석하여 기술적 실체와 문제 해결 능력을 검증할 수 있는 질문을 생성하십시오.
+
+# Persona & Rules
+1. 냉철하고 전문적인 태도를 유지하며, 말투는 반드시 격식체(~하십시오체)를 사용하십시오.
+2. 기술 용어는 원어(English) 그대로 사용하십시오.
+3. 질문은 2문장 이내로 간결하게 작성하십시오.
+4. 이력서에 기재된 기술 스택과 프로젝트의 '진위 여부'를 확인하는 데 집중하십시오.
+
+# Internal Process (Self-Critique Loop)
+Step 1. 이력서에서 가장 비중 있는 프로젝트와 기술 스택을 선별하십시오.
+Step 2. 해당 기술의 핵심 원리나 실무에서 발생할 수 있는 엣지 케이스를 질문으로 구성하십시오.
+Step 3. 자가 검수 (구체성 부족 시 문항 수정).<|eot_id|><|start_header_id|>user<|end_header_id|>
+# User Resume Summary
+{resume_summary}
+
+# Task
+위 이력서를 바탕으로 지원자의 역량을 현미경처럼 분석할 수 있는 날카로운 질문을 {count}개 생성하십시오.
+단순한 경험 나열이 아닌, "왜 이 기술인가?", "어떻게 해결했나?"를 묻는 질문이어야 합니다.
+
+# Output Format
+1. [질문 내용]
+2. [질문 내용]
+...
+
+[Generated Questions]:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+1. """
+
         try:
-            # Llama 3.2 모델을 위한 채팅 템플릿 적용
-            prompt_str = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-            
-            # 질문 생성을 위해 더 긴 토큰 허용 (return_full_text=False 설정 덕분에 prompt_str은 제외됨)
-            response = self.llm.invoke(prompt_str)
-            
-            # 응답 파싱
-            
-            # 1. 특수 토큰 및 시스템 메시지 제거 패턴
-            system_patterns = [
-                r"<\|.*?\|>",  # 특수 토큰
-                r"Cutting Knowledge Date",
-                r"Today Date",
-                r"^system$", # 헤더 잔여물
-                r"^user$",
-                r"^assistant$",
-                r"당신은 면접 질문 생성 전문가입니다", # 프롬프트 에코 방지
-                r"요구사항:",
-                r"기존 질문 예시:",
-                r"질문 \d+개:"
-            ]
-            
-            clean_lines = []
-            for line in response.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                # 시스템 메시지 패턴이 포함된 라인 건너뛰기
-                if any(re.search(pat, line) for pat in system_patterns):
-                    continue
-                
-                # 프롬프트의 지시사항 문장과 유사하면 건너뛰기 (Echo 방지 2차 필터)
-                if "평가할 수 있는 질문" in line or "이력서 내용과 연관" in line or "한 줄로 작성" in line:
-                    continue
+            response = self.llm.invoke(prompt)
+            full_response = "1. " + response.strip()
+            found_questions = re.findall(r'\d+\.\s*(.+)', full_response)
+            questions = [q.strip() for q in found_questions if len(q.strip()) > 5]
 
-                # #으로 시작하는 주석 라인 건너뛰기
-                if line.startswith('#'):
-                    continue
-                    
-                clean_lines.append(line)
+            if not questions:
+                lines = [l.strip() for l in full_response.split('\n') if l.strip()]
+                questions = [re.sub(r'^\d+[\.\s]+', '', l).strip() for l in lines]
 
-            # 2. 질문 추출 및 정제
-            questions = []
-            for line in clean_lines:
-                # 번호 제거 (예: "1. 질문" -> "질문", "- 질문" -> "질문")
-                clean_q = re.sub(r'^[\d\-\.\s]+', '', line)
-                
-                # Markdown 강조 제거 (**text** -> text)
-                clean_q = re.sub(r'\*\*(.*?)\*\*', r'\1', clean_q)
-                
-                # 앞뒤 따옴표 및 공백 제거
-                clean_q = clean_q.strip('"\' ')
-                
-                # [필터링 개선] Whitelist 방식은 너무 엄격하여 Blacklist 방식으로 변경
-                # 일본어(히라가나/가타카나), 한자, 태국어 등이 포함된 경우만 제외하고 나머지는 허용
-                # 기술 면접 질문에는 다양한 특수문자(@, #, &, [] 등)가 사용될 수 있음
-                forbidden_pattern = r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u0E00-\u0E7F]'
-                if re.search(forbidden_pattern, clean_q):
-                    logger.warning(f"제외된 질문(다국어 포함): {clean_q}")
-                    continue
-                
-                # 길이가 너무 짧은 것은 질문이 아닐 확률 높음 (10자 이상)
-                if len(clean_q) > 10:
-                    questions.append(clean_q)
-            
-            # 만약 결과가 부족하면 Fallback 질문으로 채움
-            if len(questions) < count:
-                logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count}). Fallback으로 보충합니다.")
-                fallback_needed = count - len(questions)
-                fallbacks = self._get_fallback_questions(position, fallback_needed)
-                questions.extend(fallbacks)
-                
-            logger.info(f"최종 반환 질문: {questions[:count]}")
             return questions[:count]
         except Exception as e:
-            logger.error(f"LLM 질문 생성 중 에러 발생: {e}")
-            # 에러 발생 시에도 빈 리스트 보단 Fallback 리턴
-            return self._get_fallback_questions(position, count)
-    
+            logger.error(f"이력서 기반 질문 생성 실패: {e}")
+            return ["본인의 기술적 강점에 대해 설명해 주십시오."] * count
+
+    def generate_basic_variants(self, original_question: str, count: int = 3):
+        """[Task 1] 이력서 없이 질문 하나로 유사 질문 생성 (기본 성능 테스트용)"""
+        import re
+
+        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+# Role
+당신은 20년 차 IT 기술 면접관이자 테크 리드입니다. 주어진 원본 질문의 핵심 주제를 유지하면서, 지원자의 기술적 역량을 다각도로 검증할 수 있는 유사한 질문들을 생성하십시오.
+
+# Persona & Rules
+1. 냉철하고 전문적인 태도를 유지하며, 말투는 반드시 격식체(~하십시오체)를 사용하십시오.
+2. 기술 용어는 원어(English) 그대로 사용하고, 설명은 한국어로 하십시오.
+3. 각 질문은 2문장 이내로 간결하게 작성하십시오.
+4. 원본 질문의 '의도'와 '기술 주제'를 절대 벗어나지 마십시오.<|eot_id|><|start_header_id|>user<|end_header_id|>
+# Original Question
+"{original_question}"
+
+# Task
+위 원본 질문과 기술적 주제는 동일하지만, 질문의 관점이나 구체적 요구사항을 달리한 유사 질문을 {count}개 생성하십시오.
+
+# Final Output Format
+1. [질문 내용]
+2. [질문 내용]
+...
+
+[Final Questions]:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+1. """
+
+        try:
+            response = self.llm.invoke(prompt)
+            full_response = "1. " + response.strip()
+            found_questions = re.findall(r'\d+\.\s*(.+)', full_response)
+            questions = [q.strip() for q in found_questions if len(q.strip()) > 5]
+
+            if not questions:
+                lines = [l.strip() for l in full_response.split('\n') if l.strip()]
+                questions = [re.sub(r'^\d+[\.\s]+', '', l).strip() for l in lines]
+
+            return questions[:count]
+        except Exception as e:
+            logger.error(f"기본 유사질문 생성 실패: {e}")
+            return [original_question] * count
+
+    def _specialize_question(self, original_question: str, resume_summary: str, count: int = 1):
+        """이력서 기반 초기 질문 생성 및 자가 검증 프롬프트 적용 (1:N 생성 가능)"""
+        import re
+
+        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+# Role
+당신은 20년 차 IT 기술 면접관이자 테크 리드입니다. 지원자의 이력서와 원본 질문을 바탕으로 기술적 깊이를 확인할 수 있는 질문을 생성하고 검수하십시오.
+# Persona & Rules
+1. 냉철하고 전문적인 태도를 유지하며, 말투는 반드시 격식체(~하십시오체)를 사용하십시오.
+2. 기술 용어는 원어(English) 그대로 사용하되, 설명은 한국어로 하십시오.
+3. 질문은 2문장 이내로 간결하게 작성하십시오.
+4. "느낀 점"과 같은 추상적 질문은 배제하고, 기술적 근거(Metric, Logic)를 요구하십시오.
+# Internal Process (Self-Critique Loop)
+Step 1. [Original Question]의 핵심 주제와 의도를 파악하십시오.
+Step 2. [User Resume]에서 해당 주제와 관련된 구체적인 내용(프로젝트, 기술, 경험)을 찾으십시오.
+Step 3. 원본 질문의 주제를 유지하면서 이력서 내용으로 구체화한 질문을 생성하십시오.
+Step 4. 자가 검수 수행 (원본 질문 주제 일치 여부 / Specificity / Tone & Manner).
+Step 5. 검수 기준 미달 시 문항 즉시 수정.<|eot_id|><|start_header_id|>user<|end_header_id|>
+# Input Data
+- [User Resume]:
+{resume_summary}
+- [Original Question]:
+"{original_question}"
+
+# Task
+**중요**: [Original Question]의 핵심 주제와 의도를 반드시 유지하십시오.
+[User Resume]에서 [Original Question]과 관련된 프로젝트나 경험을 찾으십시오. 해당 부분에 대해 원본 질문의 주제를 유지하면서 '왜(Why)' 그 기술을 선택했는지 혹은 '어떻게(How)' 문제를 해결했는지 묻는 날카로운 질문을 {count}개 생성하십시오.
+
+예시:
+- 원본: "자기소개를 해보세요" → 생성: "보안 엔지니어로서의 KISA 인턴 경험과 IDS 구축 프로젝트를 중심으로 자기소개를 하십시오."
+- 원본: "프로젝트 경험은?" → 생성: "Snort 기반 IDS 구축 프로젝트에서 SQL Injection 탐지 규칙을 어떻게 설계하셨습니까?"
+
+# Final Output Format
+각 질문은 다음 형식으로 출력하십시오:
+1. [질문 내용]
+2. [질문 내용]
+...
+
+[Final Questions]:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+1. """
+
+        try:
+            response = self.llm.invoke(prompt)
+            # 첫 번째 질문 앞에 "1. "이 이미 있으므로 붙여줌
+            full_response = "1. " + response.strip()
+
+            # 숫자. [내용] 패턴으로 질문들 추출
+            found_questions = re.findall(r'\d+\.\s*(.+)', full_response)
+
+            # 정제 작업
+            questions = [q.strip() for q in found_questions if len(q.strip()) > 5]
+
+            if not questions:
+                # 파싱 실패 시 줄바꿈 단위로 시도
+                lines = [l.strip() for l in full_response.split('\n') if l.strip()]
+                questions = [re.sub(r'^\d+[\.\s]+', '', l).strip() for l in lines]
+
+            return questions[:count] if questions else [original_question]
+
+        except Exception as e:
+            logger.error(f"질문 구체화 실패: {e}")
+            return [original_question]
+
     def _get_fallback_questions(self, position: str, count: int) -> List[str]:
-        """폴백 질문 생성"""
         fallback_questions = [
             f"{position} 직무에서 가장 중요하게 생각하는 역량은 무엇인가요?",
             "최근 겪었던 가장 어려운 기술적 챌린지는 무엇이었나요?",
             f"{position} 직무를 수행하는 데 필요한 핵심 기술은 무엇이라고 생각하나요?",
             "팀 프로젝트에서 의견 충돌이 있을 때 어떻게 해결하나요?",
-            "본인의 강점을 실무에서 어떻게 활용할 수 있을까요?",
-            "우리 회사에 지원한 이유를 구체적으로 말씀해주세요.",
-            "5년 후 본인의 모습을 어떻게 그리고 계신가요?",
-            "실패한 프로젝트 경험과 그로부터 배운 점을 공유해주세요."
+            "본인의 강점을 실무에서 어떻게 활용할 수 있을까요?"
         ]
         return fallback_questions[:count]
+
+    def generate_deep_dive_question(self, history: str, current_answer: str):
+        """동적 꼬리질문(Deep-Dive) 생성 프롬프트 고도화 (BS Detection 강화)"""
+        if not self.llm: return "추가 질문을 구성할 수 없습니다."
+
+        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+# Role
+당신은 지원자의 답변에서 허세(BS)를 찾아내고 기술적 밑바닥을 확인하는 20년 차 베테랑 테크 리드입니다.
+
+# Mission (Strict)
+1. **분석**: 답변을 요약하지 마십시오. 대신 "구체적 수치 부재", "원론적인 개념 나열", "직접 구현 여부 불분명" 등 **기술적 허점**을 반드시 한 줄로 지적하십시오.
+2. **질문**: 분석한 허점을 파고들어, 지원자가 실제 경험했는지 증명하게 만드는 날카로운 질문을 한 문장으로 던지십시오.
+
+# Persona & Guidelines
+- 말투는 반드시 냉철한 격식체(~하십시오체)를 사용하십시오.
+- 질문 시작은 반드시 "앞서 말씀하신 [특정 키워드] 부분과 관련하여..."를 사용하십시오.
+- 불필요한 서론/미사여구는 절대 배제하십시오.
+
+# Example
+지원자 답변: "서버 성능 향상을 위해 인덱스 최적화를 진행하여 속도를 많이 개선했습니다."
+[분석]: 어떤 인덱스 구조를 사용했는지와 구체적인 성능 개선 지표(TPS, Latency)가 누락되었습니다.
+[질문]: 앞서 말씀하신 인덱스 최적화 부분과 관련하여, 당시 사용한 인덱스 구조와 쿼리 응답 속도를 몇 ms에서 몇 ms로 개선하셨는지 구체적인 수치를 말씀해 주십시오.<|eot_id|><|start_header_id|>user<|end_header_id|>
+# Input Data
+- [History]: {history}
+- [Answer]: {current_answer}
+
+[분석]:
+[질문]:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+[분석]: """
+
+        try:
+            response = self.llm.invoke(prompt)
+            # 깔끔하게 [분석]부터 시작하도록 보정
+            full_response = "[분석]: " + response.strip()
+
+            # 줄바꿈 정제 (최대한 상위 2개 라인만 유지)
+            lines = [l.strip() for l in full_response.split('\n') if l.strip()]
+            valid_lines = [l for l in lines if l.startswith('[분석]:') or l.startswith('[질문]:')]
+
+            if len(valid_lines) >= 2:
+                return "\n".join(valid_lines[:2])
+
+            return "\n".join(lines[:2])
+
+        except Exception as e:
+            logger.error(f"Deep-Dive 생성 실패: {e}")
+            return "[분석]: 답변 내용이 추상적이며 기술적 근거가 부족합니다.\n[질문]: 앞서 말씀하신 내용 중 본인이 직접 설계하고 구현한 구체적인 로직에 대해 설명해 주십시오."
 
 @shared_task(name="tasks.question_generator.generate_questions")
 def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
@@ -282,11 +326,11 @@ def generate_questions_task(position: str, interview_id: int = None, count: int 
         logger.error(f"Task Error: {e}")
         return []
 
-# Eager Initialization: Worker 시작 시 모델 미리 로드
-# 이렇게 하면 첫 요청에서 타임아웃이 발생하지 않습니다
-try:
-    logger.info("🔥 Pre-loading Question Generator model...")
-    _warmup_generator = QuestionGenerator()
-    logger.info("✅ Question Generator ready for requests")
-except Exception as e:
-    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
+@shared_task(name="tasks.question_generator.generate_deep_dive")
+def generate_deep_dive_task(history: str, current_answer: str):
+    try:
+        generator = QuestionGenerator()
+        return generator.generate_deep_dive_question(history, current_answer)
+    except Exception as e:
+        logger.error(f"Deep-Dive Task Error: {e}")
+        return "관련하여 구체적인 기술적 근거를 말씀해 주십시오."

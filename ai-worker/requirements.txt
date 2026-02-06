@@ -1,5 +1,5 @@
 # ==========================================
-# AI-Worker Requirements  
+# AI-Worker Requirements
 # Purpose: Celery + CPU Solar-10.7B + DeepFace
 # ==========================================
 
@@ -31,23 +31,20 @@ accelerate>=0.27.0
 sentence-transformers>=2.2.0
 
 # Computer Vision & Emotion Detection
-# deepface>=0.0.91
-# tensorflow>=2.16.0
-# tf-keras>=2.16.0
-# opencv-python-headless>=4.9.0.8
+deepface
+tensorflow
+tf-keras>=2.16.0
+opencv-python-headless>=4.9.0.8
 
 # Audio Processing (if needed)
 # librosa>=0.10.1
-
-# Data Processing
-numpy>=1.23.0,<2.0.0
 
 # PDF Processing & Document Parsing
 PyPDF2>=3.0.0
 pdfplumber>=0.10.0
 python-docx>=1.1.0
 
-# Pydantic 
+# Pydantic
 pydantic>=2.0.0
 
 # Remote Kernel Connectivity

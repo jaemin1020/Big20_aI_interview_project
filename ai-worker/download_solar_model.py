@@ -12,7 +12,7 @@ except ImportError:
 # 설정
 REPO_ID = "TheBloke/Solar-10.7B-Instruct-v1.0-GGUF"
 FILENAME = "solar-10.7b-instruct-v1.0.Q8_0.gguf"
-SAVE_DIR = "./models"
+SAVE_DIR = "./ml_models"
 
 # 디렉토리 생성
 os.makedirs(SAVE_DIR, exist_ok=True)

@@ -61,11 +61,136 @@ Big20_aI_interview_project/
 
 ## 2. 프로젝트 실행 (Workflow)
 
-이 프로젝트는 Docker Compose를 사용하여 간편하게 실행할 수 있습니다.
-자세한 단계는 `.agent/workflows/setup-project.md`를 참고하거나 다음 명령어를 실행하세요:
+### 2.1 환경 설정
 
-1. `docker-compose build`
-2. `docker-compose up -d`
+**1. 환경 변수 설정**
+```bash
+# .env.example을 복사하여 .env 파일 생성
+cp .env.example .env
+
+# .env 파일을 열어 실제 API 키로 교체
+# - HUGGINGFACE_API_KEY: https://huggingface.co/settings/tokens
+# - DEEPGRAM_API_KEY: https://console.deepgram.com/
+```
+
+⚠️ **보안 주의**: `.env` 파일은 절대 Git에 커밋하지 마세요!
+
+**2. Docker 서비스 실행**
+```bash
+# 이미지 빌드
+docker-compose build
+
+# 서비스 시작 (백그라운드)
+docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+
+# 서비스 상태 확인
+docker-compose ps
+```
+
+**3. 서비스 접속**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs (Swagger): http://localhost:8000/docs
+- Media Server: http://localhost:8080
+
+### 2.2 테스트 실행
+
+**백엔드 테스트**
+```bash
+# 테스트 의존성 설치
+cd backend-core
+pip install -r tests/requirements-test.txt
+
+# 전체 테스트 실행
+pytest tests/ -v
+
+# 커버리지 포함
+pytest tests/ --cov=. --cov-report=html
+
+# 특정 테스트만 실행
+pytest tests/test_auth.py -v
+```
+
+**프론트엔드 테스트** (향후 구현 예정)
+```bash
+cd frontend
+npm test
+```
+
+### 2.3 보안 가이드
+
+자세한 보안 가이드는 [`docs/SECURITY_GUIDE.md`](docs/SECURITY_GUIDE.md)를 참고하세요.
+
+**핵심 체크리스트:**
+- ✅ `.env` 파일이 `.gitignore`에 포함되어 있는지 확인
+- ✅ API 키를 코드에 하드코딩하지 않기
+- ✅ 프로덕션 환경에서는 강력한 비밀번호 사용
+- ✅ HTTPS 강제 (프로덕션)
+
+
+### 🗄️ VectorDB 구축 (선택)
+
+프로젝트는 **PostgreSQL + pgvector**를 사용하여 질문/답변 유사도 검색을 지원합니다.
+
+#### 빠른 시작
+```bash
+# 1. Backend 컨테이너 접속
+docker exec -it interview_backend bash
+
+# 2. VectorDB 테스트
+cd /app/scripts
+python test_vectordb.py
+
+# 3. 샘플 데이터 삽입
+python populate_vectordb.py
+
+# 4. 검색 기능 테스트
+python vector_utils.py
+```
+
+#### 주요 기능
+- ✅ **유사 질문 검색**: 사용자 입력과 의미적으로 유사한 질문 추천
+- ✅ **답변 평가**: 우수 답변과 비교하여 자동 채점
+- ✅ **질문 추천**: 직무/기술 스택 기반 맞춤형 질문 생성
+- ✅ **하이브리드 검색**: 키워드 + 벡터 검색 결합
+
+📖 **상세 가이드**: [`VECTORDB_QUICKSTART.md`](./VECTORDB_QUICKSTART.md) 또는 [`.agent/workflows/vectordb-setup-guide.md`](./.agent/workflows/vectordb-setup-guide.md)
+
+### 🗣️ 자연어DB 활용 (기본 제공)
+
+프로젝트는 **PostgreSQL**을 사용하여 자연어 텍스트를 저장하고 검색합니다. (이미 구축됨!)
+
+#### 빠른 시작
+```bash
+# 1. Backend 컨테이너 접속
+docker exec -it interview_backend bash
+
+# 2. 자연어 검색 테스트
+cd /app/scripts
+python natural_language_utils.py
+
+# 3. 검색 인덱스 생성 (성능 최적화)
+docker exec -i interview_db psql -U admin -d interview_db < infra/postgres/create_indexes.sql
+```
+
+#### 주요 기능
+- ✅ **키워드 검색**: LIKE/ILIKE를 사용한 정확한 텍스트 매칭
+- ✅ **전문 검색**: PostgreSQL Full-Text Search (랭킹 지원)
+- ✅ **필터링**: 카테고리, 난이도, 직무별 질문 필터링
+- ✅ **통계 분석**: 면접 대화 내용 분석, 키워드 빈도 분석
+
+#### VectorDB vs 자연어DB
+
+| 구분 | 자연어DB | VectorDB |
+|------|----------|----------|
+| **검색 방식** | 키워드 매칭 | 의미적 유사도 |
+| **사용 케이스** | 정확한 검색, 필터링 | 유사 질문 추천 |
+| **예시** | "Python" 포함 질문 검색 | "파이썬 멀티스레딩"과 유사한 질문 |
+
+📖 **상세 가이드**: [`NATURAL_LANGUAGE_DB_GUIDE.md`](./NATURAL_LANGUAGE_DB_GUIDE.md) 또는 [`NATURAL_LANGUAGE_DB_QUICKSTART.md`](./NATURAL_LANGUAGE_DB_QUICKSTART.md)
 
 ## 3. 핵심 구현 내용 (Technical Implementation)
 

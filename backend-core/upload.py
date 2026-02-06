@@ -25,8 +25,7 @@ def get_engine():
     """
     db 삽입을 위한 engine 생성
 
-    사용예: docker exec -it interview_backend //bin/bash
-    python import_data.py
+    사용예: docker exec -it interview_backend //bin/bash python upload.py
     """
     try:
         engine = create_engine(DATABASE_URL)
@@ -57,7 +56,7 @@ def import_questions(session, file_path, source_name):
         return
 
     print(f"🚀 Importing {len(data)} items from {source_name}...")
-    
+
     count = 0
     skipped = 0
     duplicates = 0
@@ -74,7 +73,7 @@ def import_questions(session, file_path, source_name):
         # Check for duplicates (simple check by content)
         statement = select(Question).where(Question.content == q_text)
         existing_q = session.exec(statement).first()
-        
+
         if existing_q:
             duplicates += 1
             continue
@@ -84,8 +83,8 @@ def import_questions(session, file_path, source_name):
             content=q_text,
             category=QuestionCategory.TECHNICAL,
             difficulty=QuestionDifficulty.MEDIUM,
-            rubric_json={"keywords": []}, 
-            question_type="직무지식", 
+            rubric_json={"keywords": []},
+            question_type="직무지식",
             usage_count=0,
             is_active=True
         )
@@ -102,7 +101,7 @@ def import_questions(session, file_path, source_name):
         )
         session.add(answer)
         count += 1
-        
+
         if count % 100 == 0:
             print(f"   - {count} items processed...")
 
@@ -130,7 +129,7 @@ def import_companies(session, file_path):
         return
 
     print(f"🚀 Importing {len(data)} companies...")
-    
+
     count = 0
     duplicates = 0
 
@@ -154,7 +153,7 @@ def import_companies(session, file_path):
             duplicates += 1
             # Optional: Update existing record? For now, skip.
             continue
-            
+
         # Check if code is already used (double check)
         # We are using code as primary key, so 'existing_c' check covers it.
 
@@ -166,7 +165,7 @@ def import_companies(session, file_path):
         )
         session.add(company)
         count += 1
-        
+
         if count % 50 == 0:
             print(f"   - {count} companies processed...")
 
@@ -186,7 +185,7 @@ def main():
     with Session(engine) as session:
         # 1. Import Old Data (data.json)
         import_questions(session, DATA_FILE_OLD, "General Questions (data.json)")
-        
+
         print("-" * 40)
 
         # 3. Import Corporate Data (corp_data.json)
