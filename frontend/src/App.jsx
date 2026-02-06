@@ -58,6 +58,11 @@ function App() {
     termsAgreed: false
   });
 
+  // Interview state
+  const [interview, setInterview] = useState(() => {
+    const saved = sessionStorage.getItem('current_interview');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const [questions, setQuestions] = useState(() => {
     const saved = sessionStorage.getItem('current_questions');
@@ -100,6 +105,7 @@ function App() {
   
 
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const isRecordingRef = useRef(false);
@@ -308,18 +314,6 @@ function App() {
   };
 
 
-  const drawTracking = (trackingData) => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video || video.videoWidth === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    
-    // Canvas 크기를 비디오 표시 크기에 맞춤 (한 번만 설정하거나 리사이즈 이벤트 처리 필요하지만 여기선 매번 체크)
-    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
-
   const finishInterview = async () => {
     setStep('loading');
     try {
@@ -402,12 +396,6 @@ function App() {
         setStep('loading');
         if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-        setTimeout(async () => {
-          const res = await getResults(session.id);
-          setResults(res);
-          setStep('result');
-        }, 5000);
-
         await finishInterview();
 
       }
@@ -561,58 +549,6 @@ function App() {
       )}
 
       {step === 'landing' && (
-        <div className="card">
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h1>면접 시스템</h1>
-            <button
-              onClick={handleLogout}
-              className="btn-secondary"
-              style={{ padding: '8px 16px', fontSize: '0.85rem', margin: 0 }}
-            >
-              로그아웃
-            </button>
-          </div>
-          <p style={{ marginBottom: '24px' }}>
-            {user ? `${user.full_name}님, 환영합니다!` : '환영합니다!'} <br />
-            지원 정보를 입력하고 면접을 시작하세요.
-          </p>
-          <div className="input-group">
-            <div>
-              <label htmlFor="position">지원 직무</label>
-              <input
-                id="position"
-                type="text"
-                placeholder="예: Frontend 개발자"
-                value={position}
-                onChange={(e) => setPosition(e.target.value)}
-              />
-            </div>
-            <div style={{ marginTop: '15px' }}>
-                <label>이력서 (PDF/Word):</label>
-                <input 
-                    type="file" 
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => setResumeFile(e.target.files[0])}
-                />
-                <p style={{ fontSize: '0.8em', color: '#666' }}>
-                    * 이력서를 제출하면 맞춤형 면접 질문이 생성됩니다.
-                </p>
-            </div>
-          </div>
-          <button onClick={startInterview} style={{ width: '100%' }}>
-            면접 시작하기
-          </button>
-        </div>
-
-        <AuthPage 
-          authMode={authMode} setAuthMode={setAuthMode}
-          account={account} setAccount={setAccount}
-          handleAuth={handleAuth} authError={authError}
-        />
-      )}
-
-      {step === 'landing' && (
         <LandingPage 
           startInterview={startInterviewFlow} 
           handleLogout={handleLogout}
@@ -632,85 +568,6 @@ function App() {
       
       {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
-      {step === 'interview' && (
-
-        <div className="card">
-          <h2>실시간 면접</h2>
-
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <video ref={videoRef} autoPlay playsInline muted style={{ display: 'block', maxWidth: '100%' }} />
-            <canvas 
-                ref={canvasRef} 
-                style={{ 
-                    position: 'absolute', 
-                    top: 0, 
-                    left: 0, 
-                    pointerEvents: 'none',
-                    width: '100%',
-                    height: '100%'
-                }} 
-            />
-          </div>
-
-          <video ref={videoRef} autoPlay playsInline muted />
-          
-          {/* 실시간 자막 오버레이 */}
-          {subtitle && (
-            <div style={{
-              marginTop: '-45px',
-              padding: '8px 15px',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              color: 'white',
-              borderRadius: '20px',
-              position: 'relative',
-              textAlign: 'center',
-              zIndex: 10,
-              display: 'inline-block',
-              maxWidth: '90%'
-            }}>
-              {subtitle}
-            </div>
-          )}
-          
-
-          {questions.length > 0 && (
-            <div className="question-box">
-              <h3>질문 {currentIdx + 1}</h3>
-              <p style={{ color: '#1a1a2e', fontSize: '1rem', lineHeight: '1.6' }}>
-                {questions[currentIdx].question_text}
-              </p>
-
-              {/* 실시간 STT 전사 텍스트 표시 */}
-              <div className="transcript-box">
-                <h4>
-                  {isRecording ? '🎤 녹음 중...' : '📝 답변 준비'}
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.95rem', color: '#1a1a2e' }}>
-                  {transcript || '답변을 시작하려면 "녹음 시작" 버튼을 눌러주세요.'}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '20px' }}>
-            <button
-              onClick={toggleRecording}
-              className={isRecording ? 'btn-stop' : 'btn-record'}
-              style={{ minWidth: '130px' }}
-            >
-              {isRecording ? '⏸ 녹음 중지' : '🎤 녹음 시작'}
-            </button>
-
-            <button
-              onClick={nextQuestion}
-              disabled={!transcript.trim() && isRecording}
-              style={{ minWidth: '130px' }}
-            >
-              {currentIdx < questions.length - 1 ? "다음 질문 →" : "면접 종료 ✓"}
-            </button>
-          </div>
-        </div>
-      )}
 
       {step === 'loading_questions' && (
         <div className="card">
@@ -726,32 +583,6 @@ function App() {
           <div className="spinner"></div>
         </div>
       )}
-
-      {step === 'result' && report && (
-        <div className="card">
-          <h2>면접 결과</h2>
-          {/* report.results가 있다면 그것을 사용하고, 없다면 프론트 state인 results 사용 (구조에 따라 다름) */}
-          {(report.details || results).map((r, i) => (
-            <div key={i} className="result-item">
-              <strong style={{ color: '#1a1a2e' }}>Q: {r.question_text || r.question}</strong>
-              <p style={{ marginTop: '8px' }}>A: {r.answer_text || r.answer}</p>
-              <div className="result-evaluation">
-                <h4 style={{ color: '#2563eb', margin: '0 0 12px 0', fontSize: '0.95rem' }}>피드백</h4>
-                <pre>
-                  {/* JSON 파싱이 필요할 수 있음 */}
-                  {typeof r.evaluation === 'string' ? r.evaluation : JSON.stringify(r.evaluation, null, 2)}
-                </pre>
-                <h4 style={{ color: '#059669', margin: '16px 0 8px 0', fontSize: '0.95rem' }}>감정 분석</h4>
-                <p style={{ margin: 0 }}>
-                  {r.emotion_data ? `주요 감정: ${r.emotion_data.dominant_emotion}` : "분석 대기 중..."}
-                </p>
-              </div>
-            </div>
-          ))}
-          <button onClick={() => setStep('landing')} style={{ width: '100%', marginTop: '16px' }}>
-            처음으로
-          </button>
-        </div>
 
         <InterviewPage 
           currentIdx={currentIdx}
