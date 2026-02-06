@@ -1,6 +1,7 @@
 # 데이터베이스 삽입 가이드
 
 ## 📋 목차
+
 1. [Company 데이터 삽입](#1-company-데이터-삽입)
 2. [Question 데이터 삽입](#2-question-데이터-삽입)
 3. [AnswerBank 데이터 삽입](#3-answerbank-데이터-삽입)
@@ -11,6 +12,7 @@
 ## 1. Company 데이터 삽입
 
 ### 📊 테이블 구조
+
 ```sql
 CREATE TABLE companies (
     id VARCHAR(50) PRIMARY KEY,
@@ -26,19 +28,21 @@ CREATE TABLE companies (
 ### 🔧 삽입 방법
 
 #### 방법 1: SQL 직접 실행
+
 ```sql
 INSERT INTO companies (id, company_name, ideal, description)
 VALUES 
     ('KAKAO', '카카오', 
      '도전적이고 창의적인 인재, 사용자 중심의 사고를 가진 분',
      '카카오는 기술과 사람을 연결하여 더 나은 세상을 만듭니다.'),
-    
+  
     ('NAVER', '네이버', 
      '기술로 세상을 변화시키고자 하는 열정을 가진 인재',
      '네이버는 글로벌 ICT 기업으로 검색, AI, 커머스 등 다양한 서비스를 제공합니다.');
 ```
 
 #### 방법 2: Python 코드
+
 ```python
 from sqlmodel import Session
 from backend.models import Company
@@ -71,6 +75,7 @@ with Session(engine) as session:
 ```
 
 #### 방법 3: API 사용
+
 ```bash
 curl -X POST "http://localhost:8000/companies/" \
   -H "Content-Type: application/json" \
@@ -87,6 +92,7 @@ curl -X POST "http://localhost:8000/companies/" \
 ## 2. Question 데이터 삽입
 
 ### 📊 테이블 구조
+
 ```sql
 CREATE TABLE questions (
     id SERIAL PRIMARY KEY,
@@ -108,6 +114,7 @@ CREATE TABLE questions (
 ### 🔧 삽입 방법
 
 #### 방법 1: SQL 직접 실행
+
 ```sql
 INSERT INTO questions (content, category, difficulty, rubric_json, is_active)
 VALUES 
@@ -119,6 +126,7 @@ VALUES
 ```
 
 #### 방법 2: Python 코드
+
 ```python
 from sqlmodel import Session
 from backend.models import Question, QuestionCategory, QuestionDifficulty
@@ -166,6 +174,7 @@ with Session(engine) as session:
 ## 3. AnswerBank 데이터 삽입
 
 ### 📊 테이블 구조
+
 ```sql
 CREATE TABLE answer_bank (
     id SERIAL PRIMARY KEY,
@@ -186,6 +195,7 @@ CREATE TABLE answer_bank (
 ### 🔧 삽입 방법
 
 #### 방법 1: SQL 직접 실행
+
 ```sql
 INSERT INTO answer_bank (question_id, answer_text, score, evaluator_feedback, is_active)
 VALUES 
@@ -197,6 +207,7 @@ VALUES
 ```
 
 #### 방법 2: Python 코드
+
 ```python
 from sqlmodel import Session
 from backend.models import AnswerBank
@@ -229,11 +240,13 @@ with Session(engine) as session:
 ## 4. 벡터 임베딩 생성
 
 ### 🎯 임베딩 모델
+
 한국어 지원 모델: `jhgan/ko-sroberta-multitask`
 
 ### 🔧 사용 방법
 
 #### Python 코드
+
 ```python
 from sentence_transformers import SentenceTransformer
 
@@ -254,6 +267,7 @@ print(f"벡터 샘플: {embedding_list[:5]}")
 ### 📊 벡터 검색 예시
 
 #### 유사 질문 찾기
+
 ```python
 from sqlmodel import Session, select
 from backend.models import Question
@@ -270,9 +284,9 @@ with Session(engine) as session:
     ).order_by(
         Question.embedding.cosine_distance(query_embedding)
     ).limit(5)
-    
+  
     similar_questions = session.exec(stmt).all()
-    
+  
     for q in similar_questions:
         print(f"- {q.content}")
 ```
@@ -284,6 +298,7 @@ with Session(engine) as session:
 ### JSON 데이터 → DB
 
 #### 데이터 형식
+
 ```json
 [
   {
@@ -298,6 +313,7 @@ with Session(engine) as session:
 ```
 
 #### Python 삽입 코드
+
 ```python
 import json
 from sqlmodel import Session
@@ -316,7 +332,7 @@ with Session(engine) as session:
         # 1. 질문 삽입
         question_text = item["질문"]
         question_embedding = model.encode(question_text).tolist()
-        
+      
         question = Question(
             content=question_text,
             category=QuestionCategory.TECHNICAL,
@@ -330,11 +346,11 @@ with Session(engine) as session:
         )
         session.add(question)
         session.flush()  # question.id 생성
-        
+      
         # 2. 답변 삽입
         answer_text = item["답변"]
         answer_embedding = model.encode(answer_text).tolist()
-        
+      
         answer = AnswerBank(
             question_id=question.id,
             answer_text=answer_text,
@@ -344,9 +360,9 @@ with Session(engine) as session:
             is_active=True
         )
         session.add(answer)
-        
+      
         print(f"✅ 추가: {question_text[:30]}...")
-    
+  
     session.commit()
     print(f"🎉 총 {len(qa_data)}개 삽입 완료!")
 ```
@@ -356,6 +372,7 @@ with Session(engine) as session:
 ## 🔍 데이터 조회 예시
 
 ### Company 조회
+
 ```python
 from sqlmodel import Session, select
 from backend.models import Company
@@ -365,7 +382,7 @@ with Session(engine) as session:
     # ID로 조회
     company = session.get(Company, "KAKAO")
     print(f"회사명: {company.company_name}")
-    
+  
     # 전체 조회
     stmt = select(Company)
     companies = session.exec(stmt).all()
@@ -374,6 +391,7 @@ with Session(engine) as session:
 ```
 
 ### Question 조회
+
 ```python
 from sqlmodel import Session, select
 from backend.models import Question, QuestionCategory
@@ -386,7 +404,7 @@ with Session(engine) as session:
         Question.is_active == True
     )
     questions = session.exec(stmt).all()
-    
+  
     for q in questions:
         print(f"- {q.content}")
 ```
@@ -396,22 +414,23 @@ with Session(engine) as session:
 ## ⚠️ 주의사항
 
 1. **벡터 임베딩**
+
    - 텍스트 변경 시 반드시 임베딩도 재생성
    - 모델은 한 번만 로드하여 재사용
-
 2. **트랜잭션**
+
    - 대량 삽입 시 `session.commit()` 한 번만 호출
    - 에러 발생 시 자동 롤백
-
 3. **인덱스**
+
    - 벡터 검색 성능 향상을 위해 IVFFlat 인덱스 생성 권장
    - 데이터가 1000개 이상일 때 생성
-
 4. **문자 인코딩**
+
    - JSON 파일은 UTF-8 인코딩 필수
    - Python 파일 상단에 `# -*- coding: utf-8 -*-` 추가
 
 ---
 
-**작성일**: 2026-01-28  
+**작성일**: 2026-01-28
 **버전**: 1.0
