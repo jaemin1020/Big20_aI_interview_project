@@ -130,14 +130,15 @@ def test_embedding_model():
         from sentence_transformers import SentenceTransformer
 
         print("🔄 모델 다운로드 중... (최초 1회만 시간 소요)")
-        model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+        # 프로젝트 표준 모델 (1024차원)
+        model = SentenceTransformer('nlpai-lab/KURE-v1', trust_remote_code=True)
 
         # 테스트 임베딩 생성
-        test_text = "Python 개발자 면접 질문"
+        test_text = "query: Python 개발자 면접 질문" # KURE-v1 requires prefix
         embedding = model.encode(test_text)
 
         print(f"✅ 임베딩 모델 로드 성공!")
-        print(f"   모델: jhgan/ko-sroberta-multitask")
+        print(f"   모델: nlpai-lab/KURE-v1")
         print(f"   임베딩 차원: {len(embedding)}")
         print(f"   테스트 텍스트: '{test_text}'")
         print(f"   임베딩 샘플: [{embedding[0]:.4f}, {embedding[1]:.4f}, {embedding[2]:.4f}, ...]")
@@ -172,10 +173,10 @@ def test_vector_search():
 
             # 샘플 검색
             from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+            model = SentenceTransformer('nlpai-lab/KURE-v1', trust_remote_code=True)
 
             query = "파이썬 멀티스레딩"
-            query_embedding = model.encode(query).tolist()
+            query_embedding = model.encode("query: " + query).tolist()
 
             results = session.exec(
                 text(f"""
