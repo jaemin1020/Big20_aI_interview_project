@@ -4,8 +4,8 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
 from sqlmodel import Session, select
 from models import Resume, User
-from db import get_session
-from auth import get_current_user
+from database import get_session
+from utils.auth_utils import get_current_user
 from celery import Celery
 import os
 import shutil

@@ -1,72 +1,141 @@
-# 프로젝트 최종 품질 감사 리포트
+# 🏗️ 프로젝트 종합 품질 감사 보고서 (Project Quality Audit Report)
 
-**감사 일시**: 2026-01-29 10:48  
+<<<<<<< HEAD
+**감사 일시**: 2026-01-29 10:48
 **감사 대상**: Big20_aI_interview_project 전체 코드베이스
 **감사자**: AI Assistant
+=======
+**진단 일시**: 2026-02-05  
+**진단 대상**: Big20 AI Interview Project (Backend, Frontend, AI-Worker, Media-Server)
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
 
 ---
 
-## 1. 🔍 감사 요약
+## 1. 📊 종합 요약 (Executive Summary)
 
-| 검사 항목 | 상태 | 비고 |
-|:---:|:---:|:---|
-| **코드 구조** | ✅ **양호** | `backend-core`, `ai-worker` 역할 분리 명확 |
-| **유틸리티 통합** | ✅ **완료** | 공통 유틸리티, 로깅, 캐시, 예외 처리 모듈 추가 완료 |
-| **이력서 파싱** | ✅ **완료** | 실제 이력서 구조(PDF) 기반 파서 `ResumeStructurerV2` 구현 및 테스트 통과 |
-| **중복 제거** | ✅ **완료** | `question_generator.py` 중복 함수 제거 및 TODO 구현 확인 |
-| **데이터 일관성** | ✅ **완료** | `resume_tool.py` Skills 필드 구조(Dict/List) 호환성 확보 |
-| **불필요 파일** | ✅ **정리됨** | 임시 테스트 파일 삭제 및 `.gitignore` 등록 |
+<<<<<<< HEAD
+|        검사 항목        |        상태        | 비고                                                                       |
+| :---------------------: | :----------------: | :------------------------------------------------------------------------- |
+|   **코드 구조**   |  ✅**양호**  | `backend-core`, `ai-worker` 역할 분리 명확                             |
+| **유틸리티 통합** |  ✅**완료**  | 공통 유틸리티, 로깅, 캐시, 예외 처리 모듈 추가 완료                        |
+|  **이력서 파싱**  |  ✅**완료**  | 실제 이력서 구조(PDF) 기반 파서 `ResumeStructurerV2` 구현 및 테스트 통과 |
+|   **중복 제거**   |  ✅**완료**  | `question_generator.py` 중복 함수 제거 및 TODO 구현 확인                 |
+| **데이터 일관성** |  ✅**완료**  | `resume_tool.py` Skills 필드 구조(Dict/List) 호환성 확보                 |
+|  **불필요 파일**  | ✅**정리됨** | 임시 테스트 파일 삭제 및 `.gitignore` 등록                               |
+=======
+전반적으로 프로젝트는 **기능 구현 중심의 MVP 단계**로 보입니다. 핵심적인 AI 기능(면접 질문 생성, 평가, STT)과 실시간 통신(WebRTC)은 잘 구현되어 있으나, **유지보수성**과 **배포 안정성** 측면에서 개선이 필요합니다.
+
+| 영역 | 점수 | 상태 | 주요 이슈 |
+|------|------|------|-----------|
+| **아키텍처** | 4.0/5 | 🟢 양호 | 마이크로서비스 구조 분리 잘됨 (Core, Worker, Media) |
+| **코드 품질** | 3.5/5 | 🟡 보통 | 일부 파일의 비대화 (`App.jsx`, `main.py`), 하드코딩된 값 |
+| **보안** | 3.0/5 | 🟡 주의 | 프론트엔드 API 키 노출 관리 필요, 기본 Secret Key 사용 |
+| **테스트** | 2.0/5 | 🔴 미흡 | 백엔드 기본 테스트 존재하나 커버리지 낮음, 프론트엔드 테스트 부재 |
+| **인프라** | 4.0/5 | 🟢 양호 | Docker Compose 기반 실행 환경 잘 구성됨 |
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
 
 ---
 
-## 2. 🛠️ 상세 검증 결과
+## 2. 🔍 상세 진단 결과
 
+<<<<<<< HEAD
 ### 2.1 아키텍처 및 유틸리티
+
 - **Logging**: `backend-core/utils/logging_config.py` 추가로 구조화된 로깅과 파일 로테이션이 가능해짐.
 - **Exception**: `backend-core/exceptions.py`에 20개의 커스텀 예외 클래스를 정의하여 에러 핸들링의 표준을 마련함.
 - **Caching**: `backend-core/utils/cache.py`를 통해 반복적인 DB 조회 부하를 줄일 준비가 됨.
 - **Common Utils**: 텍스트 정제, 유효성 검사 등 자주 쓰이는 함수들을 `common.py`로 모듈화함.
 
 ### 2.2 비즈니스 로직
+
 - **질문 생성 (Question Gen)**:
-    - LLM 기반 생성과 DB 재활용(Hybrid) 로직이 정상 작동.
-    - `_get_fallback_question` 중복 제거로 코드 깔끔해짐.
-    - 질문 재활용 시 `increment_question_usage` 호출 로직 구현되어 통계 정확도 향상.
+  - LLM 기반 생성과 DB 재활용(Hybrid) 로직이 정상 작동.
+  - `_get_fallback_question` 중복 제거로 코드 깔끔해짐.
+  - 질문 재활용 시 `increment_question_usage` 호출 로직 구현되어 통계 정확도 향상.
 - **이력서 도구 (Resume Tool)**:
-    - 실제 이력서 파싱 결과(`Dict` 구조)와 기존 예상 구조(`List`)를 모두 처리할 수 있도록 방어 코드 적용됨.
-    - 보안 기술(Security) 필드 우선 노출 로직이 추가되어 도메인 특화 정보 제공 강화.
+  - 실제 이력서 파싱 결과(`Dict` 구조)와 기존 예상 구조(`List`)를 모두 처리할 수 있도록 방어 코드 적용됨.
+  - 보안 기술(Security) 필드 우선 노출 로직이 추가되어 도메인 특화 정보 제공 강화.
+=======
+### 2.1 코드 복잡도 및 구조 (Maintainability)
+
+**🚩 식별된 대형 파일 (Refactoring Targets)**
+다음 파일들은 단일 책임 원칙(SRP) 위배 가능성이 높으므로 분할이 권장됩니다.
+1.  **`frontend/src/App.jsx` (498 lines)**: 라우팅, 전역 상태, 웹소켓 로직이 혼재됨. → `Context API` 및 `Router` 설정 분리 필요.
+2.  **`backend-core/main.py` (481 lines)**: 모든 API 엔드포인트가 하나에 모여 있음. → `APIRouter`를 사용해 도메인별(Auth, Interview, Users)로 분리 필요.
+3.  **`backend-core/utils/rubric_generator.py` (409 lines)**: 프롬프트 관리와 로직을 분리 권장.
+
+**🚩 기술 부채 (Technical Debt)**
+- `ai-worker/tasks/answer_collector.py`: "벡터 유사도로 중복 체크" 로직이 `TODO`로 남겨져 있어, 답변 중복 저장 이슈 가능성 있음.
+
+### 2.2 보안 (Security)
+
+**✅ 양호한 점**
+- `.env` 파일이 Git에 포함되지 않음 (로컬 관리).
+- JWT 기반 인증 방식 사용.
+
+**⚠️ 개선 필요 사항**
+1.  **Deepgram API Key 노출**: 프론트엔드(`App.jsx`)에서 `import.meta.env.VITE_DEEPGRAM_API_KEY`를 직접 사용 중.
+    - **위험**: 브라우저 개발자 도구에서 키 탈취 가능성.
+    - **권장**: 백엔드에서 일회용/임시 토큰을 발급받아 프론트엔드에 전달하는 방식(Proxy)으로 변경해야 함.
+2.  **Fallback Secret Key**: `auth.py`에서 환경변수 누락 시 사용하는 기본 키(`your-secret-key...`)가 코드에 하드코딩됨. 프로덕션 배포 시 사고 위험.
+
+### 2.3 테스트 현황 (Test Coverage)
+
+- **Backend**: `backend-core/tests`에 `test_auth.py`, `test_interview.py`가 존재하지만 커버리지가 제한적임.
+- **Frontend**: `frontend/test/` 디렉토리가 존재하지만 내용이 비어있음 (**Test Void**).
+- **CI/CD**: 현재 자동화된 테스트 파이프라인 설정 파일(GitHub Workflows 등) 부재.
+
+### 2.4 의존성 관리 (Dependency Hygiene)
+
+- `backend-core`와 `ai-worker`는 `sqlmodel`, `pydantic`, `celery` 등의 버전이 잘 일치함.
+- **주의**: `media-server`는 `celery==5.4.0` (고정)을 사용하고, 다른 서비스는 `>=5.3.6`을 사용함. 마이너 버전 차이로 인한 메시지 직렬화 호환성 문제 가능성 미미하지만 존재.
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
 
 ---
 
-## 3. 🚦 배포 전 최종 점검 (Action Items)
+## 3. 📅 우선순위 기반 개선 로드맵
 
-현재 코드 상태는 매우 우수하나, 시스템 운영을 위해 아래 항목의 실행이 필요합니다.
+### 🚀 Phase 1: 안정성 및 보안 (이번 주 권장)
+- [ ] **보안 패치**: Deepgram API Key 프론트엔드 직접 호출 제거 → 백엔드 Proxy 엔드포인트 구현.
+- [ ] **구조 개선**: `backend-core/main.py`를 `routes/` 패키지로 라우터 분리.
+- [ ] **구조 개선**: `frontend/src/App.jsx`의 비즈니스 로직을 Custom Hooks(`useInterview`, `useAuth`)로 분리.
 
-1.  **DB 마이그레이션 (필수)**
-    - `Question` 테이블에 새로 추가된 컬럼(`question_type`, `is_follow_up` 등) 반영 필요.
-    ```bash
-    cd backend-core
-    alembic revision --autogenerate -m "Add question metadata fields"
-    alembic upgrade head
-    ```
+<<<<<<< HEAD
+1. **DB 마이그레이션 (필수)**
 
-2.  **라이브러리 설치 (필수)**
-    - PDF 파싱을 위한 패키지 설치.
-    ```bash
-    pip install PyPDF2>=3.0.0 pdfplumber>=0.10.0 python-docx>=1.1.0
-    ```
+   - `Question` 테이블에 새로 추가된 컬럼(`question_type`, `is_follow_up` 등) 반영 필요.
 
-3.  **환경 변수 설정 (필수)**
-    - 파일 업로드 경로 지정.
-    ```bash
-    # .env 파일
-    RESUME_UPLOAD_DIR=./uploads/resumes
-    ```
+   ```bash
+   cd backend-core
+   alembic revision --autogenerate -m "Add question metadata fields"
+   alembic upgrade head
+   ```
+2. **라이브러리 설치 (필수)**
+
+   - PDF 파싱을 위한 패키지 설치.
+
+   ```bash
+   pip install PyPDF2>=3.0.0 pdfplumber>=0.10.0 python-docx>=1.1.0
+   ```
+3. **환경 변수 설정 (필수)**
+
+   - 파일 업로드 경로 지정.
+
+   ```bash
+   # .env 파일
+   RESUME_UPLOAD_DIR=./uploads/resumes
+   ```
+=======
+### 🛠️ Phase 2: 품질 향상 (다음 주)
+- [ ] **테스트**: 백엔드 핵심 비즈니스 로직(면접 생성, 평가) 단위 테스트 보강.
+- [ ] **기능 완성**: `ai-worker`의 답변 중복 체크(TODO) 구현.
+- [ ] **문서화**: API 명세(Swagger)를 기반으로 한 연동 문서 최신화.
+
+### 🏗️ Phase 3: 운영 고도화 (추후)
+- [ ] **모니터링**: Prometheus/Grafana 도입으로 컨테이너 상태 시각화.
+- [ ] **CI**: GitHub Actions를 통한 PR 시 테스트 자동 실행 설정.
+>>>>>>> 5fe6f7adb33f16443747dc01fc10ed12295552be
 
 ---
 
-## 4. 🏆 종합 평가
-
-**최종 품질 등급**: ⭐⭐⭐⭐⭐ (**S등급**)
-
-프로젝트는 기능적 요구사항을 모두 충족하며, 확장성과 유지보수성을 고려한 구조로 잘 정돈되었습니다. 특히 실제 이력서 데이터를 기반으로 한 파싱 로직 개선과 공통 모듈의 추가는 시스템의 견고함을 크게 높였습니다. **위의 필수 액션 아이템만 수행한다면 즉시 배포 가능한 상태**입니다.
+**작성자**: AI Agent (Antigravity)
