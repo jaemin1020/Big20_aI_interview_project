@@ -3,15 +3,18 @@
 ## ✅ 추가된 기능
 
 ### 1. Question 테이블 벡터화
+
 - **embedding 필드 추가** (768차원)
 - 질문 중복 감지 및 유사 질문 검색 가능
 
 ### 2. 벡터 생성 유틸리티
+
 - **파일**: `ai-worker/utils/vector_utils.py`
 - **모델**: `jhgan/ko-sroberta-multitask` (한국어 특화)
 - **차원**: 768 (질문/답변 공통)
 
 ### 3. 우수 답변 자동 수집
+
 - **파일**: `ai-worker/tasks/answer_collector.py`
 - **기준**: 평가 점수 85점 이상
 - **저장**: AnswerBank 테이블 (벡터 포함)
@@ -32,6 +35,7 @@ result = app.send_task('tasks.answer_collector.vectorize_existing_questions', ar
 ```
 
 또는 Python 스크립트:
+
 ```python
 from ai-worker.tasks.answer_collector import vectorize_existing_questions
 
@@ -51,16 +55,16 @@ print(result)  # {"status": "success", "count": 100}
 @shared_task(name="tasks.evaluator.analyze_answer")
 def analyze_answer(transcript_id, question, answer, rubric):
     # ... 평가 로직 ...
-    
+  
     evaluation_score = (tech_score + comm_score) * 10  # 0-100 변환
-    
+  
     # 우수 답변 수집 태스크 발행
     if evaluation_score >= 85.0:
         celery_app.send_task(
             "tasks.answer_collector.collect_excellent_answer",
             args=[transcript_id, evaluation_score]
         )
-    
+  
     return result
 ```
 
@@ -76,10 +80,10 @@ from utils.vector_utils import generate_answer_embedding
 
 def search_similar_answers(user_answer: str, question_id: int, top_k: int = 3):
     """유사한 우수 답변 검색"""
-    
+  
     # 1. 사용자 답변 벡터화
     user_embedding = generate_answer_embedding(user_answer)
-    
+  
     # 2. pgvector 코사인 유사도 검색
     with Session(engine) as session:
         stmt = select(
@@ -89,9 +93,9 @@ def search_similar_answers(user_answer: str, question_id: int, top_k: int = 3):
             AnswerBank.question_id == question_id,
             AnswerBank.score >= 80.0
         ).order_by("distance").limit(top_k)
-        
+      
         results = session.exec(stmt).all()
-        
+      
         return [
             {
                 "text": answer.answer_text,
@@ -145,15 +149,18 @@ print(result)
 ## ⚠️ 주의사항
 
 ### 1. 메모리 사용량
+
 - Sentence Transformer 모델: ~500MB
 - 벡터 저장: 질문 1000개 = 약 3MB (768차원 * 4바이트 * 1000)
 
 ### 2. 성능 최적화
+
 - **배치 처리**: 여러 텍스트를 한 번에 벡터화 (`encode_batch`)
 - **캐싱**: 자주 사용되는 질문/답변은 Redis에 벡터 캐싱
 - **인덱스**: 1000개 이상 데이터 축적 후 IVFFlat 인덱스 생성
 
 ### 3. 차원 수 일치
+
 - Question: 768차원
 - AnswerBank: 1536차원 (현재 설정)
 - **권장**: 일관성을 위해 AnswerBank도 768차원으로 변경
@@ -172,23 +179,24 @@ class AnswerBank(SQLModel, table=True):
 ## 🎯 다음 단계
 
 1. ✅ 컨테이너 재빌드
+
    ```bash
    docker-compose build --no-cache ai-worker
    docker-compose up -d ai-worker
    ```
-
 2. ✅ 기존 질문 벡터화 실행
+
    ```python
    vectorize_existing_questions(batch_size=100)
    ```
-
 3. ✅ 평가 로직에 우수 답변 수집 연동
-   - `evaluator.py`에서 85점 이상 시 `collect_excellent_answer` 호출
 
+   - `evaluator.py`에서 85점 이상 시 `collect_excellent_answer` 호출
 4. ✅ 벡터 검색 기반 평가 강화
+
    - 유사 우수 답변과 비교하여 피드백 생성
 
 ---
 
-**작성일**: 2026-01-27  
+**작성일**: 2026-01-27
 **버전**: v3.0 (벡터화 시스템)
