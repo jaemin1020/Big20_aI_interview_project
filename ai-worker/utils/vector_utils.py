@@ -42,9 +42,8 @@ class EmbeddingGenerator:
         """
         if not text or len(text.strip()) == 0:
             logger.warning("Empty text provided for encoding")
-            # KURE-v1 output dimension typically 768 or 1024. Assuming 768 compatible flow or model defaults.
-            # KURE-v1 base is 768.
-            return [0.0] * 768
+            # KURE-v1 output dimension is 1024 (based on BAAI/bge-m3)
+            return [0.0] * 1024
         
         prefix = "query: " if is_query else "passage: "
         # 텍스트 앞부분에 접두어 추가
