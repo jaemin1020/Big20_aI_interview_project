@@ -4,6 +4,7 @@ import os
 import logging
 import base64
 import json
+import asyncio
 
 logger = logging.getLogger("STT-Service")
 
@@ -35,9 +36,8 @@ async def recognize_audio(file: UploadFile = File(...)):
         )
         
         # 결과 대기 (최대 60초)
-        # async def 내부에서의 블로킹 호출은 이상적이지 않으나,
-        # 빠른 응답을 위해 동기적으로 대기.
-        result = task.get(timeout=60)
+        # 중요: task.get()은 Blocking I/O이므로 메인 이벤트 루프를 차단하지 않도록 별도 스레드에서 실행
+        result = await asyncio.to_thread(task.get, timeout=60)
         
         if isinstance(result, dict) and result.get("status") == "error":
             error_msg = result.get("message", "Unknown error from worker")
