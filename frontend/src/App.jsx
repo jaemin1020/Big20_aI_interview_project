@@ -27,6 +27,10 @@ import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
 import AuthPage from './pages/auth/AuthPage';
 
+// Environment variables for WebRTC/WebSocket
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
+const WEBRTC_URL = import.meta.env.VITE_WEBRTC_URL || 'http://localhost:8080';
+
 function App() {
   const [step, setStep] = useState(() => {
     const saved = sessionStorage.getItem('current_step');
@@ -285,7 +289,7 @@ function App() {
   };
 
   const setupWebSocket = (sessionId) => {
-    const ws = new WebSocket(`ws://localhost:8080/ws/${sessionId}`);
+    const ws = new WebSocket(`${WS_URL}/ws/${sessionId}`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
@@ -311,7 +315,7 @@ function App() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const response = await fetch('http://localhost:8080/offer', {
+    const response = await fetch(`${WEBRTC_URL}/offer`, {
       method: 'POST',
       body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: interviewId }),
       headers: { 'Content-Type': 'application/json' }
@@ -337,9 +341,33 @@ function App() {
       if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
       
       await completeInterview(interview.id);
-      const res = await getEvaluationReport(interview.id);
-      setReport(res);
-      // Stay on 'loading' step - user will click "결과 확인하기" button to proceed
+      
+      // Poll for report generation (max 30 attempts, 2 seconds interval = 60 seconds total)
+      let attempts = 0;
+      const maxAttempts = 30;
+      const pollInterval = 2000; // 2 seconds
+      
+      const pollForReport = async () => {
+        try {
+          const res = await getEvaluationReport(interview.id);
+          setReport(res);
+          console.log('✅ Report generated successfully');
+          // Stay on 'loading' step - user will click "결과 확인하기" button to proceed
+        } catch (err) {
+          attempts++;
+          if (attempts < maxAttempts) {
+            console.log(`⏳ Report not ready yet, retrying... (${attempts}/${maxAttempts})`);
+            setTimeout(pollForReport, pollInterval);
+          } else {
+            console.error('❌ Report generation timeout');
+            alert('리포트 생성 시간이 초과되었습니다. 나중에 다시 시도해주세요.');
+            setStep('landing');
+          }
+        }
+      };
+      
+      pollForReport();
+      
     } catch (err) {
       console.error("Finish error:", err);
       alert('면접 종료 처리 중 오류가 발생했습니다.');
