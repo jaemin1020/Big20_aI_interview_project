@@ -181,6 +181,12 @@ cp .env.example .env
 # - HUGGINGFACE_API_KEY: https://huggingface.co/settings/tokens
 # - DEEPGRAM_API_KEY: https://console.deepgram.com/
 # - DATABASE_URL: PostgreSQL 연결 정보
+
+# 4. 프론트엔드 환경 변수 설정 (선택사항)
+cp frontend/.env.example frontend/.env
+# - VITE_API_URL: 백엔드 API URL (기본값: http://localhost:8000)
+# - VITE_WS_URL: WebSocket 서버 URL (기본값: ws://localhost:8080)
+# - VITE_WEBRTC_URL: WebRTC 서버 URL (기본값: http://localhost:8080)
 ```
 
 ### 3️⃣ 서비스 실행

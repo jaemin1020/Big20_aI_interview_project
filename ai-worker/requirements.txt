@@ -45,6 +45,7 @@ librosa>=0.10.1
 # Data Processing
 numpy>=1.23.0,<2.0.0
 
+
 # PDF Processing & Document Parsing
 PyPDF2>=3.0.1
 pdfplumber>=0.11.0
