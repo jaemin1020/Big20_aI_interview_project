@@ -104,7 +104,13 @@ async def create_interview(
         db.refresh(new_interview)
         
     except Exception as e:
+        db.rollback()
         logger.error(f"Failed to save questions: {e}")
+        # 인터뷰 생성이 질문 없이 완료되면 안되므로 실패 처리
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate interview questions. Please try again."
+        )
     
     return InterviewResponse(
         id=new_interview.id,
