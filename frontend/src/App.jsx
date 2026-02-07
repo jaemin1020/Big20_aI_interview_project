@@ -536,6 +536,7 @@ function App() {
           onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
           onHistory={() => setStep('history')}
+          pageTitle={step === 'history' ? '면접 이력' : null}
         />
       )}
 

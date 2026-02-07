@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, onHistory }) => {
+const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, onHistory, pageTitle }) => {
   const [isManageOpen, setIsManageOpen] = React.useState(false);
   const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
 
@@ -28,6 +28,18 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
             <img src="/logo.png" alt="Logo" className="theme-logo" />
           </div>
         </div>
+
+        {pageTitle && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginLeft: '1.5rem',
+            paddingLeft: '1.5rem',
+            borderLeft: '1px solid var(--glass-border)'
+          }}>
+            <span style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{pageTitle}</span>
+          </div>
+        )}
 
         {isInterviewing && (
           <div style={{

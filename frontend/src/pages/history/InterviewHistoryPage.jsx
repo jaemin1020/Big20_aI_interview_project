@@ -91,7 +91,7 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
             {/* 1. 헤더 영역 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
-                    <h2 style={{ fontSize: '2rem', fontWeight: '900', marginBottom: '0.5rem' }}>면접 이력 조회</h2>
+                    <h2 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>면접 이력 조회</h2>
                     <p style={{ color: 'var(--text-muted)' }}>나의 면접 기록과 분석 결과를 한눈에 확인하세요.</p>
                 </div>
                 <PremiumButton variant="secondary" onClick={onBack} style={{ padding: '10px 20px' }}>
