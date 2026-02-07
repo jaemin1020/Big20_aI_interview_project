@@ -24,7 +24,7 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           onClick={onLogoClick}
           style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
         >
-          <div className="logo-wrapper" style={{ width: '32px' }}>
+          <div className="logo-wrapper" style={{ width: '120px' }}>
             <img src="/logo.png" alt="Logo" className="theme-logo" />
           </div>
         </div>
@@ -169,26 +169,27 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           </button>
 
           <style>{`
-@keyframes fadeIn {
+            @keyframes fadeIn {
               from { opacity: 0; transform: translateY(-10px); }
               to { opacity: 1; transform: translateY(0); }
-}
-            .dropdown - item {
-  padding: 10px 12px;
-  border - radius: 8px;
-  background: transparent;
-  border: none;
-  color: var(--text - main);
-  text - align: left;
-  cursor: pointer;
-  transition: all 0.2s;
-  font - size: 0.9rem;
-  white - space: nowrap;
-}
-            .dropdown - item:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-`}</style>
+            }
+            .dropdown-item {
+              padding: 10px 12px;
+              border-radius: 8px;
+              background: transparent;
+              border: none;
+              color: var(--text-main);
+              text-align: left;
+              cursor: pointer;
+              transition: all 0.2s;
+              font-size: 0.9rem;
+              white-space: nowrap;
+              outline: none;
+            }
+            .dropdown-item:hover {
+              background: rgba(255, 255, 255, 0.1);
+            }
+          `}</style>
         </div>
       )}
     </header>
