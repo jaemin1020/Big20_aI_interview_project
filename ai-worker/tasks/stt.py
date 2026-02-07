@@ -17,10 +17,14 @@ def recognize_audio_task(audio_b64: str):
     Returns:
         dict: {"status": "success", "text": "..."} or {"status": "error", "message": "..."}
     """
-    token = os.getenv("HF_TOKEN")
+    token = os.getenv("HUGGINGFACE_HUB_TOKEN")
     if not token:
-        logger.error("HF_TOKEN is missing in AI-Worker environment")
-        return {"status": "error", "message": "Server configuration error: HF_TOKEN missed"}
+        # Fallback to HF_TOKEN if available
+        token = os.getenv("HF_TOKEN")
+        
+    if not token:
+        logger.error("HUGGINGFACE_HUB_TOKEN is missing in AI-Worker environment")
+        return {"status": "error", "message": "Server configuration error: Token missed"}
 
     try:
         # Base64 decoding
