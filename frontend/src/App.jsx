@@ -244,7 +244,7 @@ function App() {
     setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & User Name
-      const interviewPosition = parsedResumeData?.position || position || 'General';
+      const interviewPosition = parsedResumeData?.structured_data?.target_position || parsedResumeData?.position || position || 'General';
       
       console.log("Creating interview with:", { interviewPosition });
 
@@ -398,7 +398,7 @@ function App() {
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
 
-      await createTranscript(interview.id, 'candidate', answerText, questions[currentIdx].id);
+      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
 
       if (currentIdx < questions.length - 1) {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
