@@ -144,6 +144,7 @@ const MainPage = ({
                 transition: all 0.2s;
                 font-size: 0.9rem;
                 white-space: nowrap;
+                outline: none;
               }
               .dropdown-item:hover {
                 background: rgba(255, 255, 255, 0.1);

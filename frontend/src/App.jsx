@@ -563,7 +563,7 @@ function App() {
         </button>
       </div>
 
-      <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', paddingTop: step !== 'main' && step !== 'auth' ? '80px' : '0' }}>
         {step === 'main' && (
           <MainPage
             onStartInterview={() => {
