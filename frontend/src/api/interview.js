@@ -84,10 +84,10 @@ export const getDeepgramToken = async () => {
 
 // ==================== Interview ====================
 
-export const createInterview = async (position, jobPostingId = null, scheduledTime = null) => {
+export const createInterview = async (position, companyId = null, scheduledTime = null) => {
     const response = await api.post('/interviews', {
         position,
-        job_posting_id: jobPostingId,
+        company_id: companyId,
         scheduled_time: scheduledTime
     });
     return response.data;
