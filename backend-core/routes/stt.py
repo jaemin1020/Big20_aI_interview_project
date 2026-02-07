@@ -1,56 +1,66 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, WebSocket
-from huggingface_hub import InferenceClient
+from celery import Celery
 import os
 import logging
-import asyncio
+import base64
+import json
 
 logger = logging.getLogger("STT-Service")
 
 router = APIRouter(prefix="/stt", tags=["Speech-to-Text"])
 
-# Hugging Face 설정
-HF_TOKEN = os.getenv("HF_TOKEN")
-MODEL_ID = "openai/whisper-large-v3-turbo"
+# Celery 설정
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+CELERY_BACKEND_URL = os.getenv("CELERY_BACKEND_URL", "redis://redis:6379/0")
+celery_app = Celery("stt_client", broker=CELERY_BROKER_URL, backend=CELERY_BACKEND_URL)
 
 
 @router.post("/recognize")
 async def recognize_audio(file: UploadFile = File(...)):
     """
-    오디오 파일을 업로드 받아 Hugging Face API를 통해 텍스트로 변환
-    Note: Hugging Face Inference API 사용 (Serverless)
+    오디오 파일을 AI-Worker로 전송하여 STT 수행
     """
-    if not HF_TOKEN:
-        logger.error("HF_TOKEN environment variable is not set")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server configuration error: HF_TOKEN missed"
-        )
-    
     try:
         # 파일 읽기
         audio_content = await file.read()
         
-        # Hugging Face Inference Client 초기화
-        client = InferenceClient(token=HF_TOKEN)
+        # Base64 인코딩 (Celery JSON Serialization 호환)
+        audio_b64 = base64.b64encode(audio_content).decode('utf-8')
         
-        # ASR 요청 (Automatic Speech Recognition)
-        # Whisper 모델은 오디오 파일(bytes)을 직접 받아 처리 가능
-        response = client.automatic_speech_recognition(
-            audio_content, 
-            model=MODEL_ID
+        # AI-Worker에 작업 요청
+        logger.info(f"Sending STT task to AI-Worker (size: {len(audio_content)} bytes)")
+        task = celery_app.send_task(
+            "tasks.stt.recognize",
+            args=[audio_b64]
         )
         
-        # 응답 처리 (Hugging Face API는 {"text": "..."} 형태 반환)
-        text = response.text if hasattr(response, 'text') else str(response)
+        # 결과 대기 (최대 60초)
+        # async def 내부에서의 블로킹 호출은 이상적이지 않으나,
+        # 빠른 응답을 위해 동기적으로 대기.
+        result = task.get(timeout=60)
         
+        if isinstance(result, dict) and result.get("status") == "error":
+            error_msg = result.get("message", "Unknown error from worker")
+            logger.error(f"Worker report error: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail=f"Worker Error: {error_msg}"
+            )
+            
+        text = result.get("text", "")
         logger.info(f"STT Recognition Success: {len(text)} chars")
         return {"text": text}
         
     except Exception as e:
         logger.error(f"STT Error: {str(e)}", exc_info=True)
+        # 타임아웃 등
+        detail_msg = f"STT processing failed: {str(e)}"
+        if "Timeout" in str(e):
+             detail_msg = "STT Service Timeout (Network or Worker busy)"
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"STT processing failed: {str(e)}"
+            detail=detail_msg
         )
 
 
@@ -58,15 +68,11 @@ async def recognize_audio(file: UploadFile = File(...)):
 async def stt_websocket(websocket: WebSocket, interview_id: int):
     """
     [Deprecated] WebSocket STT Endpoint
-    
-    Deepgram 스트리밍을 사용하던 기존 엔드포인트입니다.
-    Hugging Face Whisper 모델로 전환되면서, 
-    실시간 스트리밍 대신 프론트엔드 VAD + REST API (/recognize) 방식을 사용해야 합니다.
     """
     await websocket.accept()
     await websocket.send_json({
         "type": "error",
-        "message": "WebSocket STT is deprecated. Please use POST /api/stt/recognize with audio file."
+        "message": "WebSocket STT is deprecated. Please use POST /stt/recognize."
     })
     await websocket.close()
 
