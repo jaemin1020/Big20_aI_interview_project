@@ -1,7 +1,9 @@
 FROM python:3.10-slim
 
 # 1. 시스템 의존성 설치 (OpenCV, Llama-cpp, DeepFace 및 빌드를 위한 도구)
-RUN apt-get update && apt-get install -y \
+# 한국 미러(KAIST) 사용으로 속도 및 안정성 향상
+RUN sed -i 's/deb.debian.org/ftp.kaist.ac.kr/g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --fix-missing \
     build-essential \
     cmake \
     git \
@@ -21,9 +23,9 @@ WORKDIR /app
 # 최신 패키지 빌드 및 wheel 설치를 위해 pip, setuptools, wheel 최신화 필수
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# 3. 핵심 의존성 선행 설치 (빌드 병목 및 의존성 충돌 방지)
-# numpy와 cython은 llama-cpp-python 및 deepface 빌드 시 사전에 필요할 수 있음
-RUN pip install --no-cache-dir "numpy>=1.23.0,<2.0.0" "Cython"
+# 3. 핵심 의존성 선행 설치
+# 네트워크 불안정을 방지하기 위해 timeout과 retries를 넉넉하게 설정합니다.
+RUN pip install --no-cache-dir --timeout 100 --retries 10 "numpy>=1.23.0,<2.0.0" "Cython"
 
 # 4. llama-cpp-python 빌드 및 설치 (CPU 최적화: OpenBLAS 사용)
 # CMAKE_ARGS를 통해 CPU 연산 최적화를 강제합니다.
