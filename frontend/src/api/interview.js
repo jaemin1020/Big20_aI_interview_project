@@ -11,9 +11,12 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('[API] Request to:', config.url, '| Token present:', !!token);
+        console.log('[API] Request to:', config.url, '| Token present: true');
     } else {
-        console.warn('[API] Request to:', config.url, '| No token found');
+        // Skip warning for auth endpoints as they don't need a token
+        if (!['/auth/token', '/auth/register'].includes(config.url)) {
+            console.warn('[API] Request to:', config.url, '| No token found');
+        }
     }
     return config;
 }, (error) => {
@@ -25,12 +28,17 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            console.error('[API] 401 Unauthorized - Token may be expired or invalid');
-            // Clear invalid token
-            localStorage.removeItem('token');
-            // Redirect to login if not already on auth page
-            if (window.location.pathname !== '/') {
-                window.location.href = '/';
+            // Distinguish between login failure and token expiration
+            if (error.config.url === '/auth/token') {
+                console.error('[API] 401 Unauthorized - 로그인 정보가 올바르지 않습니다.');
+            } else {
+                console.error('[API] 401 Unauthorized - 세션이 만료되었거나 토큰이 유효하지 않습니다.');
+                // Clear invalid token
+                localStorage.removeItem('token');
+                // Redirect to login if not already on auth page
+                if (window.location.pathname !== '/') {
+                    window.location.href = '/';
+                }
             }
         }
         return Promise.reject(error);
@@ -55,13 +63,13 @@ export const login = async (username, password) => {
     const formData = new URLSearchParams();
     formData.append('username', username);
     formData.append('password', password);
-    
+
     const response = await api.post('/auth/token', formData.toString(), {
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
     });
-    
+
     if (response.data.access_token) {
         localStorage.setItem('token', response.data.access_token);
     }
@@ -148,7 +156,7 @@ export const getEvaluationReport = async (interviewId) => {
 export const uploadResume = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await api.post('/api/resumes/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data'
