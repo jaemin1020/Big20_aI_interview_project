@@ -23,6 +23,7 @@ import ResumePage from './pages/landing/ResumePage';
 import EnvTestPage from './pages/setup/EnvTestPage';
 import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
+import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
 import AuthPage from './pages/auth/AuthPage';
 
@@ -243,12 +244,13 @@ function App() {
   const initInterviewSession = async () => {
     setIsLoading(true);
     try {
-      // 1. Create Interview with Parsed Position & User Name
+      // 1. Create Interview with Parsed Position & Resume ID
       const interviewPosition = parsedResumeData?.structured_data?.target_position || parsedResumeData?.position || position || 'General';
+      const resumeId = parsedResumeData?.id || null;
       
-      console.log("Creating interview with:", { interviewPosition });
+      console.log("Creating interview with:", { interviewPosition, resumeId });
 
-      const newInterview = await createInterview(interviewPosition, null, null); 
+      const newInterview = await createInterview(interviewPosition, null, resumeId, null); 
       setInterview(newInterview);
 
       // 2. Get Questions
@@ -337,7 +339,7 @@ function App() {
       await completeInterview(interview.id);
       const res = await getEvaluationReport(interview.id);
       setReport(res);
-      setStep('result');
+      // Stay on 'loading' step - user will click "결과 확인하기" button to proceed
     } catch (err) {
       console.error("Finish error:", err);
       alert('면접 종료 처리 중 오류가 발생했습니다.');
@@ -553,11 +555,19 @@ function App() {
       )}
 
       {step === 'loading' && (
-        <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
-          <h2 className="text-gradient">AI 분석 리포트 생성 중...</h2>
-          <div className="spinner" style={{ width: '60px', height: '60px', borderTopColor: 'var(--primary)' }}></div>
-          <p style={{ color: 'var(--text-muted)' }}>답변 내용을 바탕으로 정밀한 결과를 도출하고 있습니다. 잠시만 기다려주세요.</p>
-        </div>
+        <InterviewCompletePage 
+          isReportLoading={!report}
+          onCheckResult={() => {
+            if (report) {
+              setStep('result');
+            }
+          }}
+          onExit={() => {
+            setStep('landing');
+            setCurrentIdx(0);
+            setReport(null);
+          }}
+        />
       )}
 
       {step === 'result' && (
