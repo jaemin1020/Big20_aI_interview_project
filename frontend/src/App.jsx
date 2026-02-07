@@ -11,7 +11,7 @@ import {
   register as apiRegister, 
   logout as apiLogout, 
   getCurrentUser,
-  getDeepgramToken
+  recognizeAudio
 } from './api/interview';
 
 
@@ -120,6 +120,8 @@ function App() {
   const wsRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -288,15 +290,17 @@ function App() {
     }
   };
 
+  // WebSocket Setup (Eye Tracking Only - Media Server)
+  // STT는 이제 REST API를 사용하므로 여기서 처리하지 않음
   const setupWebSocket = (sessionId) => {
     const ws = new WebSocket(`${WS_URL}/ws/${sessionId}`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'stt_result' && data.text) {
-          setTranscript(prev => prev + ' ' + data.text);
-        } else if (data.type === 'eye_tracking') {
+        // if (data.type === 'stt_result') ... // Deprecated via WS
+        
+        if (data.type === 'eye_tracking') {
              drawTracking(data.data);
         }
       } catch (err) { console.error('[WS] Parse error:', err); }
@@ -324,13 +328,56 @@ function App() {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
       setIsRecording(false);
     } else {
       setTranscript('');
-      setIsRecording(true);
+      const stream = videoRef.current?.srcObject;
+      if (!stream) {
+         console.warn("No stream found via videoRef, trying getUserMedia");
+         try {
+           const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+           startRecorder(newStream);
+         } catch(e) { console.error("Mic permission error:", e); }
+         return;
+      }
+      startRecorder(stream);
     }
+  };
+
+  const startRecorder = (stream) => {
+     try {
+       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+       mediaRecorderRef.current = recorder;
+       audioChunksRef.current = [];
+
+       recorder.ondataavailable = (e) => {
+         if (e.data.size > 0) audioChunksRef.current.push(e.data);
+       };
+
+       recorder.onstop = async () => {
+         console.log("Recording stopped. Processing...");
+         setTranscript("답변 분석 중...");
+         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+         try {
+           const result = await recognizeAudio(blob);
+           console.log("STT Result:", result);
+           setTranscript(result.text || "내용 없음");
+         } catch (err) {
+           console.error("STT Error:", err);
+           setTranscript("음성 인식 오류 발생");
+         }
+       };
+
+       recorder.start();
+       setIsRecording(true);
+     } catch (e) {
+       console.error("Failed to start MediaRecorder:", e);
+     }
   };
 
 
@@ -425,6 +472,10 @@ function App() {
   };
 
   const nextQuestion = async () => {
+    if (isRecording) {
+        alert("답변이 기록 중입니다. 먼저 '답변 종료' 버튼을 눌러주세요.");
+        return;
+    }
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
 
@@ -434,11 +485,11 @@ function App() {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
-        setIsRecording(false);
+        // setIsRecording(false); // Already checked
       } else {
 
         setStep('loading');
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+        // if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
         await finishInterview();
 
@@ -452,11 +503,12 @@ function App() {
   useEffect(() => {
     if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
       setupWebRTC(interview.id);
-      setupWebSocket(interview.id);
+      setupWebSocket(interview.id); // For Eye Tracking
     }
   }, [step, interview]);
 
-  // 면접 시작 시 자동으로 녹음 시작 (Deepgram 타임아웃 방지)
+  // 면접 시작 시 자동으로 녹음 시작 (Deepgram 타임아웃 방지) -> 파일 기반이므로 자동 시작 끔
+  /*
   useEffect(() => {
     if (step === 'interview' && questions.length > 0 && !isRecording) {
       console.log('🎤 [AUTO] Starting recording automatically...');
@@ -464,10 +516,11 @@ function App() {
       isRecordingRef.current = true;
     }
   }, [step, questions]);
+  */
 
   useEffect(() => {
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      // if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
     };
   }, []);

@@ -26,6 +26,9 @@ python-dotenv>=1.0.1
 # Utility
 requests>=2.31.0
 
+
 # Speech-to-Text
-deepgram-sdk>=3.11.0
+# deepgram-sdk>=3.11.0  # Removed
+huggingface_hub>=0.20.0
+numpy>=1.24.0
 websockets>=12.0
