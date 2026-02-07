@@ -18,13 +18,13 @@ import {
 // Layout & UI
 import Header from './components/layout/Header';
 import MainPage from './pages/main/MainPage';
-import AuthPage from './pages/auth/AuthPage';
 import LandingPage from './pages/landing/LandingPage';
 import ResumePage from './pages/landing/ResumePage';
 import EnvTestPage from './pages/setup/EnvTestPage';
 import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import ResultPage from './pages/result/ResultPage';
+import AuthPage from './pages/auth/AuthPage';
 
 function App() {
   const [step, setStep] = useState(() => {
@@ -499,67 +499,14 @@ function App() {
         )}
 
       {step === 'auth' && (
-        <div className="card">
-          <h1>{authMode === 'login' ? '로그인' : '회원가입'}</h1>
-          <p style={{ marginBottom: '24px' }}>서비스를 이용하려면 로그인해주세요.</p>
-          <div className="input-group">
-            {authMode === 'register' && (
-              <div>
-                <label>성함</label>
-                <input
-                  type="text"
-                  value={account.fullName}
-                  onChange={(e) => setAccount({ ...account, fullName: e.target.value })}
-                  placeholder="이름을 입력하세요"
-                />
-              </div>
-            )}
-
-            {/* 회원가입 시 Email 입력 추가 */}
-            {authMode === 'register' && (
-              <div>
-                <label>이메일</label>
-                <input
-                  type="text"
-                  value={account.email}
-                  onChange={(e) => setAccount({ ...account, email: e.target.value })}
-                  placeholder="name@example.com"
-                />
-              </div>
-            )}
-
-            <div>
-              <label>아이디</label>
-              <input
-                type="text"
-                value={account.username}
-                onChange={(e) => setAccount({ ...account, username: e.target.value })}
-                placeholder="아이디를 입력하세요"
-              />
-            </div>
-            <div>
-              <label>비밀번호</label>
-              <input
-                type="password"
-                value={account.password}
-                maxLength={24}
-                onChange={(e) => setAccount({ ...account, password: e.target.value })}
-                placeholder="비밀번호 (최대 24자)"
-              />
-            </div>
-            {authError && <p className="error-message">{authError}</p>}
-          </div>
-          <button className="premium-button" onClick={handleAuth} style={{ width: '100%', marginBottom: '16px' }}>
-            {authMode === 'login' ? '로그인' : '회원가입'}
-          </button>
-          <p
-            className="link-text"
-            style={{ textAlign: 'center' }}
-            onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-          >
-            {authMode === 'login' ? '회원가입' : '로그인'}
-          </p>
-        </div>
+        <AuthPage 
+          authMode={authMode}
+          setAuthMode={setAuthMode}
+          account={account}
+          setAccount={setAccount}
+          handleAuth={handleAuth}
+          authError={authError}
+        />
       )}
 
       {step === 'landing' && (
