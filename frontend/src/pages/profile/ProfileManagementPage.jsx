@@ -7,15 +7,41 @@ const ProfileManagementPage = ({ onBack, user }) => {
     const [profileImage, setProfileImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
 
-    // 희망 지원 정보
-    const [desiredCompanyType, setDesiredCompanyType] = useState('');
-    const [desiredPosition, setDesiredPosition] = useState('');
+    // 희망 지원 정보 (복수 선택)
+    const [desiredCompanyTypes, setDesiredCompanyTypes] = useState([]);
+    const [desiredPositions, setDesiredPositions] = useState([]);
 
     // 개인 정보 (회원가입 시 입력한 정보를 기본값으로)
     const [name, setName] = useState(user?.name || '');
     const [birthDate, setBirthDate] = useState(user?.birthDate || '');
     const [email, setEmail] = useState(user?.email || '');
     const [phone, setPhone] = useState(user?.phone || '');
+
+    const companyTypeOptions = [
+        '대기업', '중견기업', '중소기업', '스타트업', '외국계기업', '공기업'
+    ];
+
+    const positionOptions = [
+        '프론트엔드 개발자', '백엔드 개발자', '풀스택 개발자',
+        '데이터 엔지니어', 'AI/ML 엔지니어', 'DevOps 엔지니어',
+        'QA 엔지니어', '프로덕트 매니저', 'UI/UX 디자이너', '기타'
+    ];
+
+    const handleCompanyTypeToggle = (type) => {
+        setDesiredCompanyTypes(prev =>
+            prev.includes(type)
+                ? prev.filter(t => t !== type)
+                : [...prev, type]
+        );
+    };
+
+    const handlePositionToggle = (position) => {
+        setDesiredPositions(prev =>
+            prev.includes(position)
+                ? prev.filter(p => p !== position)
+                : [...prev, position]
+        );
+    };
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -33,8 +59,8 @@ const ProfileManagementPage = ({ onBack, user }) => {
         // API 호출 로직
         const profileData = {
             profileImage,
-            desiredCompanyType,
-            desiredPosition,
+            desiredCompanyTypes,
+            desiredPositions,
             name,
             birthDate,
             email,
@@ -111,65 +137,97 @@ const ProfileManagementPage = ({ onBack, user }) => {
                     희망 지원 정보
                 </h3>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     {/* 희망 기업 유형 */}
                     <div>
-                        <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            희망 기업 유형
+                        <label style={{ display: 'block', marginBottom: '12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            희망 기업 유형 (복수 선택 가능)
                         </label>
-                        <select
-                            value={desiredCompanyType}
-                            onChange={(e) => setDesiredCompanyType(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '12px',
-                                borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: 'rgba(255,255,255,0.05)',
-                                color: 'var(--text-main)',
-                                outline: 'none'
-                            }}
-                        >
-                            <option value="">선택하세요</option>
-                            <option value="대기업">대기업</option>
-                            <option value="중견기업">중견기업</option>
-                            <option value="중소기업">중소기업</option>
-                            <option value="스타트업">스타트업</option>
-                            <option value="외국계기업">외국계기업</option>
-                            <option value="공기업">공기업</option>
-                        </select>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                            gap: '12px',
+                            padding: '1rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            borderRadius: '8px',
+                            border: '1px solid var(--glass-border)'
+                        }}>
+                            {companyTypeOptions.map(type => (
+                                <label
+                                    key={type}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        padding: '8px',
+                                        borderRadius: '6px',
+                                        background: desiredCompanyTypes.includes(type) ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                                        border: `1px solid ${desiredCompanyTypes.includes(type) ? '#6366f1' : 'transparent'}`,
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={desiredCompanyTypes.includes(type)}
+                                        onChange={() => handleCompanyTypeToggle(type)}
+                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                    <span style={{ fontSize: '0.9rem' }}>{type}</span>
+                                </label>
+                            ))}
+                        </div>
+                        {desiredCompanyTypes.length > 0 && (
+                            <p style={{ fontSize: '0.85rem', color: '#6366f1', marginTop: '8px' }}>
+                                선택됨: {desiredCompanyTypes.join(', ')}
+                            </p>
+                        )}
                     </div>
 
                     {/* 희망 직무 */}
                     <div>
-                        <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            희망 직무
+                        <label style={{ display: 'block', marginBottom: '12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            희망 직무 (복수 선택 가능)
                         </label>
-                        <select
-                            value={desiredPosition}
-                            onChange={(e) => setDesiredPosition(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '12px',
-                                borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: 'rgba(255,255,255,0.05)',
-                                color: 'var(--text-main)',
-                                outline: 'none'
-                            }}
-                        >
-                            <option value="">선택하세요</option>
-                            <option value="프론트엔드 개발자">프론트엔드 개발자</option>
-                            <option value="백엔드 개발자">백엔드 개발자</option>
-                            <option value="풀스택 개발자">풀스택 개발자</option>
-                            <option value="데이터 엔지니어">데이터 엔지니어</option>
-                            <option value="AI/ML 엔지니어">AI/ML 엔지니어</option>
-                            <option value="DevOps 엔지니어">DevOps 엔지니어</option>
-                            <option value="QA 엔지니어">QA 엔지니어</option>
-                            <option value="프로덕트 매니저">프로덕트 매니저</option>
-                            <option value="UI/UX 디자이너">UI/UX 디자이너</option>
-                            <option value="기타">기타</option>
-                        </select>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                            gap: '12px',
+                            padding: '1rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            borderRadius: '8px',
+                            border: '1px solid var(--glass-border)'
+                        }}>
+                            {positionOptions.map(position => (
+                                <label
+                                    key={position}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        padding: '8px',
+                                        borderRadius: '6px',
+                                        background: desiredPositions.includes(position) ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                                        border: `1px solid ${desiredPositions.includes(position) ? '#6366f1' : 'transparent'}`,
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={desiredPositions.includes(position)}
+                                        onChange={() => handlePositionToggle(position)}
+                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                    <span style={{ fontSize: '0.9rem' }}>{position}</span>
+                                </label>
+                            ))}
+                        </div>
+                        {desiredPositions.length > 0 && (
+                            <p style={{ fontSize: '0.85rem', color: '#6366f1', marginTop: '8px' }}>
+                                선택됨: {desiredPositions.join(', ')}
+                            </p>
+                        )}
                     </div>
                 </div>
             </GlassCard>
