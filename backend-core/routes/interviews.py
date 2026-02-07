@@ -36,6 +36,7 @@ async def create_interview(
         candidate_id=current_user.id,
         position=interview_data.position,
         company_id=interview_data.company_id,
+        resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
         start_time=datetime.utcnow()
