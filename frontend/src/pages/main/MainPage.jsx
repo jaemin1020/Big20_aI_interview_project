@@ -7,7 +7,8 @@ const MainPage = ({
   onLogin,
   onRegister,
   user,
-  onLogout
+  onLogout,
+  onHistory
 }) => {
   return (
     <div className="main-container animate-fade-in" style={{
@@ -48,7 +49,7 @@ const MainPage = ({
                 gap: '4px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
               }}>
-                <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>면접 이력</button>
+                <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
               </div>
             </div>
 
