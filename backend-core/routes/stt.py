@@ -13,7 +13,7 @@ router = APIRouter(prefix="/stt", tags=["Speech-to-Text"])
 # Celery 설정
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_BACKEND_URL = os.getenv("CELERY_BACKEND_URL", "redis://redis:6379/0")
-celery_app = Celery("stt_client", broker=CELERY_BROKER_URL, backend=CELERY_BACKEND_URL)
+celery_app = Celery("ai_worker", broker=CELERY_BROKER_URL, backend=CELERY_BACKEND_URL)
 
 
 @router.post("/recognize")
@@ -37,7 +37,8 @@ async def recognize_audio(file: UploadFile = File(...)):
         
         # 결과 대기 (최대 60초)
         # 중요: task.get()은 Blocking I/O이므로 메인 이벤트 루프를 차단하지 않도록 별도 스레드에서 실행
-        result = await asyncio.to_thread(task.get, timeout=60)
+        # 모델 초기 로딩 시간을 고려하여 타임아웃을 넉넉하게 설정 (60s -> 300s)
+        result = await asyncio.to_thread(task.get, timeout=300)
         
         if isinstance(result, dict) and result.get("status") == "error":
             error_msg = result.get("message", "Unknown error from worker")
