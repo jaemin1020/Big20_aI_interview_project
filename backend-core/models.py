@@ -33,28 +33,6 @@ class Speaker(str, Enum):
     AI = "AI"
     USER = "User"
 
-class SectionType(str, Enum):
-    """이력서 섹션 타입 (RAG 검색 정확도 향상용)"""
-    SKILL_CERT = "skill_cert"  # 기술 스택 + 자격증
-    CAREER_PROJECT = "career_project"  # 경력 + 프로젝트
-    COVER_LETTER = "cover_letter"  # 자기소개서 (지원동기, 성격, 포부 등)
-    TARGET_INFO = "target_info"  # 지원 정보 (희망 회사, 직무 등)
-    EDUCATION = "education"  # 학력 사항
-
-class ResumeSectionType(str, Enum):
-    """멀티 섹션 임베딩 타입 (구조화된 이력서 섹션)"""
-    PROFILE = "profile"  # 프로필 (이름, 연락처, 지원 정보)
-    EXPERIENCE = "experience"  # 경력
-    PROJECT = "project"  # 프로젝트
-    EDUCATION = "education"  # 학력
-    SELF_INTRODUCTION = "self_introduction"  # 자기소개서
-    CERTIFICATION = "certification"  # 자격증
-    LANGUAGE = "language"  # 어학
-    SKILL = "skill"  # 기술 스택
-    AWARD = "award"  # 수상 경력
-    ACTIVITY = "activity"  # 대외활동
-
-
 # ==================== Tables ====================
 
 class User(SQLModel, table=True):
@@ -95,6 +73,13 @@ class Resume(SQLModel, table=True):
         description="경력, 학력, 기술스택 등 구조화된 데이터"
     )
     
+    # 벡터 임베딩 (768차원 - 이력서 전체 내용)
+    embedding: Any = Field(
+        default=None,
+        sa_column=Column(Vector(1024)),
+        description="이력서 내용 벡터 (유사 이력서 검색용)"
+    )
+    
     # 메타데이터
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = Field(default=None, description="파싱 완료 시각")
@@ -104,91 +89,6 @@ class Resume(SQLModel, table=True):
     # Relationships
     candidate: User = Relationship(back_populates="resumes")
     interviews: List["Interview"] = Relationship(back_populates="resume")
-    chunks: List["ResumeChunk"] = Relationship(back_populates="resume")
-    section_embeddings: List["ResumeSectionEmbedding"] = Relationship(back_populates="resume")
-
-
-class ResumeChunk(SQLModel, table=True):
-    """이력서 청크 테이블 (RAG용 - 문맥 기반 검색)"""
-    __tablename__ = "resume_chunks"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    resume_id: int = Field(foreign_key="resumes.id", index=True)
-    
-    # 청크 내용
-    content: str = Field(description="잘게 쪼개진 이력서 텍스트 조각")
-    chunk_index: int = Field(description="청크 순서 (0부터 시작)")
-    
-    # 섹션 타입 (Phase 2: RAG 검색 정확도 향상)
-    section_type: Optional[str] = Field(
-        default=None,
-        index=True,
-        description="이력서 섹션 분류 (직무/인성 질문 그룹화용)"
-    )
-    
-    # 벡터 임베딩 (1024차원 - KURE-v1)
-    embedding: Any = Field(
-        default=None,
-        sa_column=Column(Vector(1024)),
-        description="청크의 벡터 임베딩 (유사도 검색용)"
-    )
-    
-    # 메타데이터
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Relationship
-    resume: Resume = Relationship(back_populates="chunks")
-
-
-class ResumeSectionEmbedding(SQLModel, table=True):
-    """이력서 섹션별 임베딩 테이블 (구조화된 멀티 섹션 RAG용)"""
-    __tablename__ = "resume_section_embeddings"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    resume_id: int = Field(foreign_key="resumes.id", index=True)
-    
-    # 섹션 정보
-    section_type: ResumeSectionType = Field(
-        index=True,
-        description="섹션 타입 (profile, experience, project 등)"
-    )
-    section_index: int = Field(
-        default=0,
-        description="같은 타입 내 순서 (예: 경력 1, 경력 2)"
-    )
-    section_id: Optional[str] = Field(
-        default=None,
-        description="섹션 고유 ID (예: exp_1, proj_2)"
-    )
-    
-    # 섹션 내용
-    content: str = Field(description="섹션의 텍스트 내용")
-    
-    # 구조화된 데이터 (JSON)
-    section_metadata: Optional[Dict[str, Any]] = Field(
-        default=None,
-        sa_column=Column(JSONB),
-        description="섹션별 메타데이터 (회사명, 기간, 기술스택 등)"
-    )
-    
-    # 벡터 임베딩 (1024차원 - KURE-v1)
-    embedding: Any = Field(
-        default=None,
-        sa_column=Column(Vector(1024)),
-        description="섹션의 벡터 임베딩 (의미 기반 검색용)"
-    )
-    
-    # 자기소개서 타입 분류 (self_introduction인 경우)
-    si_type: Optional[str] = Field(
-        default=None,
-        description="자기소개서 질문 타입 (지원동기, 협업경험 등)"
-    )
-    
-    # 메타데이터
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Relationship
-    resume: Resume = Relationship(back_populates="section_embeddings")
 
 
 class Company(SQLModel, table=True):
@@ -205,7 +105,7 @@ class Company(SQLModel, table=True):
     ideal: Optional[str] = Field(default=None, description="회사가 추구하는 인재상 및 가치관")
     description: Optional[str] = Field(default=None, description="회사 소개 및 비전")
     
-    # 벡터 임베딩 (1024차원 - ideal + description 통합 임베딩)
+    # 벡터 임베딩 (768차원 - ideal + description 통합 임베딩)
     embedding: Any = Field(
         default=None,
         sa_column=Column(Vector(1024)),
@@ -273,7 +173,7 @@ class Question(SQLModel, table=True):
     # 평가 기준 (JSON 형식)
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
     
-    # 벡터 임베딩 (1024차원 - 질문 유사도 검색용)
+    # 벡터 임베딩 (768차원 - 질문 유사도 검색용)
     embedding: Optional[List[float]] = Field(
         default=None,
         sa_column=Column(Vector(1024))
@@ -354,7 +254,7 @@ class AnswerBank(SQLModel, table=True):
     # 답변 내용
     answer_text: str
     
-    # 벡터 임베딩 (1024차원 - Question과 동일한 모델 사용)
+    # 벡터 임베딩 (768차원 - Question과 동일한 모델 사용)
     embedding: Optional[List[float]] = Field(
         default=None,
         sa_column=Column(Vector(1024))
@@ -395,7 +295,6 @@ class InterviewCreate(SQLModel):
     """면접 생성 요청 모델"""
     position: str
     company_id: Optional[str] = None
-    resume_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
 
 class InterviewResponse(SQLModel):
