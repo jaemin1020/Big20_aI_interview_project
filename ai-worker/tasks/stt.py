@@ -15,8 +15,10 @@ MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo")
 def load_stt_pipeline():
     global stt_pipeline
     try:
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        # cuDNN 에러 방지를 위해 CPU 사용 강제 (Docker Slim 이미지 한계)
+        # GPU 사용을 원할 경우 nvidia/cuda 베이스 이미지 사용 필요
+        device = "cpu" 
+        torch_dtype = torch.float32
 
         logger.info(f"Loading Whisper Pipeline ({MODEL_ID}) on {device} (dtype={torch_dtype})...")
         
