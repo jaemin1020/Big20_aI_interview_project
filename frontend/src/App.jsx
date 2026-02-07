@@ -25,6 +25,7 @@ import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
+import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AuthPage from './pages/auth/AuthPage';
 
 // Environment variables for WebRTC/WebSocket
@@ -534,6 +535,7 @@ function App() {
           showLogout={!!user}
           onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
+          onHistory={() => setStep('history')}
         />
       )}
 
@@ -578,6 +580,7 @@ function App() {
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
             onLogout={handleLogout}
+            onHistory={() => setStep('history')}
           />
         )}
 
@@ -589,6 +592,16 @@ function App() {
             setAccount={setAccount}
             handleAuth={handleAuth}
             authError={authError}
+          />
+        )}
+
+        {step === 'history' && (
+          <InterviewHistoryPage
+            onBack={() => setStep('landing')}
+            onViewResult={(reportData) => {
+              setReport(reportData);
+              setStep('result');
+            }}
           />
         )}
 
