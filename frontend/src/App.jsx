@@ -46,6 +46,7 @@ function App() {
   const [authError, setAuthError] = useState('');
 
   const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
+  const [envTestStep, setEnvTestStep] = useState('audio'); // audio or video
 
 
   useEffect(() => {
@@ -540,7 +541,13 @@ function App() {
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
           onProfileManagement={() => setStep('profile')}
-          pageTitle={step === 'history' ? '면접 이력' : step === 'settings' ? '계정 설정' : step === 'profile' ? '프로필 관리' : null}
+          pageTitle={
+            step === 'history' ? '면접 이력' :
+              step === 'settings' ? '계정 설정' :
+                step === 'profile' ? '프로필 관리' :
+                  step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
+                    null
+          }
         />
       )}
 
@@ -628,7 +635,7 @@ function App() {
           />
         )}
 
-        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
+        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} onStepChange={setEnvTestStep} />}
 
         {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 

@@ -3,17 +3,24 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext }) => {
+const EnvTestPage = ({ onNext, onStepChange }) => {
   const [step, setStep] = useState('audio'); // audio, video
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [videoStream, setVideoStream] = useState(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
-  
+
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
+
+  // Notify parent of step change
+  useEffect(() => {
+    if (onStepChange) {
+      onStepChange(step);
+    }
+  }, [step, onStepChange]);
 
   // Real Audio Level Visualization & Deepgram STT
   useEffect(() => {
@@ -28,7 +35,7 @@ const EnvTestPage = ({ onNext }) => {
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+
         // 1. Audio Level Visualization
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
@@ -53,7 +60,7 @@ const EnvTestPage = ({ onNext }) => {
           }
 
           const average = values / length;
-          const level = Math.min(100, Math.max(0, average * 2)); 
+          const level = Math.min(100, Math.max(0, average * 2));
           setAudioLevel(level);
         };
 
@@ -67,35 +74,35 @@ const EnvTestPage = ({ onNext }) => {
         };
 
         mediaRecorder.onstop = async () => {
-           const blob = new Blob(chunks, { type: 'audio/webm' });
-           chunks = [];
-           console.log("Audio recording stopped, sending to server...");
-           
-           try {
-             // 동적으로 import하여 순환참조 방지
-             const { recognizeAudio } = await import('../../api/interview');
-             const result = await recognizeAudio(blob);
-             if (result && result.text) {
-                setTranscript(result.text);
-                setIsRecognitionOk(true);
-             }
-           } catch (err) {
-             console.error("STT Recognition failed:", err);
-             setTranscript("인식 실패: 다시 시도해주세요.");
-           }
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          chunks = [];
+          console.log("Audio recording stopped, sending to server...");
+
+          try {
+            // 동적으로 import하여 순환참조 방지
+            const { recognizeAudio } = await import('../../api/interview');
+            const result = await recognizeAudio(blob);
+            if (result && result.text) {
+              setTranscript(result.text);
+              setIsRecognitionOk(true);
+            }
+          } catch (err) {
+            console.error("STT Recognition failed:", err);
+            setTranscript("인식 실패: 다시 시도해주세요.");
+          }
         };
 
         // 5초마다 녹음 끊어서 전송 (단순 테스트용)
         // 실제로는 VAD 등을 쓰면 좋지만 테스트 페이지이므로 자동 루프
         const startLoop = () => {
-           if (mediaRecorder.state === 'inactive') {
-              mediaRecorder.start();
-              setTimeout(() => {
-                if (mediaRecorder.state === 'recording') {
-                   mediaRecorder.stop();
-                }
-              }, 4000); // 4초 녹음
-           }
+          if (mediaRecorder.state === 'inactive') {
+            mediaRecorder.start();
+            setTimeout(() => {
+              if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+              }
+            }, 4000); // 4초 녹음
+          }
         };
 
         // 첫 시작
@@ -120,7 +127,7 @@ const EnvTestPage = ({ onNext }) => {
       if (microphone) microphone.disconnect();
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
-      
+
       // Clean up Deepgram & MediaRecorder
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
       if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
@@ -136,7 +143,7 @@ const EnvTestPage = ({ onNext }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setVideoStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
-      
+
       // Simulate Face Detection
       setTimeout(() => {
         setIsFaceDetected(true);
@@ -177,18 +184,18 @@ const EnvTestPage = ({ onNext }) => {
           </div>
           <h1 className="text-gradient">음성테스트를 시작합니다.</h1>
           <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
-          
+
           <div style={{ margin: '2rem 0' }}>
-            <img 
-              src="/mic_icon.png" 
-              alt="Microphone" 
-              style={{ 
-                width: '64px', 
-                height: '64px', 
+            <img
+              src="/mic_icon.png"
+              alt="Microphone"
+              style={{
+                width: '64px',
+                height: '64px',
                 objectFit: 'contain',
                 filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
                 marginBottom: '1.5rem'
-              }} 
+              }}
             />
             <p style={{ fontSize: '1.4rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '12px' }}>
               "AI 모의면접 진행할 준비가 되었습니다. "
@@ -206,11 +213,11 @@ const EnvTestPage = ({ onNext }) => {
           </div>
 
           {/* Transcript Box */}
-          <div style={{ 
-            minHeight: '80px', 
-            background: 'var(--bg-darker)', 
-            borderRadius: '12px', 
-            padding: '1rem', 
+          <div style={{
+            minHeight: '80px',
+            background: 'var(--bg-darker)',
+            borderRadius: '12px',
+            padding: '1rem',
             marginBottom: '2rem',
             border: '1px solid var(--glass-border)',
             textAlign: 'left'
@@ -222,15 +229,15 @@ const EnvTestPage = ({ onNext }) => {
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-             <PremiumButton onClick={handleRetry} variant="secondary" style={{ flex: 1 }}>
-               테스트 다시 진행
-             </PremiumButton>
-             <PremiumButton 
-               onClick={handleNext} 
-               style={{ flex: 1 }}
-             >
-               다음 진행
-             </PremiumButton>
+            <PremiumButton onClick={handleRetry} variant="secondary" style={{ flex: 1 }}>
+              테스트 다시 진행
+            </PremiumButton>
+            <PremiumButton
+              onClick={handleNext}
+              style={{ flex: 1 }}
+            >
+              다음 진행
+            </PremiumButton>
           </div>
         </GlassCard>
       </div>
@@ -249,17 +256,17 @@ const EnvTestPage = ({ onNext }) => {
         <p style={{ marginBottom: '2rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
 
         <div style={{ position: 'relative', marginBottom: '2rem' }}>
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
             style={{ width: '100%', borderRadius: '20px', background: '#000' }}
           />
-          <div style={{ 
-            position: 'absolute', 
-            top: '50%', 
-            left: '50%', 
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
             transform: 'translate(-50%, -50%)',
             width: '200px',
             height: '250px',
@@ -273,10 +280,10 @@ const EnvTestPage = ({ onNext }) => {
             justifyContent: 'center'
           }}>
             {isFaceDetected && (
-              <div style={{ 
-                background: '#10b981', 
-                color: 'white', 
-                padding: '0.5rem 1rem', 
+              <div style={{
+                background: '#10b981',
+                color: 'white',
+                padding: '0.5rem 1rem',
                 borderRadius: '20px',
                 fontWeight: 'bold',
                 fontSize: '0.9rem',
