@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -85,17 +85,33 @@ export const getCurrentUser = async () => {
     return response.data;
 };
 
-export const getDeepgramToken = async () => {
-    const response = await api.get('/auth/deepgram-token');
-    return response.data.temp_key;
+// export const getDeepgramToken = async () => {
+//     const response = await api.get('/auth/deepgram-token');
+//     return response.data.temp_key;
+// };
+// -> Removed Deepgram Token API
+
+export const recognizeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    // 파일명은 timestamp 등으로 유니크하게 지정 (백엔드 처리용)
+    formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
+    
+    // Hugging Face Whisper API 엔드포인트 호출
+    const response = await api.post('/stt/recognize', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    });
+    return response.data; // { text: "..." }
 };
 
 // ==================== Interview ====================
 
-export const createInterview = async (position, jobPostingId = null, scheduledTime = null) => {
+export const createInterview = async (position, companyId = null, resumeId = null, scheduledTime = null) => {
     const response = await api.post('/interviews', {
         position,
-        job_posting_id: jobPostingId,
+        company_id: companyId,
+        resume_id: resumeId,
         scheduled_time: scheduledTime
     });
     return response.data;
