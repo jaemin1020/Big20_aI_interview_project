@@ -1,6 +1,9 @@
 import React from 'react';
 
 const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, onHistory }) => {
+  const [isManageOpen, setIsManageOpen] = React.useState(false);
+  const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
+
   return (
     <header style={{
       display: 'flex',
@@ -57,78 +60,92 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
           {/* 면접 관리 드롭다운 */}
-          <div className="header-dropdown-container" style={{ position: 'relative' }}>
+          <div
+            className="header-dropdown-container"
+            style={{ position: 'relative' }}
+            onMouseEnter={() => setIsManageOpen(true)}
+            onMouseLeave={() => setIsManageOpen(false)}
+          >
             <button
               style={{
                 padding: '8px 16px',
                 borderRadius: '20px',
                 border: '1px solid var(--glass-border)',
-                background: 'transparent',
+                background: isManageOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
                 color: 'var(--text-main)',
                 cursor: 'pointer',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                outline: 'none'
               }}
-              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
             >
               면접 관리
             </button>
-            <div className="header-dropdown-menu" style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              width: '160px',
-              marginTop: '8px',
-              background: 'var(--glass-bg)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: '12px',
-              padding: '8px',
-              display: 'none',
-              flexDirection: 'column',
-              gap: '4px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-            }}>
-              <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
-            </div>
+            {isManageOpen && (
+              <div className="header-dropdown-menu" style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                width: '160px',
+                marginTop: '4px',
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '12px',
+                padding: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                animation: 'fadeIn 0.2s ease'
+              }}>
+                <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
+              </div>
+            )}
           </div>
 
           {/* 내 정보 드롭다운 */}
-          <div className="header-dropdown-container" style={{ position: 'relative' }}>
+          <div
+            className="header-dropdown-container"
+            style={{ position: 'relative' }}
+            onMouseEnter={() => setIsMyInfoOpen(true)}
+            onMouseLeave={() => setIsMyInfoOpen(false)}
+          >
             <button
               style={{
                 padding: '8px 16px',
                 borderRadius: '20px',
                 border: '1px solid var(--glass-border)',
-                background: 'transparent',
+                background: isMyInfoOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
                 color: 'var(--text-main)',
                 cursor: 'pointer',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                outline: 'none'
               }}
-              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
             >
               내 정보
             </button>
-            <div className="header-dropdown-menu" style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              width: '160px',
-              marginTop: '8px',
-              background: 'var(--glass-bg)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: '12px',
-              padding: '8px',
-              display: 'none',
-              flexDirection: 'column',
-              gap: '4px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-            }}>
-              <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>프로필 관리</button>
-              <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>계정 관리</button>
-            </div>
+            {isMyInfoOpen && (
+              <div className="header-dropdown-menu" style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                width: '160px',
+                marginTop: '4px',
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '12px',
+                padding: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                animation: 'fadeIn 0.2s ease'
+              }}>
+                <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>프로필 관리</button>
+                <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>계정 관리</button>
+              </div>
+            )}
           </div>
 
           <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)', margin: 'auto 0' }}></div>
@@ -142,7 +159,8 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
               background: 'rgba(239, 68, 68, 0.1)',
               color: '#ef4444',
               cursor: 'pointer',
-              transition: 'all 0.3s'
+              transition: 'all 0.3s',
+              outline: 'none'
             }}
             onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
             onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
@@ -151,30 +169,26 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           </button>
 
           <style>{`
-            .header-dropdown-container:hover .header-dropdown-menu {
-              display: flex !important;
-              animation: headerFadeIn 0.2s ease;
-            }
-            .dropdown-item {
-              padding: 10px 12px;
-              border-radius: 8px;
-              background: transparent;
-              border: none;
-              color: var(--text-main);
-              text-align: left;
-              cursor: pointer;
-              transition: all 0.2s;
-              font-size: 0.9rem;
-              white-space: nowrap;
-            }
-            .dropdown-item:hover {
-              background: rgba(255, 255, 255, 0.1);
-            }
-            @keyframes headerFadeIn {
+@keyframes fadeIn {
               from { opacity: 0; transform: translateY(-10px); }
               to { opacity: 1; transform: translateY(0); }
-            }
-          `}</style>
+}
+            .dropdown - item {
+  padding: 10px 12px;
+  border - radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text - main);
+  text - align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  font - size: 0.9rem;
+  white - space: nowrap;
+}
+            .dropdown - item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+`}</style>
         </div>
       )}
     </header>

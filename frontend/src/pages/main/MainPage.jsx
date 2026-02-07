@@ -10,6 +10,9 @@ const MainPage = ({
   onLogout,
   onHistory
 }) => {
+  const [isManageOpen, setIsManageOpen] = React.useState(false);
+  const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
+
   return (
     <div className="main-container animate-fade-in" style={{
       flex: 1,
@@ -26,60 +29,86 @@ const MainPage = ({
         {user ? (
           <>
             {/* 면접 관리 드롭다운 */}
-            <div className="dropdown-container" style={{ position: 'relative' }}>
+            <div
+              className="dropdown-container"
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setIsManageOpen(true)}
+              onMouseLeave={() => setIsManageOpen(false)}
+            >
               <PremiumButton
                 variant="secondary"
-                style={{ padding: '8px 20px', fontSize: '0.9rem' }}
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.9rem',
+                  background: isManageOpen ? 'rgba(255,255,255,0.1)' : 'var(--glass-bg)',
+                  outline: 'none'
+                }}
               >
                 면접 관리
               </PremiumButton>
-              <div className="dropdown-menu" style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                width: '160px',
-                marginTop: '8px',
-                background: 'var(--glass-bg)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '12px',
-                padding: '8px',
-                display: 'none', // CSS로 호버 처리 (스타일 태그 필요) 또는 JS로 처리
-                flexDirection: 'column',
-                gap: '4px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-              }}>
-                <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
-              </div>
+              {isManageOpen && (
+                <div className="dropdown-menu" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  width: '160px',
+                  marginTop: '4px',
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                  animation: 'fadeIn 0.2s ease'
+                }}>
+                  <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
+                </div>
+              )}
             </div>
 
             {/* 내 정보 드롭다운 */}
-            <div className="dropdown-container" style={{ position: 'relative' }}>
+            <div
+              className="dropdown-container"
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setIsMyInfoOpen(true)}
+              onMouseLeave={() => setIsMyInfoOpen(false)}
+            >
               <PremiumButton
                 variant="secondary"
-                style={{ padding: '8px 20px', fontSize: '0.9rem' }}
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.9rem',
+                  background: isMyInfoOpen ? 'rgba(255,255,255,0.1)' : 'var(--glass-bg)',
+                  outline: 'none'
+                }}
               >
                 내 정보
               </PremiumButton>
-              <div className="dropdown-menu" style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                width: '160px',
-                marginTop: '8px',
-                background: 'var(--glass-bg)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '12px',
-                padding: '8px',
-                display: 'none',
-                flexDirection: 'column',
-                gap: '4px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-              }}>
-                <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>프로필 관리</button>
-                <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>계정 관리</button>
-              </div>
+              {isMyInfoOpen && (
+                <div className="dropdown-menu" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  width: '160px',
+                  marginTop: '4px',
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                  animation: 'fadeIn 0.2s ease'
+                }}>
+                  <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>프로필 관리</button>
+                  <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>계정 관리</button>
+                </div>
+              )}
             </div>
 
             <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)' }}></div>
@@ -98,11 +127,11 @@ const MainPage = ({
               로그아웃
             </PremiumButton>
 
-            {/* Inline CSS for Hover Effect (임시) */}
+            {/* 스타일 정의 */}
             <style>{`
-              .dropdown-container:hover .dropdown-menu {
-                display: flex !important;
-                animation: fadeIn 0.2s ease;
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
               }
               .dropdown-item {
                 padding: 10px 12px;
@@ -114,13 +143,10 @@ const MainPage = ({
                 cursor: pointer;
                 transition: all 0.2s;
                 font-size: 0.9rem;
+                white-space: nowrap;
               }
               .dropdown-item:hover {
                 background: rgba(255, 255, 255, 0.1);
-              }
-              @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(-10px); }
-                to { opacity: 1; transform: translateY(0); }
               }
             `}</style>
           </>
