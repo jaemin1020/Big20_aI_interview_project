@@ -27,6 +27,8 @@ import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
 import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AuthPage from './pages/auth/AuthPage';
+import AccountSettingsPage from './pages/settings/AccountSettingsPage';
+import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 
 // Environment variables for WebRTC/WebSocket
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
@@ -536,7 +538,9 @@ function App() {
           onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
           onHistory={() => setStep('history')}
-          pageTitle={step === 'history' ? '면접 이력' : null}
+          onAccountSettings={() => setStep('settings')}
+          onProfileManagement={() => setStep('profile')}
+          pageTitle={step === 'history' ? '면접 이력' : step === 'settings' ? '계정 설정' : step === 'profile' ? '프로필 관리' : null}
         />
       )}
 
@@ -582,6 +586,8 @@ function App() {
             user={user}
             onLogout={handleLogout}
             onHistory={() => setStep('history')}
+            onAccountSettings={() => setStep('settings')}
+            onProfileManagement={() => setStep('profile')}
           />
         )}
 
@@ -673,6 +679,29 @@ function App() {
               setCurrentIdx(0);
               setReport(null);
             }}
+          />
+        )}
+
+        {step === 'history' && (
+          <InterviewHistoryPage
+            onBack={() => setStep('main')}
+            onViewResult={(reportData) => {
+              setReport(reportData);
+              setStep('result');
+            }}
+          />
+        )}
+
+        {step === 'settings' && (
+          <AccountSettingsPage
+            onBack={() => setStep('main')}
+          />
+        )}
+
+        {step === 'profile' && (
+          <ProfileManagementPage
+            onBack={() => setStep('main')}
+            user={user}
           />
         )}
       </div>
