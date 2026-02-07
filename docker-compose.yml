@@ -85,7 +85,10 @@ services:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
+<<<<<<< HEAD
       - ./backend-core:/backend-core # Shared Code Access
+=======
+>>>>>>> fcf5dd114240c311d9d88b39d5dda1a386002f76
     networks:
       - interview_network
 
