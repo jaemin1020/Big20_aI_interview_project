@@ -8,7 +8,9 @@ const MainPage = ({
   onRegister,
   user,
   onLogout,
-  onHistory
+  onHistory,
+  onAccountSettings,
+  onProfileManagement
 }) => {
   const [isManageOpen, setIsManageOpen] = React.useState(false);
   const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
@@ -105,8 +107,8 @@ const MainPage = ({
                   boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
                   animation: 'fadeIn 0.2s ease'
                 }}>
-                  <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>프로필 관리</button>
-                  <button className="dropdown-item" onClick={() => alert("준비 중인 기능입니다.")}>계정 관리</button>
+                  <button className="dropdown-item" onClick={onProfileManagement}>프로필 관리</button>
+                  <button className="dropdown-item" onClick={onAccountSettings}>계정 관리</button>
                 </div>
               )}
             </div>
