@@ -12,30 +12,7 @@ SET maintenance_work_mem = '256MB';
 
 -- 3. 테이블은 SQLModel이 자동 생성하지만, 추가 인덱스와 제약조건을 여기서 설정
 
--- Users 테이블 인덱스
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-
--- Interviews 테이블 인덱스
-CREATE INDEX IF NOT EXISTS idx_interviews_candidate_id ON interviews(candidate_id);
-CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status);
-CREATE INDEX IF NOT EXISTS idx_interviews_start_time ON interviews(start_time);
-
--- Questions 테이블 인덱스
-CREATE INDEX IF NOT EXISTS idx_questions_category ON questions(category);
-CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON questions(difficulty);
-CREATE INDEX IF NOT EXISTS idx_questions_position ON questions(position);
-CREATE INDEX IF NOT EXISTS idx_questions_vector_id ON questions(vector_id);
-
--- Transcripts 테이블 인덱스
-CREATE INDEX IF NOT EXISTS idx_transcripts_interview_id ON transcripts(interview_id);
-CREATE INDEX IF NOT EXISTS idx_transcripts_speaker ON transcripts(speaker);
-CREATE INDEX IF NOT EXISTS idx_transcripts_question_id ON transcripts(question_id);
-CREATE INDEX IF NOT EXISTS idx_transcripts_timestamp ON transcripts(timestamp);
-
--- Evaluation_Reports 테이블 인덱스
-CREATE INDEX IF NOT EXISTS idx_evaluation_reports_interview_id ON evaluation_reports(interview_id);
+-- 3. 테이블은 SQLModel이 자동 생성하므로, 인덱스 생성은 생략하거나 별도 마이그레이션으로 처리합니다.
 
 -- 4. Vector 유사도 검색을 위한 준비 (추후 확장용)
 -- Questions 테이블에 embedding 컬럼 추가 (선택적)
@@ -64,12 +41,29 @@ CREATE TRIGGER update_evaluation_reports_updated_at
 --     ('Frontend Engineer', 'Build amazing UIs', 'React, TypeScript, Vite', 'Frontend Developer')
 -- ON CONFLICT DO NOTHING;
 
--- 7. 통계 수집 (성능 최적화)
+-- 7. 벡터 검색 인덱스 생성 (Phase 2)
+-- resume_chunks 테이블의 embedding 컬럼에 HNSW 인덱스 생성
+-- HNSW (Hierarchical Navigable Small World): 고속 근사 최근접 이웃 검색
+CREATE INDEX IF NOT EXISTS idx_resume_chunks_embedding 
+ON resume_chunks 
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- 일반 인덱스 (검색 성능 향상)
+CREATE INDEX IF NOT EXISTS idx_resumes_status 
+ON resumes(processing_status);
+
+CREATE INDEX IF NOT EXISTS idx_resume_chunks_resume_id 
+ON resume_chunks(resume_id);
+
+-- 8. 통계 수집 (성능 최적화)
 ANALYZE users;
 ANALYZE interviews;
 ANALYZE questions;
 ANALYZE transcripts;
 ANALYZE evaluation_reports;
+ANALYZE resumes;
+ANALYZE resume_chunks;
 
 -- ==========================================
 -- 초기화 완료 메시지
