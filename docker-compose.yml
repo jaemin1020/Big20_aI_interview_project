@@ -83,7 +83,7 @@ services:
       - db
     volumes:
       - ./ai-worker:/app
-      - ./ai-worker/models:/app/models
+      - ./ai-worker/ml_models:/app/ml_models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core # Shared Code Access
     networks:

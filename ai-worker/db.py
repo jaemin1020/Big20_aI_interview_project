@@ -18,9 +18,9 @@ backend_core_docker = Path("/backend-core")
 backend_core_local = current_dir.parent / "backend-core"
 
 if backend_core_docker.exists():
-    sys.path.append(str(backend_core_docker))
+    sys.path.insert(0, str(backend_core_docker))
 elif backend_core_local.exists():
-    sys.path.append(str(backend_core_local))
+    sys.path.insert(0, str(backend_core_local))
 else:
     print("Warning: backend-core not found. Model imports may fail.")
 
@@ -37,12 +37,9 @@ except ImportError as e:
 
 # ==========================================
 # Database Connection
-# ==========================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
 
-
-# ==========================================
 # Helper Functions
 # ==========================================
 
@@ -88,16 +85,16 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
         report = session.exec(stmt).first()
-        
+
         if report:
             for key, value in kwargs.items():
                 if hasattr(report, key):
-                     setattr(report, key, value)
+                    setattr(report, key, value)
         else:
             valid_keys = EvaluationReport.__fields__.keys()
             filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
             report = EvaluationReport(interview_id=interview_id, **filtered_kwargs)
-        
+
         session.add(report)
         session.commit()
         session.refresh(report)
@@ -164,7 +161,7 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         ).order_by(
             Company.embedding.cosine_distance(embedding)
         ).limit(limit)
-        
+
         return session.exec(stmt).all()
 
 def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):

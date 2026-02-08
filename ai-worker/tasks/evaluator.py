@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from celery import shared_task
 
@@ -21,7 +22,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     개별 답변 평가 및 점수 반영 (EXAONE-3.5-7.8B-Instruct 사용)
     """
     logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
-    
+
     # 예외 처리: 답변이 없는 경우 LLM 호출 생략
     if not answer_text or not answer_text.strip():
         logger.warning(f"Empty answer for transcript {transcript_id}. Skipping LLM evaluation.")
@@ -30,7 +31,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             "communication_score": 0,
             "feedback": "답변이 제공되지 않았습니다."
         }
-    
+
     start_ts = time.time()
     
     try:
@@ -58,16 +59,16 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         
         # 질문 평점 업데이트 (선순환 구조)
         # 답변 점수 (0-100)
-        answer_quality = (tech_score + comm_score) * 10 
-        
+        answer_quality = (tech_score + comm_score) * 10
+
         if question_id:
             update_question_avg_score(question_id, answer_quality)
             logger.info(f"Updated Question {question_id} Avg Score with {answer_quality}")
 
         duration = time.time() - start_ts
         logger.info(f"Evaluation Completed ({duration:.2f}s)")
-        
-        return result
+
+        return result_dict
 
     except Exception as e:
         logger.error(f"Evaluation Failed: {e}")
@@ -75,11 +76,27 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
 
 @shared_task(name="tasks.evaluator.generate_final_report")
 def generate_final_report(interview_id: int):
+    """
+    최종 평가 리포트 생성 (엄격한 루브릭 기반)
+    A(15%), B(15%), C(20%), D(25%), E(25%) 가중치 적용
+    """
+    from db import (
+        create_or_update_evaluation_report,
+        update_interview_overall_score,
+        Interview, Company, Resume, Session, engine
+    )
+
     logger.info(f"Generating Final Report for Interview {interview_id}")
-    
-    # 1. Get all answers
-    answers = get_user_answers(interview_id)
-    if not answers:
+
+    with Session(engine) as session:
+        interview = session.get(Interview, interview_id)
+        if not interview: return
+
+        company = session.get(Company, interview.company_id) if interview.company_id else None
+        resume = session.get(Resume, interview.resume_id) if interview.resume_id else None
+        transcripts = get_interview_transcripts(interview_id)
+
+    if not transcripts:
         logger.warning("No answers found for this interview.")
         return
     

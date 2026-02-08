@@ -18,6 +18,10 @@
   - 평균 점수(`avg_score`)가 높고 사용 빈도(`usage_count`)가 낮은 질문 우선 선택
   - 선택 알고리즘: `score = avg_score - (usage_count * 0.01)` (점수 높고 덜 사용된 질문 우선)
 
+> **📝 수정 사항 (2026-01-27 함유라)**
+> 답변 점수(`avg_score`)를 질문의 품질로 보는 것은 논리적 오류가 있습니다.
+> **변경**: `avg_score` 대신 **`quality_score` (LLM이 평가한 질문 자체 점수)**를 기준으로 변경합니다.
+
 #### 1.2 사용 통계 추적
 
 - **기능**: 질문이 사용될 때마다 `usage_count` 자동 증가
@@ -71,6 +75,10 @@ class Question(SQLModel, table=True):
     avg_score: Optional[float] = None        # 평균 평가 점수 (0-100)
 ```
 
+> **📝 수정 사항 (2026-01-27 함유라)**
+> **변경**: `avg_score` 필드를 삭제하고, 질문 평가 전용 점수인 **`quality_score` (1-5점 척도)** 필드를 추가합니다.
+```
+
 #### 3.2 새로운 헬퍼 함수
 
 | 함수명                          | 기능                                 | 사용처       |
@@ -111,7 +119,7 @@ class Question(SQLModel, table=True):
 [질문 생성 요청] → AI-Worker
     ↓
 [DB 조회: 기존 질문 2개 선택]
-    ├─ avg_score 높은 순 정렬
+    ├─ quality_score 높은 순 정렬 (질문 자체 퀄리티 기준)
     ├─ usage_count 낮은 것 우선
     └─ increment_question_usage()
     ↓
@@ -121,11 +129,13 @@ class Question(SQLModel, table=True):
     ↓
 [사용자 답변 제출]
     ↓
-[Solar LLM 평가] → 점수 산출 (1-5)
+[Solar LLM 평가]
+    ├─ 1. 답변 평가 (User 점수)
+    └─ 2. 질문 평가 (Question 점수, 1-5점)
     ↓
-[update_question_avg_score()] → DB 업데이트
+[update_question_quality()] → DB 업데이트
     ↓
-[다음 면접에서 해당 질문의 avg_score 반영]
+[다음 면접에서 고품질 질문(`quality_score` high) 재사용]
 ```
 
 ---

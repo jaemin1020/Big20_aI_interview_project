@@ -222,4 +222,6 @@ uploads/
 docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
+# 유라 개인 테스트 작업 영역
+lala_test/
 .agent/

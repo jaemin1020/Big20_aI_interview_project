@@ -9,7 +9,6 @@ from db import (
     increment_question_usage,
     engine
 )
-from sqlmodel import Session, select
 
 # EXAONE LLM import
 from utils.exaone_llm import get_exaone_llm
@@ -22,13 +21,13 @@ class QuestionGenerator:
     전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
     """
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
@@ -36,32 +35,13 @@ class QuestionGenerator:
         logger.info("Initializing Question Generator with EXAONE model")
         self.llm = get_exaone_llm()
         self._initialized = True
-        logger.info("✅ Question Generator Initialized")
 
     def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
-        """
-        하이브리드 질문 생성 로직 (이력서 및 회사 정보 기반)
-        1. DB에서 검증된 질문 일부 재활용 (Reuse)
-        2. 이력서 + 회사 정보로 컨텍스트 구성
-        3. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
-        
-        Args:
-            position: 지원 직무
-            interview_id: 면접 ID (이력서/회사 정보 조회용)
-            count: 생성할 총 질문 수
-            reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
-        """
         from tools import ResumeTool, CompanyTool
-        
-        questions = []
-        reuse_count = int(count * reuse_ratio)
-        generate_count = count - reuse_count
-        
-        # 1. 컨텍스트 수집 (이력서 + 회사 정보)
-        context_parts = []
-        
+
+        # 1. 이력서 요약 가져오기
+        resume_summary = ""
         if interview_id:
-            # 이력서 정보
             resume_info = ResumeTool.get_resume_by_interview(interview_id)
             if resume_info.get("has_resume"):
                 context_parts.append(ResumeTool.format_for_llm(resume_info))
@@ -95,22 +75,66 @@ class QuestionGenerator:
         return questions[:count]  # 정확히 count개만 반환
     
     def _reuse_questions_from_db(self, position: str, count: int):
-        """DB에서 검증된 질문 가져오기"""
-        
         try:
             db_questions = get_best_questions_by_position(position, limit=count)
-            
+
             # 재활용 시 사용량 증가
             for q in db_questions:
                 try:
                     increment_question_usage(q.id)
-                except Exception as e:
-                    logger.warning(f"Question {q.id} 사용량 증가 실패: {e}")
-            
+                except:
+                    pass
             return [q.content for q in db_questions]
         except Exception as e:
-            logger.warning(f"DB 질문 조회 실패: {e}. 빈 리스트 반환")
+            logger.warning(f"DB 질문 조회 실패: {e}")
             return []
+
+    def generate_deep_dive_question(self, history: str, current_answer: str):
+        """동적 꼬리질문(Deep-Dive) 생성 프롬프트 고도화 (BS Detection 강화)"""
+        if not self.llm: return "추가 질문을 구성할 수 없습니다."
+
+        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+# Role
+당신은 지원자의 답변에서 허세(BS)를 찾아내고 기술적 밑바닥을 확인하는 20년 차 베테랑 테크 리드입니다.
+
+# Mission (Strict)
+1. **분석**: 답변을 요약하지 마십시오. 대신 "구체적 수치 부재", "원론적인 개념 나열", "직접 구현 여부 불분명" 등 **기술적 허점**을 반드시 한 줄로 지적하십시오.
+2. **질문**: 분석한 허점을 파고들어, 지원자가 실제 경험했는지 증명하게 만드는 날카로운 질문을 한 문장으로 던지십시오.
+
+# Persona & Guidelines
+- 말투는 반드시 냉철한 격식체(~하십시오체)를 사용하십시오.
+- 질문 시작은 반드시 "앞서 말씀하신 [특정 키워드] 부분과 관련하여..."를 사용하십시오.
+- 불필요한 서론/미사여구는 절대 배제하십시오.
+
+# Example
+지원자 답변: "서버 성능 향상을 위해 인덱스 최적화를 진행하여 속도를 많이 개선했습니다."
+[분석]: 어떤 인덱스 구조를 사용했는지와 구체적인 성능 개선 지표(TPS, Latency)가 누락되었습니다.
+[질문]: 앞서 말씀하신 인덱스 최적화 부분과 관련하여, 당시 사용한 인덱스 구조와 쿼리 응답 속도를 몇 ms에서 몇 ms로 개선하셨는지 구체적인 수치를 말씀해 주십시오.<|eot_id|><|start_header_id|>user<|end_header_id|>
+# Input Data
+- [History]: {history}
+- [Answer]: {current_answer}
+
+[분석]:
+[질문]:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+[분석]: """
+
+        try:
+            response = self.llm.invoke(prompt)
+            # 깔끔하게 [분석]부터 시작하도록 보정
+            full_response = "[분석]: " + response.strip()
+
+            # 줄바꿈 정제 (최대한 상위 2개 라인만 유지)
+            lines = [l.strip() for l in full_response.split('\n') if l.strip()]
+            valid_lines = [l for l in lines if l.startswith('[분석]:') or l.startswith('[질문]:')]
+
+            if len(valid_lines) >= 2:
+                return "\n".join(valid_lines[:2])
+
+            return "\n".join(lines[:2])
+
+        except Exception as e:
+            logger.error(f"Deep-Dive 생성 실패: {e}")
+            return "[분석]: 답변 내용이 추상적이며 기술적 근거가 부족합니다.\n[질문]: 앞서 말씀하신 내용 중 본인이 직접 설계하고 구현한 구체적인 로직에 대해 설명해 주십시오."
 
 @shared_task(name="tasks.question_generator.generate_questions")
 def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
