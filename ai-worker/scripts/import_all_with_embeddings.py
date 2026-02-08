@@ -25,6 +25,32 @@ from datetime import datetime
 # docker exec -it interview_worker python scripts/import_all_with_embeddings.py
 
 # ==========================================
+# 데이터 구조 (Data Structure)
+# ==========================================
+# 
+# 입력 JSON 형식:
+# [
+#     {
+#         "question": "질문 내용",
+#         "answer": "답변 내용",
+#         "subcategory": "소분류 (예: 머신러닝, 딥러닝)",  # Optional
+#         "industry": "산업 (예: IT/소프트웨어, AI/데이터)",  # Optional
+#         "company": "회사명 (예: 삼성전자, 카카오)",  # Optional
+#         "position": "직무 (예: Backend 개발자)"  # Optional
+#     }
+# ]
+#
+# DB 저장 매핑:
+# - subcategory → question_type (질문 세부 분류)
+# - industry → Question.industry (산업 분야, NULL 허용)
+# - company → Question.company (회사명, NULL 허용)
+# - position → Question.position (직무, NULL 허용)
+# - 소분류 정보를 기반으로 QuestionCategory 자동 분류
+# - NULL 값은 그대로 유지 (기본값 없음)
+#
+# ==========================================
+
+# ==========================================
 # Configuration
 # ==========================================
 
@@ -103,11 +129,35 @@ def import_questions(session, file_path, source_name, generator):
             
         # 3. 기술 (TECHNICAL) - Default
         return QuestionCategory.TECHNICAL, "직무지식"
+    
+    def auto_classify_by_subcategory(subcategory, text):
+        """소분류 정보를 기반으로 카테고리 자동 분류"""
+        subcategory_lower = subcategory.lower()
+        
+        # 인성/문화 관련 소분류
+        cultural_keywords = ["인성", "문화", "가치관", "태도", "성격", "협업", "소통"]
+        if any(keyword in subcategory_lower for keyword in cultural_keywords):
+            return QuestionCategory.CULTURAL_FIT
+        
+        # 경험/행동 관련 소분류
+        behavioral_keywords = ["경험", "프로젝트", "실무", "사례", "상황", "문제해결"]
+        if any(keyword in subcategory_lower for keyword in behavioral_keywords):
+            return QuestionCategory.BEHAVIORAL
+        
+        # 기술 관련 소분류 (기본값)
+        # 머신러닝, 딥러닝, 프로그래밍, 알고리즘 등
+        return QuestionCategory.TECHNICAL
 
     for item in data:
         q_text = item.get("question") or item.get("질문")
         # answer_cleaned 우선, 없으면 answer/답변 사용
         a_text = item.get("answer_cleaned") or item.get("answer") or item.get("답변")
+        
+        # 메타데이터 추출 (NULL 값 그대로 유지)
+        subcategory = item.get("subcategory") or item.get("소분류")  # 기본값 없음
+        industry_value = item.get("industry") or item.get("산업")  # 기본값 없음
+        company_value = item.get("company") or item.get("회사")  # 기본값 없음
+        position_value = item.get("position") or item.get("직무")  # 기본값 없음
 
         if not q_text or not a_text:
             skipped += 1
@@ -123,12 +173,16 @@ def import_questions(session, file_path, source_name, generator):
             continue
 
         # 1. Category Parsing
+        # 소분류 정보를 활용하여 카테고리 자동 분류
         category_str = item.get("QuestionCategory", "").lower()
         try:
             category = QuestionCategory(category_str)
         except ValueError:
-            # Fallback
-            category, _ = classify_question(q_text)
+            # 소분류 기반 자동 분류 (소분류가 있을 때만)
+            if subcategory:
+                category = auto_classify_by_subcategory(subcategory, q_text)
+            else:
+                category, _ = classify_question(q_text)
 
         # 2. Difficulty Parsing
         difficulty_str = item.get("QuestionDifficulty", "").lower()
@@ -138,7 +192,8 @@ def import_questions(session, file_path, source_name, generator):
             difficulty = QuestionDifficulty.MEDIUM
 
         # 3. Question Type Parsing
-        q_type = item.get("QUESTION_TYPE")
+        # 소분류를 question_type으로 사용 (없으면 자동 분류)
+        q_type = item.get("QUESTION_TYPE") or subcategory
         if not q_type:
             _, q_type = classify_question(q_text)
 
@@ -150,15 +205,19 @@ def import_questions(session, file_path, source_name, generator):
         q_embedding = generator.encode_passage(q_text)
 
         # Create Question
+        # DB 필드에 직접 저장 (NULL 값 그대로 유지)
         question = Question(
             content=q_text,
             category=category,
             difficulty=difficulty,
-            rubric_json={"keywords": []}, 
+            rubric_json={"keywords": []},  # 기본 rubric만 저장
             question_type=q_type, 
             usage_count=0,
             is_active=True,
-            embedding=q_embedding # 임베딩 저장
+            embedding=q_embedding,  # 임베딩 저장
+            company=company_value,  # None이면 NULL로 저장
+            industry=industry_value,  # None이면 NULL로 저장
+            position=position_value  # None이면 NULL로 저장
         )
         session.add(question)
         session.flush() # To get ID
@@ -173,7 +232,10 @@ def import_questions(session, file_path, source_name, generator):
             score=100.0,
             reference_count=0,
             is_active=True,
-            embedding=a_embedding # 임베딩 저장
+            embedding=a_embedding,  # 임베딩 저장
+            company=company_value,
+            industry=industry_value,
+            position=position_value
         )
         session.add(answer)
         count += 1

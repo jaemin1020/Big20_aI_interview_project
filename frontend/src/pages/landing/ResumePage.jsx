@@ -26,12 +26,12 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
-      const resumeId = uploadData.id;
+      const resumeId = uploadData.resume_id;
       console.log('Upload basic success, ID:', resumeId);
       
       // 2. 폴링 (분석 완료 대기)
       let pollCount = 0;
-      const maxPolls = 30; // 최대 60초 (2초 * 30)
+      const maxPolls = 90; // 최대 180초 (2초 * 90) - 첫 실행 시 모델 로딩으로 인해 오래 걸릴 수 있음
       
       const poll = async () => {
         try {
@@ -51,7 +51,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
-            throw new Error("분석 시간 초과");
+            throw new Error("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
           }
         } catch (err) {
           console.error('Polling error:', err);
@@ -71,8 +71,13 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
   if (step === 'confirm') {
     return (
-      <div className="resume-confirm animate-fade-in">
-        <GlassCard style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <div className="resume-confirm animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+        <GlassCard style={{ maxWidth: '700px', width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <div className="logo-wrapper" style={{ width: '200px' }}>
+              <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+            </div>
+          </div>
           <h1 className="text-gradient" style={{ textAlign: 'center', marginBottom: '2rem' }}>지원 정보 확인</h1>
           <p style={{ textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)' }}>
             업로드하신 이력서에서 추출된 정보입니다. 내용이 맞다면 면접 진행을 눌러주세요.
@@ -91,13 +96,13 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+                {uploadResult?.structured_data?.target_position || uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
               </dd>
               
-              {uploadResult?.skills && uploadResult.skills.length > 0 && (
+              {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
-                  <dd>{uploadResult.skills.join(', ')}</dd>
+                  <dd>{uploadResult.structured_data.skills.join(', ')}</dd>
                 </>
               )}
               
@@ -115,8 +120,13 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   }
 
   return (
-    <div className="resume-upload animate-fade-in">
-      <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+    <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '240px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
         <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
         <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
