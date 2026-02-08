@@ -5,11 +5,13 @@ from celery import shared_task
 from sqlmodel import Session
 from db import Resume, engine
 from utils.pdf_parser import ResumePDFParser
-from utils.resume_structurer import ResumeStructurer
+# from utils.resume_structurer import ResumeStructurer  # 사용 안 함 (LLM 의존성 제거)
 from utils.vector_utils import get_embedding_generator
+from utils.section_classifier import ResumeSectionClassifier
 from datetime import datetime
 import logging
 import os
+import re
 
 # LangChain for text splitting
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -59,98 +61,143 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
                 session.commit()
             return {"status": "error", "message": f"PDF extraction failed: {e}"}
         
-        # 3. 이력서 구조화
-        logger.info(f"[Resume {resume_id}] 이력서 구조화 중...")
-        try:
-            structurer = ResumeStructurer()  # LLM 없이 규칙 기반
-            structured_data = structurer.structure_with_rules(cleaned_text)
-            logger.info(f"[Resume {resume_id}] 구조화 완료")
-            
-            # 구조화 결과 로깅 (요약)
-            logger.info("=" * 40)
-            logger.info(f"[Resume {resume_id}] 파싱 결과 요약:")
-            for key, val in structured_data.items():
-                if isinstance(val, list):
-                    logger.info(f" - {key}: {len(val)} items")
-                else:
-                    logger.info(f" - {key}: {str(val)[:50]}...")
-            logger.info("=" * 40)
-        except Exception as e:
-            logger.error(f"[Resume {resume_id}] 구조화 실패: {e}")
-            structured_data = {}
+        # 2.1 텍스트 품질 검증
+        from utils.validation import ResumeValidator
+        text_valid, text_error = ResumeValidator.validate_extracted_text(cleaned_text)
+        if not text_valid:
+            logger.error(f"[Resume {resume_id}] 텍스트 품질 검증 실패: {text_error}")
+            with Session(engine) as session:
+                resume = session.get(Resume, resume_id)
+                resume.processing_status = "failed"
+                resume.structured_data = {
+                    "error": "text_validation_failed",
+                    "message": text_error,
+                    "text_length": len(cleaned_text)
+                }
+                session.add(resume)
+                session.commit()
+            return {"status": "error", "message": f"Text validation failed: {text_error}"}
         
-        # 4. LangChain을 이용한 텍스트 청킹 (RAG 구조)
-        logger.info(f"[Resume {resume_id}] 텍스트 청킹 중...")
+        # 3. 이력서 섹션 분할 (Phase_2.md 매핑 규칙 적용)
+        logger.info(f"[Resume {resume_id}] 키워드 기반 섹션 분할 중...")
+        used_fallback = False
         try:
-            # RecursiveCharacterTextSplitter 설정
-            # chunk_size: 약 1500자 (KURE-v1은 8192 토큰까지 지원하므로 여유있게)
-            # chunk_overlap: 300자 (약 20% 중첩으로 문맥 유지)
+            from utils.section_splitter import SectionSplitter
+            # LLM 없이 원문을 키워드 기준으로 잘라냅니다. (원본 보존)
+            segments = SectionSplitter.split_by_sections(cleaned_text)
+            logger.info(f"[Resume {resume_id}] {len(segments)}개 섹션으로 분리 완료")
+            
+            # 섹션 검증
+            sections_valid, sections_error = ResumeValidator.validate_sections(segments)
+            if not sections_valid:
+                logger.warning(f"[Resume {resume_id}] 섹션 검증 경고: {sections_error}")
+        except Exception as e:
+            logger.error(f"[Resume {resume_id}] 섹션 분할 실패: {e}")
+            segments = [{"section_type": "general", "content": cleaned_text}]
+            used_fallback = True
+            logger.warning(f"[Resume {resume_id}] 폴백 모드 사용: 전체 텍스트를 'general' 섹션으로 처리")
+        
+        # 4. 각 섹션 내에서 너무 긴 경우 추가 청킹 (500자 단위)
+        logger.info(f"[Resume {resume_id}] 최종 청킹 중...")
+        final_chunks = []
+        try:
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1500,
-                chunk_overlap=300,
+                chunk_size=500,
+                chunk_overlap=100,
                 length_function=len,
                 separators=["\n\n", "\n", " ", ""]
             )
             
-            chunks = text_splitter.split_text(cleaned_text)
-            logger.info(f"[Resume {resume_id}] 텍스트를 {len(chunks)}개 청크로 분할 완료")
+            for segment in segments:
+                sub_chunks = text_splitter.split_text(segment["content"])
+                for sub in sub_chunks:
+                    final_chunks.append({
+                        "section_type": segment["section_type"],
+                        "content": sub
+                    })
+            logger.info(f"[Resume {resume_id}] 최종 {len(final_chunks)}개 청크 준비 완료")
             
         except Exception as e:
-            logger.error(f"[Resume {resume_id}] 텍스트 청킹 실패: {e}")
-            # 실패 시 전체 텍스트를 하나의 청크로 처리
-            chunks = [cleaned_text[:2000]]
+            logger.error(f"[Resume {resume_id}] 청킹 실패: {e}")
+            final_chunks = [{"section_type": "skill_cert", "content": cleaned_text}]
         
-        # 5. 각 청크를 임베딩하여 ResumeChunk 테이블에 저장
-        logger.info(f"[Resume {resume_id}] 청크 임베딩 생성 및 저장 중...")
-        try:
-            # ResumeChunk 모델 임포트 (동적 임포트로 순환 참조 방지)
-            from db import ResumeChunk
-            
-            generator = get_embedding_generator()
-            
-            for idx, chunk_text in enumerate(chunks):
-                # 각 청크를 임베딩
-                chunk_embedding = generator.encode_passage(chunk_text)
-                
-                # ResumeChunk 레코드 생성
-                chunk_record = ResumeChunk(
-                    resume_id=resume_id,
-                    content=chunk_text,
-                    chunk_index=idx,
-                    embedding=chunk_embedding
-                )
-                
-                with Session(engine) as session:
-                    session.add(chunk_record)
-                    session.commit()
-                
-                logger.info(f"[Resume {resume_id}] 청크 {idx+1}/{len(chunks)} 저장 완료 (길이: {len(chunk_text)}자)")
-            
-            logger.info(f"[Resume {resume_id}] 모든 청크 임베딩 완료: {len(chunks)}개")
-            
-        except Exception as e:
-            logger.error(f"[Resume {resume_id}] 청크 임베딩 생성 실패: {e}", exc_info=True)
+        # 5. 섹션 정보 저장 (청크 정보는 메타데이터로만 유지)
+        logger.info(f"[Resume {resume_id}] 청크 정보 수집 완료")
+        processed_chunks_info = []
+        for idx, chunk_data in enumerate(final_chunks):
+            processed_chunks_info.append({
+                "index": idx,
+                "section_type": chunk_data["section_type"],
+                "length": len(chunk_data["content"])
+            })
         
-        # 6. Resume 메타데이터 업데이트 (embedding은 ResumeChunk에 저장됨)
+        # 6. Resume 메타데이터 업데이트 (지원 정보 추출 및 그룹 명세 포함)
         logger.info(f"[Resume {resume_id}] Resume 메타데이터 업데이트 중...")
+        
+        target_company = "Unknown"
+        target_position = "Unknown"
+        for seg in segments:
+            if seg["section_type"] == "target_info":
+                content = seg["content"]
+                comp_match = re.search(r'(?:지원\s*회사|회사명|기업명)\s*[:：]\s*([가-힣\w\s]+)', content)
+                pos_match = re.search(r'(?:지원\s*직무|직군|포지션)\s*[:：]\s*([가-힣\w\s]+)', content)
+                
+                if comp_match: target_company = comp_match.group(1).strip()
+                if pos_match: target_position = pos_match.group(1).strip()
+                break
+
         with Session(engine) as session:
             resume = session.get(Resume, resume_id)
             resume.extracted_text = cleaned_text
-            resume.structured_data = structured_data
-            # embedding 필드는 이제 사용하지 않음 (ResumeChunk에 저장)
-            resume.embedding = None
+            
+            # 품질 점수 계산
+            quality_report = ResumeValidator.get_quality_score(
+                cleaned_text, segments, {
+                    "target_company": target_company,
+                    "target_position": target_position,
+                    "chunks_info": processed_chunks_info
+                }
+            )
+            
+            # 사용자 요구사항 매핑 명세 저장
+            resume.structured_data = {
+                "target_company": target_company,
+                "target_position": target_position,
+                "mapping_rules": {
+                    "technical_questions": ["target_info(position)", "skill_cert", "career_project", "education"],
+                    "behavioral_questions": ["target_info(company)", "cover_letter"]
+                },
+                "segments_count": len(segments),
+                "chunks_info": processed_chunks_info,  # 청크 정보를 메타데이터로 저장
+                "note": "Raw content preserved via SectionSplitter",
+                "used_fallback": used_fallback,  # 폴백 사용 여부
+                "quality_score": quality_report["score"],
+                "quality_grade": quality_report["grade"],
+                "quality_issues": quality_report["issues"]
+            }
             resume.processed_at = datetime.utcnow()
             resume.processing_status = "completed"
             session.add(resume)
             session.commit()
-            logger.info(f"[Resume {resume_id}] Resume 메타데이터 업데이트 완료")
+            logger.info(
+                f"[Resume {resume_id}] 업데이트 완료: {target_company} / {target_position} 타겟팅됨 "
+                f"(품질: {quality_report['grade']}, {quality_report['score']}점)"
+            )
+        
+        # 7. 섹션 기반 임베딩 생성 태스크 비동기 호출
+        logger.info(f"[Resume {resume_id}] 섹션 임베딩 생성 태스크 시작...")
+        from celery import current_app
+        current_app.send_task(
+            "generate_resume_embeddings",
+            args=[resume_id]
+        )
         
         return {
             "status": "success",
             "resume_id": resume_id,
             "text_length": len(cleaned_text),
-            "structured_fields": list(structured_data.keys()),
-            "chunks_count": len(chunks)
+            "chunks_count": len(final_chunks),
+            "chunks_detail": processed_chunks_info
         }
         
     except Exception as e:

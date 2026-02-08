@@ -1,22 +1,140 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext }) => {
+const EnvTestPage = ({ onNext, onStepChange }) => {
   const [step, setStep] = useState('audio'); // audio, video
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
+  const [transcript, setTranscript] = useState('');
   const [videoStream, setVideoStream] = useState(null);
-  const videoRef = useRef(null);
+  const [isFaceDetected, setIsFaceDetected] = useState(false);
 
-  // Audio Level Simulation
+  const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
+
+  // Notify parent of step change
   useEffect(() => {
-    if (step === 'audio') {
-      const interval = setInterval(() => {
-        setAudioLevel(Math.random() * 100);
-      }, 100);
-      return () => clearInterval(interval);
+    if (onStepChange) {
+      onStepChange(step);
     }
+  }, [step, onStepChange]);
+
+  // Real Audio Level Visualization & Deepgram STT
+  useEffect(() => {
+    let audioContext;
+    let analyser;
+    let microphone;
+    let javascriptNode;
+    let stream;
+
+    const startAudioAnalysis = async () => {
+      if (step !== 'audio') return;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // 1. Audio Level Visualization
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 1024;
+
+        microphone.connect(analyser);
+        analyser.connect(javascriptNode);
+        javascriptNode.connect(audioContext.destination);
+
+        javascriptNode.onaudioprocess = () => {
+          const array = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(array);
+          let values = 0;
+
+          const length = array.length;
+          for (let i = 0; i < length; i++) {
+            values += array[i];
+          }
+
+          const average = values / length;
+          const level = Math.min(100, Math.max(0, average * 2));
+          setAudioLevel(level);
+        };
+
+        // 2. STT Test Setup (REST API)
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        mediaRecorderRef.current = mediaRecorder;
+        let chunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          chunks = [];
+          console.log("Audio recording stopped, sending to server...");
+
+          try {
+            // 동적으로 import하여 순환참조 방지
+            const { recognizeAudio } = await import('../../api/interview');
+            const result = await recognizeAudio(blob);
+            if (result && result.text) {
+              setTranscript(result.text);
+              setIsRecognitionOk(true);
+            }
+          } catch (err) {
+            console.error("STT Recognition failed:", err);
+            setTranscript("인식 실패: 다시 시도해주세요.");
+          }
+        };
+
+        // 5초마다 녹음 끊어서 전송 (단순 테스트용)
+        // 실제로는 VAD 등을 쓰면 좋지만 테스트 페이지이므로 자동 루프
+        const startLoop = () => {
+          if (mediaRecorder.state === 'inactive') {
+            mediaRecorder.start();
+            setTimeout(() => {
+              if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+              }
+            }, 4000); // 4초 녹음
+          }
+        };
+
+        // 첫 시작
+        startLoop();
+        // 반복 (재시도 등을 위해 interval 사용 가능하지만, 여기선 한 번만 하거나 사용자 액션 유도)
+        // 일단 4초 녹음 후 멈춤. 사용자가 '다시 시도' 누르면 handleRetry에서 처리
+
+
+      } catch (err) {
+        console.error("Microphone access failed:", err);
+        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
+      }
+    };
+
+    if (step === 'audio') {
+      startAudioAnalysis();
+    }
+
+    return () => {
+      // Clean up Audio Context
+      if (javascriptNode) javascriptNode.disconnect();
+      if (microphone) microphone.disconnect();
+      if (analyser) analyser.disconnect();
+      if (audioContext) audioContext.close();
+
+      // Clean up Deepgram & MediaRecorder
+      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
+
+      // Stop Tracks
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
   }, [step]);
 
   // Video Stream Start
@@ -25,6 +143,11 @@ const EnvTestPage = ({ onNext }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setVideoStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
+
+      // Simulate Face Detection
+      setTimeout(() => {
+        setIsFaceDetected(true);
+      }, 2000);
     } catch (err) {
       console.error("Camera access failed:", err);
     }
@@ -41,28 +164,47 @@ const EnvTestPage = ({ onNext }) => {
     };
   }, [step]);
 
-  const handleAudioDone = () => {
-    setIsRecognitionOk(true);
-    setTimeout(() => setStep('video'), 1000);
+  const handleRetry = () => {
+    setTranscript('');
+    setIsRecognitionOk(false);
+  };
+
+  const handleNext = () => {
+    setStep('video');
   };
 
   if (step === 'audio') {
     return (
-      <div className="audio-test animate-fade-in">
-        <GlassCard style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
-          <h1 className="text-gradient">환경 테스트 - 오디오</h1>
+      <div className="audio-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
+        <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <div className="logo-wrapper" style={{ width: '160px' }}>
+              <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+            </div>
+          </div>
+          <h1 className="text-gradient">음성테스트를 시작합니다.</h1>
           <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
-          
+
           <div style={{ margin: '2rem 0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>🎙️</div>
+            <img
+              src="/mic_icon.png"
+              alt="Microphone"
+              style={{
+                width: '64px',
+                height: '64px',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
+                marginBottom: '1.5rem'
+              }}
+            />
             <p style={{ fontSize: '1.4rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '12px' }}>
-              "AI 모의면접 진행할 준비가 되었습니다."
+              "AI 모의면접 진행할 준비가 되었습니다. "
             </p>
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              <span>마이크 입력 레벨</span>
+              <span>마이크 입력 레벨 {audioLevel > 5 ? '(입력 중...)' : ''}</span>
               <span>{Math.round(audioLevel)}%</span>
             </div>
             <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -70,40 +212,87 @@ const EnvTestPage = ({ onNext }) => {
             </div>
           </div>
 
-          <PremiumButton onClick={handleAudioDone} style={{ width: '100%' }}>
-            {isRecognitionOk ? '✅ 분석 완료' : '문장 읽기 완료'}
-          </PremiumButton>
+          {/* Transcript Box */}
+          <div style={{
+            minHeight: '80px',
+            background: 'var(--bg-darker)',
+            borderRadius: '12px',
+            padding: '1rem',
+            marginBottom: '2rem',
+            border: '1px solid var(--glass-border)',
+            textAlign: 'left'
+          }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>인식된 텍스트:</span>
+            <span style={{ color: transcript ? 'var(--text-main)' : 'var(--text-muted)' }}>
+              {transcript || "말씀하시면 이곳에 텍스트가 표시됩니다..."}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <PremiumButton onClick={handleRetry} variant="secondary" style={{ flex: 1 }}>
+              테스트 다시 진행
+            </PremiumButton>
+            <PremiumButton
+              onClick={handleNext}
+              style={{ flex: 1 }}
+            >
+              다음 진행
+            </PremiumButton>
+          </div>
         </GlassCard>
       </div>
     );
   }
 
   return (
-    <div className="video-test animate-fade-in">
-      <GlassCard style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+    <div className="video-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
+      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '160px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
         <h1 className="text-gradient">환경 테스트 - 영상</h1>
         <p style={{ marginBottom: '2rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
 
         <div style={{ position: 'relative', marginBottom: '2rem' }}>
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
             style={{ width: '100%', borderRadius: '20px', background: '#000' }}
           />
-          <div style={{ 
-            position: 'absolute', 
-            top: '50%', 
-            left: '50%', 
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
             transform: 'translate(-50%, -50%)',
             width: '200px',
             height: '250px',
-            border: '2px solid var(--secondary)',
+            border: isFaceDetected ? '3px solid #10b981' : '2px solid var(--secondary)', // Green if detected
             borderRadius: '50%',
             pointerEvents: 'none',
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)'
-          }}></div>
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
+            transition: 'border 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {isFaceDetected && (
+              <div style={{
+                background: '#10b981',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '20px',
+                fontWeight: 'bold',
+                fontSize: '0.9rem',
+                boxShadow: '0 4px 10px rgba(16, 185, 129, 0.4)'
+              }}>
+                ✓ 인식 완료
+              </div>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem' }}>

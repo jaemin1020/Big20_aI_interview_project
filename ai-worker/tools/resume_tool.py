@@ -100,6 +100,12 @@ class ResumeTool:
         data = resume.structured_data
         summary_parts = []
         
+        # 지원 정보 (target_company, target_position)
+        if "target_company" in data and data["target_company"] and data["target_company"] != "Unknown":
+            summary_parts.append(f"지원 회사: {data['target_company']}")
+        if "target_position" in data and data["target_position"] and data["target_position"] != "Unknown":
+            summary_parts.append(f"지원 직무: {data['target_position']}")
+        
         # 경력
         if "experience" in data and data["experience"]:
             exp_count = len(data["experience"])
@@ -135,7 +141,14 @@ class ResumeTool:
             project_count = len(data["projects"])
             summary_parts.append(f"프로젝트: {project_count}개")
         
-        return " | ".join(summary_parts) if summary_parts else "이력서 정보 없음"
+        # 요약이 없으면 텍스트 앞부분 사용
+        if not summary_parts:
+            text = resume.extracted_text or ""
+            if text:
+                return text[:200] + "..." if len(text) > 200 else text
+            return "이력서 정보 없음"
+        
+        return " | ".join(summary_parts)
 
     
     @staticmethod
