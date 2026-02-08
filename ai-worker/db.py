@@ -1,74 +1,81 @@
-from sqlmodel import SQLModel, create_engine, Session, Field, JSON, Column, select
-from sqlalchemy.dialects.postgresql import JSONB
-from typing import Optional, Dict, Any
+
+from sqlmodel import SQLModel, create_engine, Session, select
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import os
+import sys
+from pathlib import Path
 
+# ==========================================
+# Path Setup for Shared Models
+# ==========================================
+# Try to find backend-core to import central models
+current_dir = Path(__file__).parent.resolve()
+
+# 1. Docker Path (/backend-core)
+backend_core_docker = Path("/backend-core")
+# 2. Local Path relative to this file (../backend-core)
+backend_core_local = current_dir.parent / "backend-core"
+
+if backend_core_docker.exists():
+    sys.path.append(str(backend_core_docker))
+elif backend_core_local.exists():
+    sys.path.append(str(backend_core_local))
+else:
+    print("Warning: backend-core not found. Model imports may fail.")
+
+try:
+    # Centralized Model Imports
+    from models import (
+        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker, ResumeSectionType,
+        User, Resume, ResumeChunk, ResumeSectionEmbedding, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
+    )
+except ImportError as e:
+    print(f"Error importing models from backend-core: {e}")
+    # Fallback or Exit? For now let it crash to be visible.
+    raise e
+
+# ==========================================
+# Database Connection
+# ==========================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
 engine = create_engine(DATABASE_URL)
 
-# ==================== Models (AI-Worker 버전) ====================
 
-class Interview(SQLModel, table=True):
-    __tablename__ = "interviews"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    candidate_id: int
-    position: str
-    status: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    overall_score: Optional[float] = None
-    emotion_summary: Optional[Dict[str, Any]] = Field(
-        default=None, 
-        sa_column=Column(JSONB)
-    )
+# ==========================================
+# Helper Functions
+# ==========================================
 
-class Question(SQLModel, table=True):
-    __tablename__ = "questions"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    content: str
-    category: str
-    difficulty: str
-    rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
-    position: Optional[str] = None
-    usage_count: int = Field(default=0)
+def get_best_questions_by_position(position: str, limit: int = 10):
+    with Session(engine) as session:
+        stmt = select(Question).where(
+            Question.position == position,
+            Question.avg_score >= 3.0,
+            Question.usage_count < 100
+        ).order_by(Question.avg_score.desc()).limit(limit)
+        return session.exec(stmt).all()
 
-class Transcript(SQLModel, table=True):
-    __tablename__ = "transcripts"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    speaker: str  # "AI" or "User"
-    text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    sentiment_score: Optional[float] = None
-    emotion: Optional[str] = None
-    question_id: Optional[int] = None
-    order: Optional[int] = None
+def increment_question_usage(question_id: int):
+    with Session(engine) as session:
+        question = session.get(Question, question_id)
+        if question:
+            question.usage_count += 1
+            session.add(question)
+            session.commit()
 
-class EvaluationReport(SQLModel, table=True):
-    __tablename__ = "evaluation_reports"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    technical_score: Optional[float] = None
-    communication_score: Optional[float] = None
-    cultural_fit_score: Optional[float] = None
-    summary_text: Optional[str] = None
-    details_json: Optional[Dict[str, Any]] = Field(
-        default=None,
-        sa_column=Column(JSONB)
-    )
-    evaluator_model: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-# ==================== DB Helper Functions ====================
+def update_question_avg_score(question_id: int, new_score: float):
+    with Session(engine) as session:
+        question = session.get(Question, question_id)
+        if question:
+            if question.avg_score is None:
+                question.avg_score = new_score
+            else:
+                weight = min(question.usage_count, 10) / 10
+                question.avg_score = question.avg_score * weight + new_score * (1 - weight)
+            session.add(question)
+            session.commit()
 
 def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emotion: str):
-    """Transcript에 감정 분석 결과 업데이트"""
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
@@ -77,59 +84,19 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
             session.add(transcript)
             session.commit()
 
-def update_interview_emotion(interview_id: int, emotion_summary: dict):
-    """Interview에 전체 감정 요약 업데이트"""
+def create_or_update_evaluation_report(interview_id: int, **kwargs):
     with Session(engine) as session:
-        interview = session.get(Interview, interview_id)
-        if interview:
-            interview.emotion_summary = emotion_summary
-            session.add(interview)
-            session.commit()
-
-def create_or_update_evaluation_report(
-    interview_id: int,
-    technical_score: float = None,
-    communication_score: float = None,
-    cultural_fit_score: float = None,
-    summary_text: str = None,
-    details_json: dict = None,
-    evaluator_model: str = None
-):
-    """평가 리포트 생성 또는 업데이트"""
-    with Session(engine) as session:
-        # 기존 리포트 확인
-        stmt = select(EvaluationReport).where(
-            EvaluationReport.interview_id == interview_id
-        )
+        stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
         report = session.exec(stmt).first()
         
         if report:
-            # 업데이트
-            if technical_score is not None:
-                report.technical_score = technical_score
-            if communication_score is not None:
-                report.communication_score = communication_score
-            if cultural_fit_score is not None:
-                report.cultural_fit_score = cultural_fit_score
-            if summary_text:
-                report.summary_text = summary_text
-            if details_json:
-                report.details_json = details_json
-            if evaluator_model:
-                report.evaluator_model = evaluator_model
-            
-            report.updated_at = datetime.utcnow()
+            for key, value in kwargs.items():
+                if hasattr(report, key):
+                     setattr(report, key, value)
         else:
-            # 새로 생성
-            report = EvaluationReport(
-                interview_id=interview_id,
-                technical_score=technical_score,
-                communication_score=communication_score,
-                cultural_fit_score=cultural_fit_score,
-                summary_text=summary_text,
-                details_json=details_json,
-                evaluator_model=evaluator_model
-            )
+            valid_keys = EvaluationReport.__fields__.keys()
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
+            report = EvaluationReport(interview_id=interview_id, **filtered_kwargs)
         
         session.add(report)
         session.commit()
@@ -137,27 +104,89 @@ def create_or_update_evaluation_report(
         return report
 
 def get_interview_transcripts(interview_id: int):
-    """면접의 모든 대화 기록 조회"""
     with Session(engine) as session:
-        stmt = select(Transcript).where(
-            Transcript.interview_id == interview_id
-        ).order_by(Transcript.timestamp)
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order)
         return session.exec(stmt).all()
 
 def get_user_answers(interview_id: int):
-    """사용자 답변만 조회"""
     with Session(engine) as session:
         stmt = select(Transcript).where(
             Transcript.interview_id == interview_id,
-            Transcript.speaker == "User"
-        ).order_by(Transcript.timestamp)
+            Transcript.speaker != Speaker.AI
+        )
         return session.exec(stmt).all()
 
-def update_interview_overall_score(interview_id: int, overall_score: float):
-    """Interview의 overall_score 업데이트"""
+def update_interview_overall_score(interview_id: int, score: float):
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
         if interview:
-            interview.overall_score = overall_score
+            interview.overall_score = score
+            session.add(interview)
+            session.commit()
+
+# ==================== Company Helper Functions ====================
+
+def create_company(company_id: str, company_name: str, ideal: str = None, description: str = None, embedding: List[float] = None):
+    """회사 정보 생성"""
+    with Session(engine) as session:
+        company = Company(
+            id=company_id,
+            company_name=company_name,
+            ideal=ideal,
+            description=description,
+            embedding=embedding
+        )
+        session.add(company)
+        session.commit()
+        session.refresh(company)
+        return company
+
+def get_company_by_id(company_id: str):
+    """회사 ID로 조회"""
+    with Session(engine) as session:
+        return session.get(Company, company_id)
+
+def update_company_embedding(company_id: str, embedding: List[float]):
+    """회사 특성 벡터 업데이트"""
+    with Session(engine) as session:
+        company = session.get(Company, company_id)
+        if company:
+            company.embedding = embedding
+            company.updated_at = datetime.utcnow()
+            session.add(company)
+            session.commit()
+
+def find_similar_companies(embedding: List[float], limit: int = 5):
+    """벡터 유사도 기반 유사 회사 검색"""
+    with Session(engine) as session:
+        stmt = select(Company).where(
+            Company.embedding.isnot(None)
+        ).order_by(
+            Company.embedding.cosine_distance(embedding)
+        ).limit(limit)
+        
+        return session.exec(stmt).all()
+
+def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
+    """면접 세션의 감정 분석 결과 업데이트"""
+    with Session(engine) as session:
+        interview = session.get(Interview, interview_id)
+        if interview:
+            current_summary = interview.emotion_summary or {}
+            
+            # 이력 관리를 위해 history 리스트에 추가
+            if "history" not in current_summary:
+                current_summary["history"] = []
+            
+            # 타임스탬프 추가
+            emotion_data["timestamp"] = datetime.utcnow().isoformat()
+            current_summary["history"].append(emotion_data)
+            
+            # 최신 상태 업데이트
+            current_summary["latest"] = emotion_data
+            
+            # SQLModel에서 JSON 필드 변경 감지를 위해 재할당
+            interview.emotion_summary = dict(current_summary)
+            
             session.add(interview)
             session.commit()

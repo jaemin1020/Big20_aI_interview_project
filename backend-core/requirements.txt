@@ -1,6 +1,6 @@
 # ==========================================
 # Backend-Core Requirements
-# Purpose: FastAPI + DB + Celery Client (No Heavy LLM)
+# Purpose: FastAPI + DB + Celery Client (No AI/ML)
 # ==========================================
 
 # Web Framework
@@ -11,6 +11,7 @@ python-multipart>=0.0.9
 # Database
 sqlmodel>=0.0.14
 psycopg[binary]>=3.2.0
+pgvector>=0.2.0  # Vector similarity search
 
 # Task Queue
 celery[redis]>=5.3.6
@@ -24,3 +25,7 @@ python-dotenv>=1.0.1
 
 # Utility
 requests>=2.31.0
+
+
+# Speech-to-Text (Delegated to AI-Worker)
+websockets>=12.0
