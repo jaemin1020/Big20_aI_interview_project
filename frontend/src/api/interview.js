@@ -113,6 +113,19 @@ export const completeInterview = async (interviewId) => {
 
 // ==================== Transcript ====================
 
+export const recognizeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('file', audioBlob);
+
+    // 타임아웃 5분 (모델 로딩 대비)
+    const response = await api.post('/stt/recognize', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000
+    });
+    return response.data;
+};
+
+
 export const createTranscript = async (interviewId, speaker, text, questionId = null) => {
     const response = await api.post('/transcripts', {
         interview_id: interviewId,
