@@ -169,7 +169,23 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
     setIsRecognitionOk(false);
   };
 
-  const handleNext = () => {
+  const handleVideoPass = () => {
+    // Save video test result
+    if (isFaceDetected) {
+      sessionStorage.setItem('env_video_ok', 'true');
+    } else {
+      sessionStorage.setItem('env_video_ok', 'false');
+    }
+    onNext();
+  };
+
+  // Save audio test result when moving to video step
+  const handleAudioPass = () => {
+    if (isRecognitionOk) {
+      sessionStorage.setItem('env_audio_ok', 'true');
+    } else {
+      sessionStorage.setItem('env_audio_ok', 'false');
+    }
     setStep('video');
   };
 
@@ -241,7 +257,7 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
               테스트 다시 진행
             </PremiumButton>
             <PremiumButton
-              onClick={handleNext}
+              onClick={handleAudioPass}
               style={{ flex: 1 }}
             >
               다음 진행
@@ -304,7 +320,7 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <PremiumButton onClick={onNext} style={{ flex: 1 }}>다음 단계 진행</PremiumButton>
+          <PremiumButton onClick={handleVideoPass} style={{ flex: 1 }}>다음 단계 진행</PremiumButton>
           <PremiumButton variant="secondary" onClick={() => setStep('audio')}>오디오 테스트 다시 하기</PremiumButton>
         </div>
       </GlassCard>
