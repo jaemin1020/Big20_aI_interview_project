@@ -25,8 +25,22 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
             ✅ 환경 테스트 완료
           </div>
           <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0, margin: 0, color: 'var(--text-muted)' }}>
-            <li style={{ marginBottom: '8px' }}>• 음성 입력 정상</li>
-            <li style={{ marginBottom: '8px' }}>• 영상 인식 정상</li>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_audio_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>음성 입력 테스트 {sessionStorage.getItem('env_audio_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_video_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>영상 인식 테스트 {sessionStorage.getItem('env_video_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
           </ul>
         </div>
 
