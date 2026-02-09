@@ -116,9 +116,30 @@ const ResultPage = ({ results, report, interview, onReset }) => {
           💡 본 분석 결과는 지원 회사의 인재상, 비전 및 해당 직무의 핵심 요구 역량을 기준으로 AI가 종합 분석한 결과입니다.
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        {/* 4. 직무 역량 & 5. 인성 태도 평가 (Top Row) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+          <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+            <h3 style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '10px', marginBottom: '1rem' }}>직무 역량 평가</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <SkillBar label="기술 이해도" score={report?.technical_score || 85} color="#3b82f6" />
+              <SkillBar label="문제 해결 능력" score={92} color="#3b82f6" />
+              <SkillBar label="직무 관련 경험" score={88} color="#3b82f6" />
+            </div>
+          </GlassCard>
 
-          {/* 6. 종합 평가 & 7. 역량 레이더 차트 */}
+          <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+            <h3 style={{ borderLeft: '4px solid #10b981', paddingLeft: '10px', marginBottom: '1rem' }}>인성 및 태도 평가</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <SkillBar label="의사소통 능력" score={report?.communication_score || 78} color="#10b981" />
+              <SkillBar label="책임감" score={95} color="#10b981" />
+              <SkillBar label="성장 의지" score={90} color="#10b981" />
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* 6. 종합 평가&차트 & 8. 종합 피드백 (Bottom Row) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginTop: '2rem' }}>
+          {/* 종합 역량 분석 (Chart) */}
           <GlassCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <h3 style={{ alignSelf: 'flex-start', borderLeft: '4px solid var(--primary)', paddingLeft: '10px', marginBottom: '1rem' }}>종합 역량 분석</h3>
 
@@ -148,70 +169,19 @@ const ResultPage = ({ results, report, interview, onReset }) => {
             </div>
           </GlassCard>
 
-          {/* 4. 직무 역량 & 5. 인성 태도 평가 (간략 카드) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
-              <h3 style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '10px', marginBottom: '1rem' }}>직무 역량 평가</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <SkillBar label="기술 이해도" score={report?.technical_score || 85} color="#3b82f6" />
-                <SkillBar label="문제 해결 능력" score={92} color="#3b82f6" />
-                <SkillBar label="직무 관련 경험" score={88} color="#3b82f6" />
-              </div>
-            </GlassCard>
-
-            <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
-              <h3 style={{ borderLeft: '4px solid #10b981', paddingLeft: '10px', marginBottom: '1rem' }}>인성 및 태도 평가</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <SkillBar label="의사소통 능력" score={report?.communication_score || 78} color="#10b981" />
-                <SkillBar label="책임감" score={95} color="#10b981" />
-                <SkillBar label="성장 의지" score={90} color="#10b981" />
-              </div>
-            </GlassCard>
-          </div>
+          {/* 종합 피드백 */}
+          <GlassCard style={{ padding: '2rem' }}>
+            <h3 style={{ borderLeft: '4px solid #f59e0b', paddingLeft: '10px', marginBottom: '1rem' }}>종합 피드백</h3>
+            <div style={{ lineHeight: '1.6', color: 'var(--text-main)', fontSize: '1rem', height: '100%', overflowY: 'auto', maxHeight: '400px' }}>
+              {report?.summary_text
+                ? report.summary_text.split('\n').map((line, i) => <p key={i} style={{ marginBottom: '0.5rem' }}>{line}</p>)
+                : <p>면접 전반에 걸쳐 우수한 역량을 보여주셨습니다. 특히 기술적인 질문에 대한 답변이 구체적이고 논리적이었습니다. 다만, 일부 상황 대처 질문에서는 조금 더 유연한 사고를 보여주면 좋겠습니다.</p>
+              }
+            </div>
+          </GlassCard>
         </div>
 
-        {/* 8. 종합 피드백 영역 */}
-        <GlassCard style={{ padding: '2rem' }}>
-          <h3 style={{ borderLeft: '4px solid #f59e0b', paddingLeft: '10px', marginBottom: '1rem' }}>종합 피드백</h3>
-          <div style={{ lineHeight: '1.6', color: 'var(--text-main)', fontSize: '1rem' }}>
-            {report?.summary_text
-              ? report.summary_text.split('\n').map((line, i) => <p key={i} style={{ marginBottom: '0.5rem' }}>{line}</p>)
-              : <p>면접 전반에 걸쳐 우수한 역량을 보여주셨습니다. 특히 기술적인 질문에 대한 답변이 구체적이고 논리적이었습니다. 다만, 일부 상황 대처 질문에서는 조금 더 유연한 사고를 보여주면 좋겠습니다.</p>
-            }
-          </div>
-        </GlassCard>
 
-        {/* 질문별 상세 결과 (기존 유지) */}
-        <div style={{ marginTop: '2rem' }}>
-          <h3 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>질문별 상세 분석</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {results && results.map((result, idx) => (
-              <GlassCard key={idx} style={{ padding: '2rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '1.5rem' }}>
-                  <div style={{
-                    width: '40px', height: '40px', background: 'var(--primary)', color: 'white',
-                    borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    fontWeight: '800', fontSize: '1.1rem'
-                  }}>{idx + 1}</div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>{result.question}</h3>
-                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                      <p style={{ margin: 0, color: 'var(--text-main)' }}>{result.answer || '답변 없음'}</p>
-                    </div>
-                    {/* 평가 피드백 */}
-                    <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '0.5rem' }}>AI 평가</span>
-                      <p style={{ margin: 0, fontSize: '0.95rem' }}>
-                        {result.evaluation ? (typeof result.evaluation === 'object' ? result.evaluation.feedback : result.evaluation) : '분석 중...'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        </div>
 
       </div>
 
