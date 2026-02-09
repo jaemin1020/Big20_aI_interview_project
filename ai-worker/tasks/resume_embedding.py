@@ -67,6 +67,17 @@ def generate_resume_embeddings_task(self, resume_id: int):
             resume_data["languages"] = []
             resume_data["skills"] = {}
         
+        # 3.1 임베딩 생성용 데이터 검증
+        from utils.validation import ResumeValidator
+        data_valid, data_error = ResumeValidator.validate_resume_data_for_embedding(resume_data)
+        if not data_valid:
+            logger.error(f"[Resume {resume_id}] 임베딩 데이터 검증 실패: {data_error}")
+            return {
+                "status": "error", 
+                "message": f"Embedding data validation failed: {data_error}",
+                "resume_id": resume_id
+            }
+        
         # 임베딩 생성
         embedding_result = embedder.build_resume_embeddings(resume_data)
         
@@ -77,121 +88,132 @@ def generate_resume_embeddings_task(self, resume_id: int):
         
         saved_count = 0
         
-        with Session(engine) as session:
-            embeddings = embedding_result["embeddings"]
-            
-            # 프로필
-            if "vector" in embeddings.get("profile", {}):
-                section_emb = ResumeSectionEmbedding(
-                    resume_id=resume_id,
-                    section_type=ResumeSectionType.PROFILE,
-                    section_index=0,
-                    section_id="profile",
-                    content=embeddings["profile"].get("text", ""),
-                    embedding=embeddings["profile"]["vector"],
-                    section_metadata={"role": embedding_result.get("role", "")}
-                )
-                session.add(section_emb)
-                saved_count += 1
-            
-            # 경력
-            for idx, exp in enumerate(embeddings.get("experience", [])):
-                if "vector" in exp:
+        try:
+            with Session(engine) as session:
+                embeddings = embedding_result["embeddings"]
+                
+                # 프로필
+                if "vector" in embeddings.get("profile", {}):
                     section_emb = ResumeSectionEmbedding(
                         resume_id=resume_id,
-                        section_type=ResumeSectionType.EXPERIENCE,
-                        section_index=idx,
-                        section_id=exp.get("id", f"exp_{idx}"),
-                        content=exp.get("text", ""),
-                        embedding=exp["vector"]
+                        section_type=ResumeSectionType.PROFILE,
+                        section_index=0,
+                        section_id="profile",
+                        content=embeddings["profile"].get("text", ""),
+                        embedding=embeddings["profile"]["vector"],
+                        section_metadata={"role": embedding_result.get("role", "")}
                     )
                     session.add(section_emb)
                     saved_count += 1
-            
-            # 프로젝트
-            for idx, proj in enumerate(embeddings.get("projects", [])):
-                if "vector" in proj:
+                
+                # 경력
+                for idx, exp in enumerate(embeddings.get("experience", [])):
+                    if "vector" in exp:
+                        section_emb = ResumeSectionEmbedding(
+                            resume_id=resume_id,
+                            section_type=ResumeSectionType.EXPERIENCE,
+                            section_index=idx,
+                            section_id=exp.get("id", f"exp_{idx}"),
+                            content=exp.get("text", ""),
+                            embedding=exp["vector"]
+                        )
+                        session.add(section_emb)
+                        saved_count += 1
+                
+                # 프로젝트
+                for idx, proj in enumerate(embeddings.get("projects", [])):
+                    if "vector" in proj:
+                        section_emb = ResumeSectionEmbedding(
+                            resume_id=resume_id,
+                            section_type=ResumeSectionType.PROJECT,
+                            section_index=idx,
+                            section_id=proj.get("id", f"proj_{idx}"),
+                            content=proj.get("text", ""),
+                            embedding=proj["vector"]
+                        )
+                        session.add(section_emb)
+                        saved_count += 1
+                
+                # 학력
+                for idx, edu in enumerate(embeddings.get("education", [])):
+                    if "vector" in edu:
+                        section_emb = ResumeSectionEmbedding(
+                            resume_id=resume_id,
+                            section_type=ResumeSectionType.EDUCATION,
+                            section_index=idx,
+                            section_id=edu.get("id", f"edu_{idx}"),
+                            content=edu.get("text", ""),
+                            embedding=edu["vector"]
+                        )
+                        session.add(section_emb)
+                        saved_count += 1
+                
+                # 자기소개
+                for idx, si in enumerate(embeddings.get("self_introduction", [])):
+                    if "vector" in si:
+                        section_emb = ResumeSectionEmbedding(
+                            resume_id=resume_id,
+                            section_type=ResumeSectionType.SELF_INTRODUCTION,
+                            section_index=idx,
+                            section_id=f"si_{idx}",
+                            content=si.get("text", ""),
+                            embedding=si["vector"],
+                            si_type=si.get("type", "기타")
+                        )
+                        session.add(section_emb)
+                        saved_count += 1
+                
+                # 자격증
+                if "vector" in embeddings.get("certifications", {}):
                     section_emb = ResumeSectionEmbedding(
                         resume_id=resume_id,
-                        section_type=ResumeSectionType.PROJECT,
-                        section_index=idx,
-                        section_id=proj.get("id", f"proj_{idx}"),
-                        content=proj.get("text", ""),
-                        embedding=proj["vector"]
+                        section_type=ResumeSectionType.CERTIFICATION,
+                        section_index=0,
+                        section_id="certifications",
+                        content=embeddings["certifications"].get("text", ""),
+                        embedding=embeddings["certifications"]["vector"]
                     )
                     session.add(section_emb)
                     saved_count += 1
-            
-            # 학력
-            for idx, edu in enumerate(embeddings.get("education", [])):
-                if "vector" in edu:
+                
+                # 어학
+                if "vector" in embeddings.get("languages", {}):
                     section_emb = ResumeSectionEmbedding(
                         resume_id=resume_id,
-                        section_type=ResumeSectionType.EDUCATION,
-                        section_index=idx,
-                        section_id=edu.get("id", f"edu_{idx}"),
-                        content=edu.get("text", ""),
-                        embedding=edu["vector"]
+                        section_type=ResumeSectionType.LANGUAGE,
+                        section_index=0,
+                        section_id="languages",
+                        content=embeddings["languages"].get("text", ""),
+                        embedding=embeddings["languages"]["vector"]
                     )
                     session.add(section_emb)
                     saved_count += 1
-            
-            # 자기소개
-            for idx, si in enumerate(embeddings.get("self_introduction", [])):
-                if "vector" in si:
+                
+                # 기술 스택
+                if "vector" in embeddings.get("skills", {}):
                     section_emb = ResumeSectionEmbedding(
                         resume_id=resume_id,
-                        section_type=ResumeSectionType.SELF_INTRODUCTION,
-                        section_index=idx,
-                        section_id=f"si_{idx}",
-                        content=si.get("text", ""),
-                        embedding=si["vector"],
-                        si_type=si.get("type", "기타")
+                        section_type=ResumeSectionType.SKILL,
+                        section_index=0,
+                        section_id="skills",
+                        content=embeddings["skills"].get("text", ""),
+                        embedding=embeddings["skills"]["vector"]
                     )
                     session.add(section_emb)
                     saved_count += 1
-            
-            # 자격증
-            if "vector" in embeddings.get("certifications", {}):
-                section_emb = ResumeSectionEmbedding(
-                    resume_id=resume_id,
-                    section_type=ResumeSectionType.CERTIFICATION,
-                    section_index=0,
-                    section_id="certifications",
-                    content=embeddings["certifications"].get("text", ""),
-                    embedding=embeddings["certifications"]["vector"]
-                )
-                session.add(section_emb)
-                saved_count += 1
-            
-            # 어학
-            if "vector" in embeddings.get("languages", {}):
-                section_emb = ResumeSectionEmbedding(
-                    resume_id=resume_id,
-                    section_type=ResumeSectionType.LANGUAGE,
-                    section_index=0,
-                    section_id="languages",
-                    content=embeddings["languages"].get("text", ""),
-                    embedding=embeddings["languages"]["vector"]
-                )
-                session.add(section_emb)
-                saved_count += 1
-            
-            # 기술 스택
-            if "vector" in embeddings.get("skills", {}):
-                section_emb = ResumeSectionEmbedding(
-                    resume_id=resume_id,
-                    section_type=ResumeSectionType.SKILL,
-                    section_index=0,
-                    section_id="skills",
-                    content=embeddings["skills"].get("text", ""),
-                    embedding=embeddings["skills"]["vector"]
-                )
-                session.add(section_emb)
-                saved_count += 1
-            
-            session.commit()
-            logger.info(f"[Resume {resume_id}] {saved_count}개 섹션 임베딩 저장 완료")
+                
+                # 모든 임베딩 저장 완료 후 커밋
+                session.commit()
+                logger.info(f"[Resume {resume_id}] {saved_count}개 섹션 임베딩 저장 완료")
+        
+        except Exception as e:
+            logger.error(f"[Resume {resume_id}] 임베딩 저장 실패: {e}", exc_info=True)
+            # 세션은 자동으로 롤백됨 (context manager)
+            return {
+                "status": "error",
+                "message": f"Failed to save embeddings: {e}",
+                "resume_id": resume_id
+            }
         
         # 통계 정보 수집
         stats = {

@@ -26,6 +26,6 @@ python-dotenv>=1.0.1
 # Utility
 requests>=2.31.0
 
-# Speech-to-Text
-deepgram-sdk>=3.11.0
+
+# Speech-to-Text (Delegated to AI-Worker)
 websockets>=12.0
