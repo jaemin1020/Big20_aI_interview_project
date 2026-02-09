@@ -13,10 +13,13 @@ class ResumeSectionClassifier:
     """
     이력서 텍스트를 섹션별로 분류하는 클래스
     
-    섹션 타입:
+    Attributes:
     - SKILL_CERT: 기술 스택, 자격증
     - CAREER_PROJECT: 경력, 프로젝트
     - COVER_LETTER: 자기소개서 (지원동기, 성격, 포부 등)
+
+    생성자: lyn
+    생성일자: 2026-02-07
     """
     
     # 키워드 기반 분류 규칙
@@ -49,6 +52,9 @@ class ResumeSectionClassifier:
             
         Returns:
             str: 'skill_cert', 'career_project', 'cover_letter'
+        
+        생성자: lyn
+        생성일자: 2026-02-07
         """
         text_lower = text.lower()
         
@@ -88,6 +94,9 @@ class ResumeSectionClassifier:
             
         Returns:
             List[Dict]: [{"content": "...", "chunk_index": 0, "section_type": "skill_cert"}, ...]
+        
+        생성자: lyn
+        생성일자: 2026-02-07
         """
         classified_chunks = []
         
