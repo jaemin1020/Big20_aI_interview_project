@@ -10,9 +10,6 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
-  login as apiLogin,
-  register as apiRegister,
-  logout as apiLogout,
   getCurrentUser,
   recognizeAudio
 } from './api/interview';
