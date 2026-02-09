@@ -70,6 +70,21 @@ function App() {
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
 
+  // Users selected interview for result view
+  const [selectedInterview, setSelectedInterview] = useState(null);
+
+  // Persistence Effect
+  useEffect(() => {
+    sessionStorage.setItem('current_step', step);
+    sessionStorage.setItem('current_interview', JSON.stringify(interview));
+    sessionStorage.setItem('current_questions', JSON.stringify(questions));
+    sessionStorage.setItem('current_idx', currentIdx);
+    sessionStorage.setItem('current_report', JSON.stringify(report));
+    sessionStorage.setItem('current_position', position);
+    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
+  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
+
+
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
@@ -628,14 +643,41 @@ function App() {
 
         {step === 'result' && (
           <ResultPage
-            results={report || []}
-            isReportLoading={isReportLoading}
+            results={report?.details_json || []}
+            report={report}
+            interview={selectedInterview}
             onReset={() => {
               setStep('main');
               setCurrentIdx(0);
               setReport(null);
+              setReport(null);
               setIsReportLoading(false);
+              setSelectedInterview(null);
             }}
+          />
+        )}
+
+        {step === 'history' && (
+          <InterviewHistoryPage
+            onBack={() => setStep('main')}
+            onViewResult={(reportData, interviewData) => {
+              setReport(reportData);
+              setSelectedInterview(interviewData);
+              setStep('result');
+            }}
+          />
+        )}
+
+        {step === 'settings' && (
+          <AccountSettingsPage
+            onBack={() => setStep('main')}
+          />
+        )}
+
+        {step === 'profile' && (
+          <ProfileManagementPage
+            onBack={() => setStep('main')}
+            user={user}
           />
         )}
       </div>
