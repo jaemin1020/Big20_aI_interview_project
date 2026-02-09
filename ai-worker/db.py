@@ -27,8 +27,8 @@ else:
 try:
     # Centralized Model Imports
     from models import (
-        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
-        User, Resume, ResumeChunk, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
+        UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker, ResumeSectionType,
+        User, Resume, ResumeChunk, ResumeSectionEmbedding, Interview, Question, Transcript, EvaluationReport, AnswerBank, Company
     )
 except ImportError as e:
     print(f"Error importing models from backend-core: {e}")
@@ -38,7 +38,11 @@ except ImportError as e:
 # ==========================================
 # Database Connection
 # ==========================================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:15432/interview_db")
+
+# db ➔ localhost
+# 5432 ➔ 1543
+
 engine = create_engine(DATABASE_URL)
 
 

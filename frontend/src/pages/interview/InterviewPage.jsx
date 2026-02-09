@@ -177,14 +177,12 @@ const InterviewPage = ({
           >
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}
           </PremiumButton>
-          {currentIdx < totalQuestions - 1 && (
-            <PremiumButton 
-              onClick={nextQuestion} 
-              style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
-            >
-              다음 질문
-            </PremiumButton>
-          )}
+          <PremiumButton 
+            onClick={nextQuestion} 
+            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+          >
+            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
+          </PremiumButton>
           <PremiumButton 
             variant="secondary"
             onClick={onFinish}
