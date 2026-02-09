@@ -13,6 +13,18 @@ stt_pipeline = None
 MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo") 
 
 def load_stt_pipeline():
+    """
+    Whisper 파이프라인 로드
+    
+    Returns:
+        None
+    
+    Raises:
+        Exception: 파이프라인 로드 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     global stt_pipeline
     try:
         # cuDNN 에러 방지를 위해 CPU 사용 강제 (Docker Slim 이미지 한계)
@@ -48,6 +60,12 @@ def recognize_audio_task(audio_b64: str):
         
     Returns:
         dict: {"status": "success", "text": "..."}
+    
+    Raises:
+        Exception: STT 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-08
     """
     global stt_pipeline
     

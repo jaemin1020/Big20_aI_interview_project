@@ -29,7 +29,20 @@ async def create_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """면접 세션 생성 및 질문 생성"""
+    """
+    면접 세션 생성 및 질문 생성
+    
+    Args:
+        interview_data (InterviewCreate): 면접 생성 정보
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        InterviewResponse: 면접 생성 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     
     # 1. Interview 레코드 생성 (상태: SCHEDULED)
     new_interview = Interview(
@@ -123,7 +136,19 @@ async def get_all_interviews(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """전체 인터뷰 목록 조회"""
+    """
+    전체 인터뷰 목록 조회
+    
+    Args:
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        List[InterviewResponse]: 인터뷰 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     if current_user.role not in ["recruiter", "admin"]:
         stmt = select(Interview).where(
             Interview.candidate_id == current_user.id
@@ -156,7 +181,20 @@ async def get_interview_questions(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """면접의 질문 목록 조회"""
+    """
+    면접의 질문 목록 조회
+    
+    Args:
+        interview_id (int): 면접 ID
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        List[InterviewResponse]: 면접 질문 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
@@ -181,7 +219,20 @@ async def get_interview_transcripts(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """면접의 전체 대화 기록 조회"""
+    """
+    면접의 전체 대화 기록 조회
+    
+    Args:
+        interview_id (int): 면접 ID
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        List[InterviewResponse]: 면접 대화 기록 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id
     ).order_by(Transcript.timestamp)
@@ -207,6 +258,20 @@ async def complete_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    면접 완료 처리
+    
+    Args:
+        interview_id (int): 면접 ID
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        dict: 면접 완료 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -229,6 +294,20 @@ async def get_evaluation_report(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    평가 리포트 조회
+    
+    Args:
+        interview_id (int): 면접 ID
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
+        
+    Returns:
+        EvaluationReportResponse: 평가 리포트
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     stmt = select(EvaluationReport).where(
         EvaluationReport.interview_id == interview_id
     )
@@ -239,10 +318,3 @@ async def get_evaluation_report(
     
     return report
 
-# --- Transcript Route (별도 파일로 할 수도 있지만 interview와 밀접하므로 여기에 포함) ---
-# 기존 main.py에서는 /transcripts 였지만 여기서는 /interviews 하위가 아님.
-# 따라서 별도 라우터(`transcripts_router`)로 분리하거나, prefix 없는 별도 라우터를 정의해야 함.
-# 편의상 여기서는 router 외에 별도 router를 정의하지 않고,
-# /transcripts 엔드포인트를 위해 APIRouter를 하나 더 만들지 않고, 
-# main.py에서 transcript 관련은 별도 라우터 파일(`routes/transcripts.py`)로 빼는 게 깔끔함.
-# 일단 여기서는 Interview 관련만 처리.

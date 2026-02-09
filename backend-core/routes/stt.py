@@ -20,6 +20,12 @@ celery_app = Celery("ai_worker", broker=CELERY_BROKER_URL, backend=CELERY_BACKEN
 async def recognize_audio(file: UploadFile = File(...)):
     """
     오디오 파일을 AI-Worker로 전송하여 STT 수행
+    
+    Args:
+        file (UploadFile): 오디오 파일
+        
+    Returns:
+        dict: STT 결과
     """
     try:
         # 파일 읽기
