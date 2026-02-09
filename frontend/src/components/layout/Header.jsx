@@ -50,19 +50,19 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
             paddingLeft: '1.5rem',
             borderLeft: '1px solid var(--glass-border)'
           }}>
-            <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>▶</span>
-            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>면접 진행중</span>
+            <span style={{ color: '#ef4444', fontSize: '1.2rem' }}>▶</span>
+            <span style={{ fontSize: '1.3rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>면접 진행중</span>
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               background: 'rgba(239, 68, 68, 0.1)',
-              padding: '2px 10px',
+              padding: '4px 12px',
               borderRadius: '6px',
               border: '1px solid rgba(239, 68, 68, 0.2)'
             }}>
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} className="blink"></div>
-              <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#ef4444' }}>LIVE</span>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} className="blink"></div>
+              <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#ef4444' }}>LIVE</span>
             </div>
           </div>
         )}
