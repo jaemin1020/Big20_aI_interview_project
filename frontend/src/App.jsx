@@ -533,6 +533,17 @@ function App() {
           onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
+          onHistory={() => setStep('history')}
+          onAccountSettings={() => setStep('settings')}
+          onProfileManagement={() => setStep('profile')}
+          pageTitle={
+            step === 'history' ? '면접 이력' :
+              step === 'result' ? '면접 결과' :
+                step === 'settings' ? '계정 설정' :
+                  step === 'profile' ? '프로필 관리' :
+                    step === 'env_test' ? '환경 테스트' :
+                      null
+          }
         />
       )}
 
