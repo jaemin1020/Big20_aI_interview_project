@@ -36,6 +36,10 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
         }
     };
 
+    // 고유한 회사명과 직무 목록 추출
+    const uniqueCompanies = [...new Set(interviews.map(item => item.company_name).filter(Boolean))];
+    const uniquePositions = [...new Set(interviews.map(item => item.position).filter(Boolean))];
+
     const handleSearch = () => {
         // 필터링은 클라이언트 사이드에서 처리 (데이터 양이 많지 않을 것으로 가정)
         // 실제로는 API에 파라미터를 보내는 것이 좋음.
@@ -44,11 +48,11 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
 
     const filteredInterviews = interviews.filter(item => {
         // 1. Company Filter
-        if (companyFilter && !item.company_name?.toLowerCase().includes(companyFilter.toLowerCase())) {
+        if (companyFilter && companyFilter !== item.company_name) {
             return false;
         }
         // 2. Position Filter
-        if (positionFilter && !item.position?.toLowerCase().includes(positionFilter.toLowerCase())) {
+        if (positionFilter && positionFilter !== item.position) {
             return false;
         }
         // 3. Date Filter
@@ -97,6 +101,7 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
 
             {/* 2. 필터 영역 (GlassCard) */}
             <GlassCard className="filter-section" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+                {/* 첫 번째 행: 모든 필터 */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'end' }}>
 
                     {/* 기간 필터 */}
@@ -120,20 +125,12 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                             <option value="3month">최근 3개월</option>
                             <option value="custom">직접 입력</option>
                         </select>
-                        {dateFilter === 'custom' && (
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                                <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-main)' }} />
-                                <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-main)' }} />
-                            </div>
-                        )}
                     </div>
 
                     {/* 회사명 필터 */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>지원 회사</label>
-                        <input
-                            type="text"
-                            placeholder="회사명 검색"
+                        <select
                             value={companyFilter}
                             onChange={(e) => setCompanyFilter(e.target.value)}
                             style={{
@@ -145,15 +142,18 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                 color: 'var(--text-main)',
                                 outline: 'none'
                             }}
-                        />
+                        >
+                            <option value="">전체 회사</option>
+                            {uniqueCompanies.map(company => (
+                                <option key={company} value={company}>{company}</option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* 직무 필터 */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>지원 직무</label>
-                        <input
-                            type="text"
-                            placeholder="직무명 검색"
+                        <select
                             value={positionFilter}
                             onChange={(e) => setPositionFilter(e.target.value)}
                             style={{
@@ -165,17 +165,57 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                 color: 'var(--text-main)',
                                 outline: 'none'
                             }}
-                        />
+                        >
+                            <option value="">전체 직무</option>
+                            {uniquePositions.map(position => (
+                                <option key={position} value={position}>{position}</option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* 검색 버튼 */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        {/* 실시간 필터링이므로 버튼은 상징적인 의미거나, API 재요청용 */}
                         <PremiumButton onClick={handleSearch} style={{ width: '100%', padding: '10px' }}>
                             검색 적용
                         </PremiumButton>
                     </div>
                 </div>
+
+                {/* 두 번째 행: 직접 입력 날짜 (조건부 표시) */}
+                {dateFilter === 'custom' && (
+                    <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <label style={{ color: 'var(--text-muted)', fontSize: '0.9rem', minWidth: '80px' }}>기간 선택:</label>
+                        <input
+                            type="date"
+                            value={customStartDate}
+                            onChange={(e) => setCustomStartDate(e.target.value)}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                borderRadius: '8px',
+                                border: '1px solid var(--glass-border)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: 'var(--text-main)',
+                                outline: 'none'
+                            }}
+                        />
+                        <span style={{ color: 'var(--text-muted)' }}>~</span>
+                        <input
+                            type="date"
+                            value={customEndDate}
+                            onChange={(e) => setCustomEndDate(e.target.value)}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                borderRadius: '8px',
+                                border: '1px solid var(--glass-border)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: 'var(--text-main)',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                )}
             </GlassCard>
 
             {/* 3. 리스트 영역 */}
