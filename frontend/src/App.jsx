@@ -106,6 +106,9 @@ function App() {
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
 
+  // Users selected interview for result view
+  const [selectedInterview, setSelectedInterview] = useState(null);
+
   // Persistence Effect
   useEffect(() => {
     sessionStorage.setItem('current_step', step);
@@ -688,10 +691,13 @@ function App() {
         {step === 'result' && (
           <ResultPage
             results={report?.details_json || []}
+            report={report}
+            interview={selectedInterview}
             onReset={() => {
               setStep('landing');
               setCurrentIdx(0);
               setReport(null);
+              setSelectedInterview(null);
             }}
           />
         )}
@@ -699,8 +705,9 @@ function App() {
         {step === 'history' && (
           <InterviewHistoryPage
             onBack={() => setStep('main')}
-            onViewResult={(reportData) => {
+            onViewResult={(reportData, interviewData) => {
               setReport(reportData);
+              setSelectedInterview(interviewData);
               setStep('result');
             }}
           />
