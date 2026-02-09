@@ -41,6 +41,7 @@ opencv-python-headless>=4.10.0.84
 # Audio Processing
 librosa>=0.10.2
 
+
 # PDF Processing & Document Parsing
 PyPDF2>=3.0.1
 pdfplumber>=0.11.0

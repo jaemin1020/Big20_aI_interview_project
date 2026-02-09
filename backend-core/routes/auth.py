@@ -66,49 +66,4 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     logger.info(f"User logged in: {user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Deepgram 임시 토큰 발급 (New)
-@router.get("/deepgram-token")
-async def get_deepgram_token(current_user: User = Depends(get_current_user)):
-    """Deepgram 사용을 위한 임시 API Key 발급"""
-    DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-    if not DEEPGRAM_API_KEY:
-        raise HTTPException(status_code=500, detail="Deepgram API Key not configured on server")
 
-    try:
-        # 멤버/프로젝트 정보 조회하여 Project ID 획득
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        # 프로젝트 목록 조회
-        resp = requests.get("https://api.deepgram.com/v1/projects", headers=headers)
-        if resp.status_code != 200:
-            logger.error(f"Failed to get Deepgram projects: {resp.text}")
-            raise HTTPException(status_code=500, detail="Failed to communicate with Deepgram")
-            
-        projects = resp.json().get("projects", [])
-        if not projects:
-             raise HTTPException(status_code=500, detail="No Deepgram projects found")
-             
-        project_id = projects[0]["project_id"]
-        
-        # 임시 키 생성 (TTL: 10분)
-        # Deepgram Key Creation API
-        create_key_url = f"https://api.deepgram.com/v1/projects/{project_id}/keys"
-        payload = {
-            "comment": f"Temp key for user {current_user.username}",
-            "scopes": ["usage:write"], # 최소 권한
-            "time_to_live_in_seconds": 600 # 10분
-        }
-        
-        key_resp = requests.post(create_key_url, headers=headers, json=payload)
-        if key_resp.status_code != 200:
-            logger.error(f"Failed to create temp key: {key_resp.text}")
-            raise HTTPException(status_code=500, detail="Failed to create temporary Deepgram key")
-            
-        temp_key = key_resp.json()["api_key"]
-        return {"temp_key": temp_key}
-        
-    except Exception as e:
-        logger.error(f"Deepgram token generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
