@@ -18,6 +18,13 @@ MODEL_PATH = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 class ExaoneLLM:
     """
     EXAONE-3.5-7.8B-Instruct (GGUF) 싱글톤 LLM
+    
+    Attributes:
+        llm (Llama): Llama.cpp 모델 인스턴스
+        _initialized (bool): 초기화 여부
+    
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     _instance = None
     
@@ -63,7 +70,20 @@ class ExaoneLLM:
         examples: List[str] = None,
         count: int = 5
     ) -> List[str]:
-        """면접 질문 생성"""
+        """면접 질문 생성
+        
+        Args:
+            position (str): 직무 포지션
+            context (str, optional): 추가 컨텍스트. Defaults to "".
+            examples (List[str], optional): 예시 질문. Defaults to None.
+            count (int, optional): 생성할 질문 수. Defaults to 5.
+            
+        Returns:
+            List[str]: 생성된 질문 리스트
+        
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         # Few-shot 예시
         if examples:
             few_shot = "\n".join([f"- {q}" for q in examples[:3]])
@@ -132,7 +152,19 @@ class ExaoneLLM:
         answer_text: str,
         rubric: Optional[Dict] = None
     ) -> Dict:
-        """답변 평가"""
+        """답변 평가
+        
+        Args:
+            question_text (str): 평가할 질문 텍스트
+            answer_text (str): 평가할 답변 텍스트
+            rubric (Optional[Dict], optional): 평가 기준. Defaults to None.
+            
+        Returns:
+            Dict: 평가 결과
+        
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         if not answer_text or not answer_text.strip():
             return {"technical_score": 0, "communication_score": 0, "feedback": "답변이 없습니다."}
 
@@ -189,6 +221,18 @@ class ExaoneLLM:
             return {"technical_score": 3, "communication_score": 3, "feedback": "평가 중 시스템 오류 발생"}
 
     def _get_fallback_questions(self, position: str, count: int) -> List[str]:
+        """기본 질문 생성
+        
+        Args:
+            position (str): 직무 포지션
+            count (int): 생성할 질문 수
+            
+        Returns:
+            List[str]: 생성된 기본 질문 리스트
+        
+        생성자: ejm
+        생성일자: 2026-02-07
+        """
         base_qs = [
             f"{position} 직무에 지원하게 된 구체적인 동기는 무엇인가요?",
             "본인의 가장 큰 강점과 약점은 무엇이라고 생각하나요?",
@@ -199,6 +243,14 @@ class ExaoneLLM:
         return base_qs[:count]
 
 def get_exaone_llm() -> ExaoneLLM:
+    """싱글톤 인스턴스 반환
+    
+    Returns:
+        ExaoneLLM: 싱글톤 인스턴스
+    
+    생성자: ejm
+    생성일자: 2026-02-07
+    """
     return ExaoneLLM()
 
 # Warmup

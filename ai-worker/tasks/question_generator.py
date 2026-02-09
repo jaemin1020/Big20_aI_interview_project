@@ -20,6 +20,14 @@ class QuestionGenerator:
     """
     하이브리드 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
     전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
+    
+    Attributes:
+        _instance (QuestionGenerator): 싱글톤 인스턴스
+        _initialized (bool): 초기화 여부
+        llm (LLM): EXAONE LLM 인스턴스
+
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     _instance = None
     
@@ -50,6 +58,15 @@ class QuestionGenerator:
             interview_id: 면접 ID (이력서/회사 정보 조회용)
             count: 생성할 총 질문 수
             reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
+        
+        Returns:
+            List[str]: 생성된 질문 리스트
+        
+        Raises:
+            ValueError: 재활용 비율이 유효하지 않을 경우
+        
+        생성자: ejm
+        생성일자: 2026-02-04
         """
         from tools import ResumeTool, CompanyTool
         
@@ -95,7 +112,22 @@ class QuestionGenerator:
         return questions[:count]  # 정확히 count개만 반환
     
     def _reuse_questions_from_db(self, position: str, count: int):
-        """DB에서 검증된 질문 가져오기"""
+        """
+        DB에서 검증된 질문 가져오기
+        
+        Args:
+            position (str): 지원 직무
+            count (int): 가져올 질문 수
+        
+        Returns:
+            List[str]: DB에서 가져온 질문 리스트
+        
+        Raises:
+            Exception: DB 조회 실패
+        
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         
         try:
             db_questions = get_best_questions_by_position(position, limit=count)
@@ -114,6 +146,23 @@ class QuestionGenerator:
 
 @shared_task(name="tasks.question_generator.generate_questions")
 def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
+    """
+    질문 생성 Task
+    
+    Args:
+        position (str): 지원 직무
+        interview_id (int, optional): 면접 ID. Defaults to None.
+        count (int, optional): 생성할 질문 수. Defaults to 5.
+    
+    Returns:
+        List[str]: 생성된 질문 리스트
+    
+    Raises:
+        Exception: 질문 생성 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     try:
         generator = QuestionGenerator()
         return generator.generate_questions(position, interview_id, count)
