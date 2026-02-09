@@ -96,7 +96,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+                {uploadResult?.structured_data?.target_position || 'Unknown'}
               </dd>
 
               {uploadResult?.skills && uploadResult.skills.length > 0 && (

@@ -3,17 +3,16 @@ FROM python:3.10-slim
 # 1. 시스템 의존성 설치 (OpenCV, Llama-cpp, DeepFace 및 빌드를 위한 도구)
 # 한국 미러(KAIST) 사용으로 속도 및 안정성 향상
 RUN sed -i 's/deb.debian.org/ftp.kaist.ac.kr/g' /etc/apt/sources.list.d/debian.sources && \
-    apt-get update && apt-get install -y \
+    apt-get update && apt-get install -y --fix-missing \
     build-essential \
-    curl \
+    cmake \
     git \
+    pkg-config \
     ffmpeg \
     libsm6 \
     libxext6 \
     libgl1 \
     libglib2.0-0 \
-    cmake \
-    pkg-config \
     libopenblas-dev \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*

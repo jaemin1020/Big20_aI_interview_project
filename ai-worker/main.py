@@ -40,4 +40,17 @@ app.conf.update(
 
 if __name__ == "__main__":
     logger.info("AI-Worker Celery App initialized.")
+    
+    # 모델 Preload (첫 요청 지연 방지)
+    try:
+        from tasks.stt import load_models as load_stt
+        from tasks.resume_embedding import load_embedding_model
+        
+        logger.info("Preloading models...")
+        load_stt()
+        load_embedding_model()
+        logger.info("Models preloaded successfully.")
+    except Exception as e:
+        logger.warning(f"Model preload failed: {e}")
+
     app.start()

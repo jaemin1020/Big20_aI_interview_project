@@ -175,6 +175,7 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
                     "behavioral_questions": ["target_info(company)", "cover_letter"]
                 },
                 "segments_count": len(segments),
+                "sections": segments,  # 섹션 내용 포함 (임베딩 생성을 위해 필수)
                 "chunks_info": processed_chunks_info,  # 청크 정보를 메타데이터로 저장
                 "note": "Raw content preserved via SectionSplitter",
                 "used_fallback": used_fallback,  # 폴백 사용 여부

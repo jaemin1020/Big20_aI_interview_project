@@ -62,16 +62,47 @@ def generate_resume_embeddings_task(self, resume_id: int):
         
         # extracted_text에서 섹션 정보 추출 (간단한 예시)
         # 실제로는 더 정교한 파싱이 필요할 수 있음
-        if resume.extracted_text:
-            # 섹션별로 분리된 데이터가 있다면 활용
-            # 여기서는 기본 구조만 생성
-            resume_data["experience"] = []
-            resume_data["projects"] = []
-            resume_data["education"] = []
-            resume_data["self_introduction"] = []
-            resume_data["certifications"] = []
-            resume_data["languages"] = []
-            resume_data["skills"] = {}
+        
+        # extracted_text에서 섹션 정보 추출 (간단한 예시)
+        # 실제로는 더 정교한 파싱이 필요할 수 있음
+        sections = resume.structured_data.get("sections", [])
+        
+        # 하위 호환성: sections가 없으면 재빨리 다시 파싱
+        if not sections and resume.extracted_text:
+            from utils.section_splitter import SectionSplitter
+            sections = SectionSplitter.split_by_sections(resume.extracted_text)
+            logger.info(f"[Resume {resume_id}] 기존 데이터에 섹션 정보가 없어 재파싱함: {len(sections)}개 섹션")
+
+        # 섹션별 데이터 매핑
+        resume_data["experience"] = []
+        resume_data["projects"] = []
+        resume_data["education"] = []
+        resume_data["self_introduction"] = []
+        resume_data["certifications"] = []
+        resume_data["languages"] = []
+        resume_data["skills"] = {}
+
+        for sec in sections:
+            stype = sec.get("section_type", "")
+            content = sec.get("content", "")
+            
+            if not content: continue
+
+            if stype == "education":
+                resume_data["education"].append({"text": content})
+            elif stype == "career_project":
+                # 경력/프로젝트 구분 모호하므로 경력에 우선 배정
+                resume_data["experience"].append({"text": content})
+                resume_data["projects"].append({"text": content}) 
+            elif stype == "skill_cert":
+                resume_data["certifications"].append({"text": content})
+                # skills는 텍스트로 처리
+                resume_data["skills"]["raw"] = content
+            elif stype == "cover_letter":
+                resume_data["self_introduction"].append({"text": content, "type": "자기소개"})
+            elif stype == "target_info":
+                # 이미 profile에 들어갔지만 텍스트로도 보존
+                pass
         
         # 3.1 임베딩 생성용 데이터 검증
         from utils.validation import ResumeValidator
