@@ -255,7 +255,14 @@ function App() {
     setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & Resume ID
-      const interviewPosition = parsedResumeData?.structured_data?.target_position || parsedResumeData?.position || position || 'General';
+      let interviewPosition = parsedResumeData?.structured_data?.target_position;
+
+      // 만약 target_position이 객체라면 내부 position 필드 추출
+      if (interviewPosition && typeof interviewPosition === 'object') {
+        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
+      }
+
+      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
       const resumeId = parsedResumeData?.id || null;
 
       console.log("Creating interview with:", { interviewPosition, resumeId });
