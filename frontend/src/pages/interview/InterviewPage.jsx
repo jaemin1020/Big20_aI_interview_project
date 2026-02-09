@@ -109,25 +109,26 @@ const InterviewPage = ({
               />
               <div style={{
                 position: 'absolute',
-                top: '0.8rem',
-                right: '0.8rem',
-                padding: '4px 10px',
+                top: '1rem',
+                right: '1rem',
+                padding: '6px 14px',
                 borderRadius: '50px',
-                background: 'rgba(0,0,0,0.5)',
+                background: 'rgba(0,0,0,0.6)',
                 backdropFilter: 'blur(10px)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                border: '1px solid rgba(255,255,255,0.1)'
+                gap: '8px',
+                border: '1px solid rgba(255,255,255,0.2)'
               }}>
                 <div style={{
-                  width: '6px',
-                  height: '6px',
+                  width: '10px',
+                  height: '10px',
                   borderRadius: '50%',
                   background: isRecording ? '#ef4444' : '#10b981',
+                  boxShadow: isRecording ? '0 0 8px #ef4444' : 'none'
                 }}></div>
-                <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'white' }}>
-                  {isRecording ? 'REC' : 'IDLE'}
+                <span style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white', letterSpacing: '0.05em' }}>
+                  {isRecording ? 'LIVE REC' : 'READY'}
                 </span>
               </div>
             </div>
