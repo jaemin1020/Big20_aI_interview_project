@@ -1,6 +1,23 @@
 # 📝 Development Change Log
 
 
+## [8108e37] 2026-02-09 (작성자: codename lala)
+
+**[스타일 조정] 코드 스타일 일관성 유지 및 가독성 향상**
+
+- **수정 위치**: 
+  - lala_test/edit_log/DEVELOPMENT_LOG.md
+- **수정 원인**: 코드 스타일 일관성 유지 및 가독성 향상
+- **개선 전 (Before)**:
+  > 중복된 import 문 존재
+- **개선 후 (After)**:
+  > 중복된 import 문 제거 및 형식 통일
+- **상세 변경 내용**:
+  App.jsx 파일에서 중복된 'login', 'register', 'logout' import 문을 삭제하고, 나머지 API 관련 import 문을 일관된 스타일로 재구성하여 코드의 가독성을 향상시켰습니다.
+
+<!-- hash:8108e372da7ed3b7b9fadae25b029f4e85aeccfe -->
+---
+
 ## [6c255e9] 2026-02-09 (작성자: codename lala)
 
 **[스타일 조정] 코드 스타일 일관성 유지 및 가독성 향상**
