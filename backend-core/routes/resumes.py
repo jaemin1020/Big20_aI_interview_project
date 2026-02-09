@@ -35,9 +35,16 @@ async def upload_resume(
     """
     이력서 PDF 업로드
     
-    - 파일 저장
-    - DB 레코드 생성
-    - 비동기 파싱 작업 전송
+    Args:
+        file (UploadFile): 업로드할 이력서 파일
+        user (User): 현재 사용자
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        dict: 업로드 결과
+    
+    생성자: ejm
+    생성일자: 2026-02-06
     """
     # 파일 확장자 검증
     if not file.filename.lower().endswith('.pdf'):
@@ -114,7 +121,20 @@ async def get_resume(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
-    """이력서 조회"""
+    """
+    이력서 조회
+    
+    Args:
+        resume_id (int): 이력서 ID
+        user (User): 현재 사용자
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        dict: 이력서 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     resume = db.get(Resume, resume_id)
     
     if not resume:
@@ -148,7 +168,20 @@ async def get_user_resumes(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
-    """사용자의 이력서 목록 조회"""
+    """
+    사용자의 이력서 목록 조회
+    
+    Args:
+        user_id (int): 사용자 ID
+        user (User): 현재 사용자
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        dict: 이력서 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     # 권한 확인
     if user_id != user.id and user.role != "ADMIN":
         raise HTTPException(
@@ -184,7 +217,20 @@ async def reprocess_resume(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
-    """이력서 재처리"""
+    """
+    이력서 재처리
+    
+    Args:
+        resume_id (int): 이력서 ID
+        user (User): 현재 사용자
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        dict: 재처리 결과
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     resume = db.get(Resume, resume_id)
     
     if not resume:
@@ -231,7 +277,20 @@ async def delete_resume(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
-    """이력서 삭제 (soft delete)"""
+    """
+    이력서 삭제 (soft delete)
+    
+    Args:
+        resume_id (int): 이력서 ID
+        user (User): 현재 사용자
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        dict: 삭제 결과
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     resume = db.get(Resume, resume_id)
     
     if not resume:
