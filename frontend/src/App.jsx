@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
-  createInterview, 
-  getInterviewQuestions, 
+import {
+  createInterview,
+  getInterviewQuestions,
   createTranscript,
   completeInterview,
   getEvaluationReport,
   uploadResume,
   getAllInterviews,
-  login as apiLogin, 
-  register as apiRegister, 
-  logout as apiLogout, 
-  getCurrentUser 
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  getCurrentUser
 } from './api/interview';
 import { createClient } from "@deepgram/sdk";
 
@@ -31,7 +31,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
-  
+
   const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
 
   useEffect(() => {
@@ -42,13 +42,13 @@ function App() {
       document.body.classList.remove('dark-theme');
     }
   }, [isDarkMode]);
-  
-  const [account, setAccount] = useState({ 
-    email: '', 
+
+  const [account, setAccount] = useState({
+    email: '',
     username: '',
-    password: '', 
+    password: '',
     passwordConfirm: '',
-    fullName: '', 
+    fullName: '',
     birthDate: '',
     profileImage: null,
     termsAgreed: false
@@ -58,7 +58,7 @@ function App() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [report, setReport] = useState(null);
   const [isReportLoading, setIsReportLoading] = useState(false);
-  
+
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
@@ -69,7 +69,7 @@ function App() {
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
-  
+
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
@@ -99,7 +99,7 @@ function App() {
           if (savedReport) setReport(JSON.parse(savedReport));
           if (savedPosition) setPosition(savedPosition);
           if (savedParsedResume) setParsedResumeData(JSON.parse(savedParsedResume));
-          
+
           if (savedStep) {
             setStep(savedStep);
             if (savedStep === 'complete' && !savedReport && savedInterview) {
@@ -138,20 +138,20 @@ function App() {
 
   const handleAuth = async () => {
     setAuthError('');
-    
+
     // 클라이언트 사이드 유효성 검사
     if (authMode === 'register') {
-        const usernameRegex = /^[a-z0-9_]{4,12}$/;
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const usernameRegex = /^[a-z0-9_]{4,12}$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-        if (!usernameRegex.test(account.username)) {
-            setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
-            return;
-        }
-        if (!emailRegex.test(account.email)) {
-            setAuthError("유효한 이메일 주소를 입력해주세요.");
-            return;
-        }
+      if (!usernameRegex.test(account.username)) {
+        setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+        return;
+      }
+      if (!emailRegex.test(account.email)) {
+        setAuthError("유효한 이메일 주소를 입력해주세요.");
+        return;
+      }
     }
 
     try {
@@ -225,26 +225,32 @@ function App() {
   const initInterviewSession = async () => {
     setIsLoading(true);
     try {
-      // 1. Create Interview with Parsed Position & User Name
-      const interviewPosition = parsedResumeData?.position || position || 'General';
-      
-      console.log("Creating interview with:", { interviewPosition });
+      // 1. Create Interview with Parsed Position & Resume ID
+      let interviewPosition = parsedResumeData?.structured_data?.target_position;
 
-      const newInterview = await createInterview(interviewPosition, null, null); 
+      // 만약 target_position이 객체라면 내부 position 필드 추출
+      if (interviewPosition && typeof interviewPosition === 'object') {
+        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
+      }
+
+      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
+      const resumeId = parsedResumeData?.id || null;
+
+      const newInterview = await createInterview(interviewPosition, null, null);
       setInterview(newInterview);
 
       // 2. Get Questions
       let qs = await getInterviewQuestions(newInterview.id);
-      
+
       // Simple retry logic
       if (!qs || qs.length === 0) {
-         console.log("Questions not ready, retrying in 3s...");
-         await new Promise(r => setTimeout(r, 3000));
-         qs = await getInterviewQuestions(newInterview.id);
+        console.log("Questions not ready, retrying in 3s...");
+        await new Promise(r => setTimeout(r, 3000));
+        qs = await getInterviewQuestions(newInterview.id);
       }
 
       if (!qs || qs.length === 0) {
-          throw new Error("질문 생성에 시간이 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
+        throw new Error("질문 생성에 시간이 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
       }
 
       setQuestions(qs);
@@ -253,12 +259,12 @@ function App() {
       console.error("Session init error:", err);
       // 구체적인 에러 메시지 표시
       if (err.response?.status === 401) {
-          alert("세션이 만료되었습니다. 다시 로그인해주세요.");
-          localStorage.removeItem('token');
-          setUser(null);
-          setStep('auth');
+        alert("세션이 만료되었습니다. 다시 로그인해주세요.");
+        localStorage.removeItem('token');
+        setUser(null);
+        setStep('auth');
       } else {
-          alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
+        alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
       }
     } finally {
       setIsLoading(false);
@@ -273,7 +279,7 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-          
+
           setTranscript(prev => prev + ' ' + data.text);
         }
       } catch (err) {
@@ -297,13 +303,13 @@ function App() {
       model: "nova-2",
       language: "ko",
       smart_format: true,
-      encoding: "linear16", 
+      encoding: "linear16",
       sample_rate: 16000,
     });
 
     connection.on("Open", () => {
       console.log("Deepgram WebSocket Connected");
-      
+
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorder.addEventListener('dataavailable', (event) => {
         if (event.data.size > 0 && connection.getReadyState() === 1) {
@@ -319,13 +325,13 @@ function App() {
       if (channel && channel.alternatives && channel.alternatives[0]) {
         const transcriptText = channel.alternatives[0].transcript;
         const isFinal = result.is_final;
-        
+
         if (transcriptText) {
           if (isFinal) {
-             setTranscript(prev => prev + ' ' + transcriptText);
-             setSubtitle(''); 
+            setTranscript(prev => prev + ' ' + transcriptText);
+            setSubtitle('');
           } else {
-             setSubtitle(transcriptText);
+            setSubtitle(transcriptText);
           }
         }
       }
@@ -343,13 +349,13 @@ function App() {
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
-      
+
       setupDeepgram(stream);
 
       stream.getTracks().forEach(track => {
@@ -451,7 +457,7 @@ function App() {
     }
 
     const answerText = transcript.trim() || "답변 없음";
-    
+
     try {
       console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
       // Transcript 저장 (사용자 답변)
@@ -461,9 +467,9 @@ function App() {
         answerText,
         questions[currentIdx].id
       );
-      
+
       console.log('[nextQuestion] Transcript saved successfully');
-      
+
       if (currentIdx < questions.length - 1) {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
@@ -506,10 +512,10 @@ function App() {
     <div className="container">
       {/* Header - Visible in Most Steps */}
       {step !== 'main' && step !== 'auth' && (
-        <Header 
-          onLogout={handleLogout} 
-          showLogout={!!user} 
-          onLogoClick={() => setStep('main')} 
+        <Header
+          onLogout={handleLogout}
+          showLogout={!!user}
+          onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
         />
@@ -517,12 +523,12 @@ function App() {
 
       {/* Theme Toggle Button */}
       <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
-        <button 
+        <button
           onClick={() => setIsDarkMode(!isDarkMode)}
-          style={{ 
-            width: '50px', 
-            height: '50px', 
-            borderRadius: '50%', 
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '50%',
             background: 'var(--glass-bg)',
             backdropFilter: 'blur(10px)',
             border: '1px solid var(--glass-border)',
@@ -541,7 +547,7 @@ function App() {
 
       <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
         {step === 'main' && (
-          <MainPage 
+          <MainPage
             onStartInterview={() => {
               if (user) {
                 setStep('landing');
@@ -559,79 +565,79 @@ function App() {
           />
         )}
 
-      {step === 'auth' && (
-        <AuthPage 
-          authMode={authMode} setAuthMode={setAuthMode}
-          account={account} setAccount={setAccount}
-          handleAuth={handleAuth} authError={authError}
-        />
-      )}
+        {step === 'auth' && (
+          <AuthPage
+            authMode={authMode} setAuthMode={setAuthMode}
+            account={account} setAccount={setAccount}
+            handleAuth={handleAuth} authError={authError}
+          />
+        )}
 
-      {step === 'landing' && (
-        <LandingPage 
-          startInterview={startInterviewFlow} 
-          handleLogout={handleLogout}
-        />
-      )}
+        {step === 'landing' && (
+          <LandingPage
+            startInterview={startInterviewFlow}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {step === 'resume' && (
-        <ResumePage 
-          onNext={() => setStep('env_test')} 
-          onFileSelect={setResumeFile} 
-          onParsedData={setParsedResumeData} // Pass this to save parsed info
-        />
-      )}
-      
-      {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
-      
-      {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
+        {step === 'resume' && (
+          <ResumePage
+            onNext={() => setStep('env_test')}
+            onFileSelect={setResumeFile}
+            onParsedData={setParsedResumeData} // Pass this to save parsed info
+          />
+        )}
 
-      {step === 'interview' && (
-        <InterviewPage 
-          currentIdx={currentIdx}
-          totalQuestions={questions.length}
-          question={questions[currentIdx]?.content}
-          isRecording={isRecording}
-          transcript={transcript}
-          toggleRecording={toggleRecording}
-          nextQuestion={nextQuestion}
-          onFinish={finishInterview}
-          videoRef={videoRef}
-        />
-      )}
+        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
 
-      {step === 'complete' && (
-        <InterviewCompletePage 
-          isReportLoading={isReportLoading} 
-          onCheckResult={() => setStep('result')} 
-          onExit={() => {
-            setStep('main');
-            setReport(null);
-            setIsReportLoading(false);
-          }}
-        />
-      )}
+        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
-      {step === 'loading' && (
-        <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
-          <h2 className="text-gradient">AI 분석 리포트 생성 중...</h2>
-          <div className="spinner" style={{ width: '60px', height: '60px', borderTopColor: 'var(--primary)' }}></div>
-          <p style={{ color: 'var(--text-muted)' }}>답변 내용을 바탕으로 정밀한 결과를 도출하고 있습니다. 잠시만 기다려주세요.</p>
-        </div>
-      )}
+        {step === 'interview' && (
+          <InterviewPage
+            currentIdx={currentIdx}
+            totalQuestions={questions.length}
+            question={questions[currentIdx]?.content}
+            isRecording={isRecording}
+            transcript={transcript}
+            toggleRecording={toggleRecording}
+            nextQuestion={nextQuestion}
+            onFinish={finishInterview}
+            videoRef={videoRef}
+          />
+        )}
 
-      {step === 'result' && (
-        <ResultPage 
-          results={report || []} 
-          isReportLoading={isReportLoading}
-          onReset={() => {
-            setStep('main');
-            setCurrentIdx(0);
-            setReport(null);
-            setIsReportLoading(false);
-          }} 
-        />
-      )}
+        {step === 'complete' && (
+          <InterviewCompletePage
+            isReportLoading={isReportLoading}
+            onCheckResult={() => setStep('result')}
+            onExit={() => {
+              setStep('main');
+              setReport(null);
+              setIsReportLoading(false);
+            }}
+          />
+        )}
+
+        {step === 'loading' && (
+          <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
+            <h2 className="text-gradient">AI 분석 리포트 생성 중...</h2>
+            <div className="spinner" style={{ width: '60px', height: '60px', borderTopColor: 'var(--primary)' }}></div>
+            <p style={{ color: 'var(--text-muted)' }}>답변 내용을 바탕으로 정밀한 결과를 도출하고 있습니다. 잠시만 기다려주세요.</p>
+          </div>
+        )}
+
+        {step === 'result' && (
+          <ResultPage
+            results={report || []}
+            isReportLoading={isReportLoading}
+            onReset={() => {
+              setStep('main');
+              setCurrentIdx(0);
+              setReport(null);
+              setIsReportLoading(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );
