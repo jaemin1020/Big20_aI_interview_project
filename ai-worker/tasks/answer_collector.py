@@ -29,6 +29,12 @@ def collect_excellent_answer(transcript_id: int, evaluation_score: float):
     
     Returns:
         dict: 수집 결과
+    
+    Raises:
+        ValueError: 평가 점수가 기준 이하인 경우
+
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     # 점수 체크
     if evaluation_score < EXCELLENT_THRESHOLD:
@@ -126,6 +132,12 @@ def vectorize_existing_questions(batch_size: int = 100):
     
     Returns:
         dict: 처리 결과
+    
+    Raises:
+        ValueError: 질문이 없거나 벡터화 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     try:
         with Session(engine) as session:

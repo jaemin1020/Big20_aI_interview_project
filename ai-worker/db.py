@@ -47,6 +47,7 @@ engine = create_engine(DATABASE_URL)
 # ==========================================
 
 def get_best_questions_by_position(position: str, limit: int = 10):
+    
     with Session(engine) as session:
         stmt = select(Question).where(
             Question.position == position,

@@ -11,6 +11,20 @@ logger = logging.getLogger("ResumeStructurer")
 
 # 데이터 구조 정의용 Pydantic 모델
 class StructuredResume(BaseModel):
+    """이력서 구조화를 위한 Pydantic 모델
+    
+    Attributes:
+        personal_info (Dict): 개인 정보
+        education (List[Dict]): 학력 사항 리스트
+        experience (List[Dict]): 경력 사항 리스트
+        projects (List[Dict]): 프로젝트 리스트
+        skills (Dict): 보유 기술
+        certifications (List[Dict]): 자격증 및 수상 내역
+        cover_letter (Dict): 자기소개서 각 항목별 내용
+    
+    생성자: lyn
+    생성일자: 2026-02-04
+    """
     personal_info: Dict = Field(description="이름, 이메일, 연락처 등 개인 정보")
     education: List[Dict] = Field(description="학력 사항 리스트 (학교, 전공, 학위, 졸업일)")
     experience: List[Dict] = Field(description="경력 사항 리스트 (회사명, 직무, 기간, 상세업무)")
@@ -20,8 +34,15 @@ class StructuredResume(BaseModel):
     cover_letter: Dict = Field(description="자기소개서 각 항목별 내용")
 
 class ResumeStructurer:
-    """LLM 기반 이력서 구조화 엔진"""
-
+    """LLM 기반 이력서 구조화 엔진
+    
+    Attributes:
+        llm (ChatOpenAI): LLM 엔진
+        parser (JsonOutputParser): JSON 출력 파서
+    
+    생성자: lyn
+    생성일자: 2026-02-04
+    """
     def __init__(self):
         # 환경 변수에서 모델 설정 로드
         model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")
@@ -38,10 +59,18 @@ class ResumeStructurer:
         self.parser = JsonOutputParser(pydantic_object=StructuredResume)
 
     def structure_resume(self, text: str) -> Dict:
+        """LLM을 사용하여 이력서 텍스트를 완벽하게 구조화
+        
+        Args:
+            text (str): 구조화할 이력서 텍스트
+            
+        Returns:
+            Dict: 구조화된 이력서 데이터
+        
+        생성자: lyn
+        생성일자: 2026-02-04
         """
-        LLM을 사용하여 이력서 텍스트를 완벽하게 구조화
-        """
-        logger.info("🤖 LLM을 이용한 이력서 구조화 시작...")
+        logger.info("LLM을 이용한 이력서 구조화 시작...")
         
         prompt = ChatPromptTemplate.from_template("""
         당신은 최고의 채용 컨설턴트입니다. 아래 제공된 [이력서 텍스트]를 분석하여 지정된 JSON 형식으로 구조화하세요.
@@ -68,15 +97,32 @@ class ResumeStructurer:
             logger.info("✅ 이력서 구조화 완료")
             return result
         except Exception as e:
-            logger.error(f"❌ 이력서 구조화 실패: {e}")
+            logger.error(f"LLM 이력서 구조화 실패: {e}")
             return self._get_fallback_data()
 
     def structure_with_rules(self, text: str) -> Dict:
-        """기존 코드와의 호환성을 위한 별칭"""
+        """기존 코드와의 호환성을 위한 별칭
+        
+        Args:
+            text (str): 구조화할 이력서 텍스트
+            
+        Returns:
+            Dict: 구조화된 이력서 데이터
+        
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         return self.structure_resume(text)
 
     def _get_fallback_data(self) -> Dict:
-        """실패 시 반환할 기본 구조"""
+        """실패 시 반환할 기본 구조
+        
+        Returns:
+            Dict: 기본 구조 데이터
+        
+        생성자: lyn
+        생성일자: 2026-02-04
+        """
         return {
             "personal_info": {},
             "education": [],
