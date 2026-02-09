@@ -553,10 +553,11 @@ function App() {
           onProfileManagement={() => setStep('profile')}
           pageTitle={
             step === 'history' ? '면접 이력' :
-              step === 'settings' ? '계정 설정' :
-                step === 'profile' ? '프로필 관리' :
-                  step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
-                    null
+              step === 'result' ? '면접 결과' :
+                step === 'settings' ? '계정 설정' :
+                  step === 'profile' ? '프로필 관리' :
+                    step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
+                      null
           }
         />
       )}
