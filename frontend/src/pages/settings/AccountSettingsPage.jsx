@@ -61,14 +61,14 @@ const AccountSettingsPage = ({ onBack }) => {
 
             {/* 1. 헤더 영역 */}
             <div style={{ marginBottom: '2rem' }}>
-                <h2 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>계정 설정</h2>
+                <h2 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>⚙️ 계정 설정</h2>
                 <p style={{ color: 'var(--text-muted)' }}>계정 정보를 관리하고 알림 설정을 변경할 수 있습니다.</p>
             </div>
 
             {/* 2. 비밀번호 변경 영역 */}
             <GlassCard style={{ padding: '2rem', marginBottom: '1.5rem' }}>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: '600', marginBottom: '1.5rem', borderLeft: '4px solid var(--primary)', paddingLeft: '12px' }}>
-                    비밀번호 변경
+                    🔐 비밀번호 변경
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -150,7 +150,7 @@ const AccountSettingsPage = ({ onBack }) => {
             {/* 3. 알림 설정 영역 */}
             <GlassCard style={{ padding: '2rem', marginBottom: '1.5rem' }}>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: '600', marginBottom: '1.5rem', borderLeft: '4px solid var(--primary)', paddingLeft: '12px' }}>
-                    알림 설정
+                    🔔 알림 설정
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
