@@ -295,6 +295,7 @@ class InterviewCreate(SQLModel):
     """면접 생성 요청 모델"""
     position: str
     company_id: Optional[str] = None
+    resume_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
 
 class InterviewResponse(SQLModel):
