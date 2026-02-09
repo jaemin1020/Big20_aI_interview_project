@@ -20,8 +20,7 @@ const InterviewPage = ({
   }, [currentIdx]);
 
   React.useEffect(() => {
-    // 타이머 기능 일시 중지 (사용자 요청)
-    /*
+    // 타이머 기능 활성화
     if (timeLeft <= 0) {
       if (!isRecording) nextQuestion();
       return;
@@ -32,7 +31,7 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-    */
+
   }, [timeLeft, nextQuestion, isRecording]);
 
   const formatTime = (seconds) => {
