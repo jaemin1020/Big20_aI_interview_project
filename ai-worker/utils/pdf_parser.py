@@ -17,7 +17,14 @@ except ImportError:
 
 
 class ResumePDFParser:
-    """이력서 PDF 파싱 클래스"""
+    """이력서 PDF 파싱 클래스
+    
+    Attributes:
+        PDF_AVAILABLE (bool): PDF 파싱 라이브러리 설치 여부
+    
+    생성자: ejm
+    생성일자: 2026-02-07
+    """
     
     @staticmethod
     def extract_text_pypdf2(pdf_path: str) -> str:
@@ -29,6 +36,9 @@ class ResumePDFParser:
             
         Returns:
             str: 추출된 텍스트
+        
+        생성자: ejm
+        생성일자: 2026-02-07
         """
         if not PDF_AVAILABLE:
             raise ImportError("PyPDF2 not installed")
@@ -65,6 +75,9 @@ class ResumePDFParser:
             
         Returns:
             str: 추출된 텍스트
+        
+        생성자: lyn
+        생성일자: 2026-02-07
         """
         if not PDF_AVAILABLE:
             raise ImportError("pdfplumber not installed")
@@ -100,6 +113,9 @@ class ResumePDFParser:
             
         Returns:
             str: 추출된 텍스트
+        
+        생성자: lyn
+        생성일자: 2026-02-04
         """
         try:
             if method == "pdfplumber":
@@ -123,7 +139,10 @@ class ResumePDFParser:
             pdf_path: PDF 파일 경로
             
         Returns:
-            dict: 메타데이터
+            dict: 메타데이터 정보
+        
+        생성자: lyn
+        생성일자: 2026-02-04
         """
         try:
             with open(pdf_path, 'rb') as file:
@@ -154,6 +173,9 @@ class ResumePDFParser:
             
         Returns:
             str: 정제된 텍스트
+        
+        생성자: ejm
+        생성일자: 2026-02-04
         """
         # 여러 개의 공백을 하나로
         text = re.sub(r'\s+', ' ', text)
