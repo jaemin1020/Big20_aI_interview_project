@@ -30,6 +30,13 @@ def parse_resume_pdf_task(self, resume_id: int, file_path: str):
         
     Returns:
         dict: 파싱 결과
+    
+    Raises:
+        ValueError: 
+        
+    생성자: ejm
+    생성일자: 2026-02-04
+
     """
     logger.info(f"[Task {self.request.id}] Resume {resume_id} 파싱 시작")
     
@@ -224,6 +231,15 @@ def reprocess_resume_task(resume_id: int):
     
     Args:
         resume_id: Resume ID
+        
+    Returns:
+        dict: 재처리 결과
+    
+    Raises:
+        ValueError: 
+    
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     logger.info(f"Resume {resume_id} 재처리 시작")
     

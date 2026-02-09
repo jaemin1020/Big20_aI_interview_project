@@ -23,6 +23,12 @@ def generate_resume_embeddings_task(self, resume_id: int):
         
     Returns:
         dict: 임베딩 생성 결과
+    
+    Raises:
+        ValueError: 
+        
+    생성자: ejm
+    생성일자: 2026-02-07
     """
     logger.info(f"[Task {self.request.id}] Resume {resume_id} 멀티 섹션 임베딩 생성 시작")
     
@@ -254,6 +260,12 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
         
     Returns:
         dict: 검색 결과
+    
+    Raises:
+        ValueError: 검색실패
+
+    생성자: ejm
+    생성일자: 2026-02-07
     """
     logger.info(f"Resume {resume_id}에서 '{query}' 검색 시작")
     
