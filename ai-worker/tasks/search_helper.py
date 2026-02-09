@@ -20,6 +20,12 @@ def generate_query_embedding_task(self, query: str):
         
     Returns:
         list: 1024차원 임베딩 벡터
+    
+    Raises:
+        Exception: 임베딩 생성 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-06
     """
     logger.info(f"🔍 [Task {self.request.id}] Generating embedding for query: '{query}'")
     
