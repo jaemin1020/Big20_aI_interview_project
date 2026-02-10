@@ -141,7 +141,7 @@ function App() {
 
           // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
           if (savedStep === 'auth') {
-            setStep('landing');
+            setStep('main');
           }
           else {
             const hasInterviewData = sessionStorage.getItem('current_interview');
@@ -191,7 +191,7 @@ function App() {
         await apiLogin(account.username, account.password);
         const u = await getCurrentUser();
         setUser(u);
-        setStep('landing');
+        setStep('main');
         setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
