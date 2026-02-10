@@ -55,6 +55,11 @@ export const getCurrentUser = async () => {
     return response.data;
 };
 
+export const getDeepgramToken = async () => {
+    const response = await api.get('/auth/deepgram-token');
+    return response.data.temp_key;
+};
+
 // ==================== Interview ====================
 
 export const createInterview = async (position, jobPostingId = null, resumeId = null, scheduledTime = null) => {
@@ -80,6 +85,19 @@ export const completeInterview = async (interviewId) => {
 };
 
 // ==================== Transcript ====================
+
+export const recognizeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('file', audioBlob);
+
+    // 타임아웃 5분 (모델 로딩 대비)
+    const response = await api.post('/stt/recognize', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000
+    });
+    return response.data;
+};
+
 
 export const createTranscript = async (interviewId, speaker, text, questionId = null) => {
     const response = await api.post('/transcripts', {
@@ -118,7 +136,7 @@ export const uploadResume = async (file) => {
 };
 
 export const getResume = async (resumeId) => {
-    const response = await api.get(`/api/resumes/${resumeId}`);
+    const response = await api.get(`/resumes/${resumeId}`);
     return response.data;
 };
 
