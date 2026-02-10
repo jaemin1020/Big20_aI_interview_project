@@ -3,8 +3,9 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext }) => {
-  const [step, setStep] = useState('audio'); // audio, video
+const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
+  const step = envTestStep;
+  const setStep = setEnvTestStep;
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
