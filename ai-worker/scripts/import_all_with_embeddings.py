@@ -60,10 +60,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@interv
 # Docker 컨테이너 내에서 경로가 다를 수 있으므로 volume mount 확인 필요
 # 여기서는 상대 경로로 접근 시도. 실패 시 절대 경로 확인 필요.
 
-<<<<<<< HEAD
-# 원본 데이터 경로 (backend-core/data)
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend-core", "data")
-=======
 POSSIBLE_DATA_DIRS = [
     "../backend-core/data", 
     "/backend-core/data",
@@ -71,7 +67,6 @@ POSSIBLE_DATA_DIRS = [
     "/app/data", # Maybe mounted here
     "/data"
 ]
->>>>>>> origin/main
 
 DATA_FILE_NAME_OLD = "preprocessed_data.json"
 DATA_FILE_NAME_CORP = "corp_data.json"
