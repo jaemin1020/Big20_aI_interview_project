@@ -9,13 +9,49 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   const [step, setStep] = useState('upload'); // upload, confirm
   const [uploadResult, setUploadResult] = useState(null);
 
-  const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      const selectedFile = e.target.files[0];
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  const handleFile = (selectedFile) => {
+    if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(selectedFile));
       if (onFileSelect) {
         onFileSelect(selectedFile);
       }
+    } else if (selectedFile) {
+      alert("PDF 형식의 파일만 업로드 가능합니다.");
+    }
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const handleFileChange = (e) => {
+    if (e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -160,15 +196,15 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   }
 
   return (
-    <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
+    <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 1rem' }}>
+      <GlassCard style={{ maxWidth: file ? '900px' : '600px', width: '100%', textAlign: 'center', transition: 'max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '240px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
         </div>
-        <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
-        <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
+        <h2 className="text-gradient" style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>이력서를 업로드 해주세요.</h2>
+        <p style={{ marginBottom: '2rem', color: 'var(--text-muted)' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
         <div
           style={{
@@ -215,8 +251,47 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
               <span>분석 중...</span>
             </div>
-          ) : '파일 업로드'}
-        </PremiumButton>
+          </div>
+        ) : (
+        <>
+          <div
+            style={{
+              border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+              borderRadius: '20px',
+              padding: '4rem 2rem',
+              marginBottom: '2rem',
+              cursor: 'pointer',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+              transform: isDragging ? 'scale(1.02)' : 'scale(1)'
+            }}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+            onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+            onClick={() => document.getElementById('resume-input').click()}
+          >
+            <div style={{ fontSize: '4rem', marginBottom: '1.5rem', transform: isDragging ? 'translateY(-10px)' : 'translateY(0)', transition: 'transform 0.3s' }}>📁</div>
+            <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
+          </div>
+
+          <PremiumButton
+            disabled={true}
+            style={{ width: '100%', padding: '16px', opacity: 0.5 }}
+          >
+            파일을 업로드 해주세요
+          </PremiumButton>
+        </>
+        )}
+        <input
+          id="resume-input"
+          type="file"
+          accept=".pdf"
+          hidden
+          onChange={handleFileChange}
+        />
       </GlassCard>
     </div>
   );

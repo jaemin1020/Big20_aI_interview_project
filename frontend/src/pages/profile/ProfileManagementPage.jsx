@@ -43,15 +43,43 @@ const ProfileManagementPage = ({ onBack, user }) => {
         );
     };
 
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleFile = (file) => {
+        if (file && file.type.startsWith('image/')) {
             setProfileImage(file);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImagePreview(reader.result);
             };
             reader.readAsDataURL(file);
+        } else if (file) {
+            alert("이미지 파일만 업로드 가능합니다.");
+        }
+    };
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleFile(file);
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFile(e.dataTransfer.files[0]);
         }
     };
 
@@ -86,23 +114,35 @@ const ProfileManagementPage = ({ onBack, user }) => {
                     프로필 이미지
                 </h3>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                <div
+                    style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
                     {/* 프로필 이미지 미리보기 */}
-                    <div style={{
-                        width: '150px',
-                        height: '150px',
-                        borderRadius: '50%',
-                        overflow: 'hidden',
-                        border: '3px solid var(--glass-border)',
-                        background: 'var(--glass-bg)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
+                    <div
+                        onClick={() => document.getElementById('profile-image-upload')?.click()}
+                        style={{
+                            width: '150px',
+                            height: '150px',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            border: `3px solid ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+                            background: isDragging ? 'rgba(99, 102, 241, 0.1)' : 'var(--glass-bg)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            transform: isDragging ? 'scale(1.05)' : 'scale(1)',
+                            boxShadow: isDragging ? '0 0 20px rgba(99, 102, 241, 0.3)' : 'none'
+                        }}
+                    >
                         {imagePreview ? (
                             <img src={imagePreview} alt="프로필" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
-                            <div style={{ fontSize: '4rem', color: 'var(--text-muted)' }}>👤</div>
+                            <div style={{ fontSize: '4rem', color: isDragging ? 'var(--primary)' : 'var(--text-muted)' }}>👤</div>
                         )}
                     </div>
 
@@ -113,19 +153,22 @@ const ProfileManagementPage = ({ onBack, user }) => {
                             id="profile-image-upload"
                             accept="image/*"
                             onChange={handleImageUpload}
-                            style={{ display: 'none' }}
+                            style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
                         />
-                        <label htmlFor="profile-image-upload">
+                        <label
+                            htmlFor="profile-image-upload"
+                            style={{ cursor: 'pointer', display: 'inline-block' }}
+                        >
                             <PremiumButton
                                 as="span"
                                 variant="secondary"
-                                style={{ padding: '10px 24px', cursor: 'pointer', display: 'inline-block' }}
+                                style={{ padding: '10px 24px', pointerEvents: 'none' }}
                             >
                                 이미지 업로드
                             </PremiumButton>
                         </label>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                            JPG, PNG 파일 (최대 5MB)
+                        <p style={{ fontSize: '0.85rem', color: isDragging ? 'var(--primary)' : 'var(--text-muted)', marginTop: '8px', fontWeight: isDragging ? '600' : '400' }}>
+                            {isDragging ? '여기에 이미지를 놓으세요!' : 'JPG, PNG 파일 (최대 5MB) - 드래그 앤 드롭 지원'}
                         </p>
                     </div>
                 </div>
