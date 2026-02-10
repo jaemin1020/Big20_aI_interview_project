@@ -9,35 +9,62 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   const [step, setStep] = useState('upload'); // upload, confirm
   const [uploadResult, setUploadResult] = useState(null);
 
-  const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      const selectedFile = e.target.files[0];
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFile = (selectedFile) => {
+    if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
       if (onFileSelect) {
         onFileSelect(selectedFile);
       }
+    } else if (selectedFile) {
+      alert("PDF 형식의 파일만 업로드 가능합니다.");
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
-    
+
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
       const resumeId = uploadData.id;
       console.log('Upload basic success, ID:', resumeId);
-      
+
       // 2. 폴링 (분석 완료 대기)
       let pollCount = 0;
       const maxPolls = 90; // 최대 180초 (2초 * 90) - 첫 실행 시 모델 로딩으로 인해 오래 걸릴 수 있음
-      
+
       const poll = async () => {
         try {
           const result = await getResume(resumeId);
           console.log('Polling result:', result.processing_status);
-          
+
           if (result.processing_status === 'completed') {
             setUploadResult(result);
             if (onParsedData) {
@@ -59,9 +86,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
           alert(err.message || "이력서 분석 중 오류가 발생했습니다.");
         }
       };
-      
+
       setTimeout(poll, 1000); // 1초 뒤 첫 폴링 시작
-      
+
     } catch (err) {
       console.error(err);
       setIsUploading(false);
@@ -83,9 +110,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             업로드하신 이력서에서 추출된 정보입니다. 내용이 맞다면 면접 진행을 눌러주세요.
           </p>
 
-          <div style={{ 
-            background: 'rgba(255, 255, 255, 0.03)', 
-            padding: '2rem', 
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            padding: '2rem',
             borderRadius: '16px',
             marginBottom: '2rem',
             border: '1px solid var(--glass-border)'
@@ -93,20 +120,20 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
               <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
-              
+
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
                 {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
               </dd>
-              
+
               {uploadResult?.skills && uploadResult.skills.length > 0 && (
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
                   <dd>{uploadResult.skills.join(', ')}</dd>
                 </>
               )}
-              
-             {/* If additional parsed info exists, add here */}
+
+              {/* If additional parsed info exists, add here */}
             </dl>
           </div>
 
@@ -130,17 +157,22 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
         <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
-        <div 
-          style={{ 
-            border: '2px dashed var(--glass-border)', 
-            borderRadius: '20px', 
+        <div
+          style={{
+            border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+            borderRadius: '20px',
             padding: '3rem 2rem',
             marginBottom: '2rem',
             cursor: 'pointer',
-            transition: 'border-color 0.3s'
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+            transform: isDragging ? 'scale(1.02)' : 'scale(1)'
           }}
-          onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
-          onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--glass-border)'}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+          onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
           onClick={() => document.getElementById('resume-input').click()}
         >
           {file ? (
@@ -151,22 +183,22 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📁</div>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem', transform: isDragging ? 'translateY(-10px)' : 'translateY(0)', transition: 'transform 0.3s' }}>📁</div>
               <p style={{ margin: 0, fontWeight: '500' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
               <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
             </>
           )}
-          <input 
-            id="resume-input" 
-            type="file" 
-            accept=".pdf" 
-            hidden 
-            onChange={handleFileChange} 
+          <input
+            id="resume-input"
+            type="file"
+            accept=".pdf"
+            hidden
+            onChange={handleFileChange}
           />
         </div>
 
-        <PremiumButton 
-          disabled={!file || isUploading} 
+        <PremiumButton
+          disabled={!file || isUploading}
           onClick={handleUpload}
           style={{ width: '100%', padding: '16px' }}
         >
