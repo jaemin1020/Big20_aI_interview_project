@@ -41,6 +41,9 @@ RUN pip3 install --no-cache-dir "numpy>=1.23.0,<2.0.0" "Cython"
 RUN CMAKE_ARGS="-DGGML_CUDA=on" \
     pip3 install --no-cache-dir llama-cpp-python>=0.3.5
 
+# 4.5 PyTorch GPU 버전 먼저 설치 (CUDA 12.1 호환)
+RUN pip3 install --no-cache-dir torch==2.3.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
 # 5. 나머지 Python 패키지 설치
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
