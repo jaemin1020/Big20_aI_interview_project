@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, onHistory, onAccountSettings, onProfileManagement, pageTitle }) => {
+const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle }) => {
   const [isManageOpen, setIsManageOpen] = React.useState(false);
   const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
 
@@ -15,9 +15,9 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
       left: 0,
       right: 0,
       zIndex: 1000,
-      background: isInterviewing ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
+      background: (isInterviewing || isComplete) ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
       backdropFilter: 'blur(10px)',
-      borderBottom: isInterviewing ? '1px solid var(--glass-border)' : 'none'
+      borderBottom: (isInterviewing || isComplete) ? '1px solid var(--glass-border)' : 'none'
     }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div
@@ -50,25 +50,66 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
             paddingLeft: '1.5rem',
             borderLeft: '1px solid var(--glass-border)'
           }}>
-            <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>▶</span>
-            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>면접 진행중</span>
+            <span style={{ color: '#ef4444', fontSize: '1.2rem' }}>▶</span>
+            <span style={{ fontSize: '1.3rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>면접 진행중</span>
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               background: 'rgba(239, 68, 68, 0.1)',
-              padding: '2px 10px',
+              padding: '4px 12px',
               borderRadius: '6px',
               border: '1px solid rgba(239, 68, 68, 0.2)'
             }}>
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} className="blink"></div>
-              <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#ef4444' }}>LIVE</span>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} className="blink"></div>
+              <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#ef4444' }}>LIVE</span>
             </div>
           </div>
         )}
       </div>
 
-      {showLogout && !isInterviewing && (
+      {!showLogout && !isInterviewing && !isComplete && (
+        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+          <button
+            onClick={onLogin}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '20px',
+              border: '1px solid var(--glass-border)',
+              background: 'transparent',
+              color: 'var(--text-main)',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+              outline: 'none'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            로그인
+          </button>
+          <button
+            onClick={onRegister}
+            style={{
+              padding: '8px 24px',
+              borderRadius: '20px',
+              border: 'none',
+              background: 'var(--primary)',
+              color: 'white',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+              outline: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            회원가입
+          </button>
+        </div>
+      )}
+
+      {showLogout && !isInterviewing && !isComplete && (
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
           {/* 면접 관리 드롭다운 */}

@@ -17,6 +17,7 @@ app = Celery(
     "ai_worker",
     broker="redis://redis:6379/0",
     backend="redis://redis:6379/0",
+<<<<<<< HEAD
     include=[
         'tasks.evaluator', 
         'tasks.vision', 
@@ -30,6 +31,9 @@ app = Celery(
         'tasks.resume_pipeline',
         'tasks.stt'
     ]
+=======
+    include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator', 'tasks.resume_parser', 'tasks.answer_collector', 'tasks.search_helper', 'tasks.resume_embedding', 'tasks.stt', 'tasks.tts']
+>>>>>>> origin/lsj
 )
 
 # 3. 성능 최적화 및 큐 라우팅 설정

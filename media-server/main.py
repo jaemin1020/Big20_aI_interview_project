@@ -11,6 +11,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
+import numpy as np
+from faster_whisper import WhisperModel
 
 # 1. 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -41,6 +43,24 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
+
+# 4. Local Whisper 설정
+WHISPER_MODEL = None
+LOCAL_MODEL_SIZE = "large-v3-turbo" # or small, medium, etc.
+
+def load_local_whisper():
+    global WHISPER_MODEL
+    try:
+        if WHISPER_MODEL is None:
+            logger.info(f"⏳ Loading Local Whisper Model ({LOCAL_MODEL_SIZE})...")
+            # GPU 사용 시 float16, CPU 사용 시 int8 권장
+            device = "cuda" if os.getenv("USE_GPU", "true").lower() == "true" else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+            
+            WHISPER_MODEL = WhisperModel(LOCAL_MODEL_SIZE, device=device, compute_type=compute_type)
+            logger.info(f"✅ Local Whisper Model Loaded on {device}")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Local Whisper: {e}")
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -148,6 +168,63 @@ class VideoAnalysisTrack(MediaStreamTrack):
 
         return frame
 
+async def start_stt_with_local_whisper(track, session_id):
+    """Local Whisper를 이용한 실시간 STT 처리"""
+    logger.info(f"[{session_id}] 서버 사이드 실시간 STT 시작 (Local Whisper)")
+    
+    if WHISPER_MODEL is None:
+        load_local_whisper()
+
+    audio_buffer = []
+    # 약 1초 분량의 오디오를 모아서 처리 (16kHz 기준 16000 샘플)
+    BUFFER_THRESHOLD = 16000 
+    
+    try:
+        while True:
+            frame = await track.recv()
+            
+            # 오디오 데이터 추출 및 리샘플링 (av 사용)
+            # WebRTC는 대개 48kHz 사용하므로 16kHz로 변환 필요
+            # 여기서는 편의상 numpy로 변환 후 whisper가 지원하는 포맷으로 가정
+            resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+            resampled_frames = resampler.resample(frame)
+            
+            for f in resampled_frames:
+                data = f.to_ndarray()
+                # float32로 변환 (-1.0 ~ 1.0)
+                audio_buffer.append(data.astype(np.float32) / 32768.0)
+                
+            # 버퍼가 임계치를 넘으면 변환 실행
+            current_buffer_size = sum(len(b[0]) if b.ndim > 1 else len(b) for b in audio_buffer)
+            
+            if current_buffer_size >= BUFFER_THRESHOLD:
+                # 버퍼 병합
+                full_audio = np.concatenate(audio_buffer)
+                audio_buffer = [] # 버퍼 초기화
+                
+                # Whisper 추론 (비동기 틱에서 실행을 위해 루프 밖에서 처리하거나 thread 사용 고려)
+                # 여기서는 간단히 직접 호출 (모델이 무거우면 loop 지연 발생 가능)
+                segments, info = WHISPER_MODEL.transcribe(full_audio, language="ko", beam_size=5)
+                
+                text = ""
+                for segment in segments:
+                    text += segment.text
+                
+                if text.strip():
+                    logger.info(f"[{session_id}] STT Result: {text}")
+                    ws = active_websockets.get(session_id)
+                    if ws:
+                        await send_to_websocket(ws, {
+                            "type": "stt",
+                            "text": text,
+                            "final": False # 실시간 중간 결과 느낌
+                        })
+
+    except Exception as e:
+        logger.error(f"[{session_id}] STT error: {e}")
+    finally:
+        logger.info(f"[{session_id}] STT 종료")
+
 async def send_to_websocket(ws: WebSocket, data: dict):
     """WebSocket으로 데이터 전송"""
     try:
@@ -200,14 +277,9 @@ async def offer(request: Request):
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
         elif track.kind == "audio":
-            # 오디오 트랙: 서버에서는 처리하지 않음 (STT는 프론트엔드에서 수행)
-            # 다만 WebRTC 연결 유지를 위해 트랙을 소비해주는 것이 좋음 (Blackhole)
-            @track.on("ended")
-            async def on_ended():
-                logger.info(f"[{session_id}] Audio track ended")
-            
-            asyncio.ensure_future(consume_audio(track))
-            logger.info(f"[{session_id}] Audio track ignored (Client-side STT used)")
+            # [변경] Deepgram 대신 Local Whisper 사용
+            asyncio.ensure_future(start_stt_with_local_whisper(track, session_id))
+            logger.info(f"[{session_id}] Audio track processing started (Local Whisper enabled)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
@@ -234,7 +306,7 @@ async def root():
     return {
         "service": "AI Interview Media Server",
         "status": "running",
-        "mode": "Video Analysis Only (STT migrated to frontend)"
+        "mode": "Video Analysis + Server-side Whisper STT"
     }
 
 if __name__ == "__main__":

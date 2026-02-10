@@ -2,16 +2,16 @@ import React from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
-const LandingPage = ({ 
-  startInterview, 
-  handleLogout 
+const LandingPage = ({
+  startInterview,
+  handleLogout
 }) => {
   return (
-    <div className="landing-container animate-fade-in" style={{ 
-      flex: 1, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      justifyContent: 'center', 
+    <div className="landing-container animate-fade-in" style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
       alignItems: 'center',
       width: '100%'
     }}>
@@ -30,21 +30,21 @@ const LandingPage = ({
           </p>
         </div>
 
-        <div style={{ 
-          border: '1px solid var(--glass-border)', 
-          borderRadius: '16px', 
-          padding: '1.5rem', 
-          textAlign: 'left', 
+        <div style={{
+          border: '1px solid var(--glass-border)',
+          borderRadius: '16px',
+          padding: '1.5rem',
+          textAlign: 'left',
           marginBottom: '2.5rem',
           background: 'rgba(255, 255, 255, 0.03)'
         }}>
-          <ul style={{ 
-            margin: 0, 
-            paddingLeft: '1.2rem', 
-            color: 'var(--text-main)', 
-            fontSize: '1rem', 
+          <ul style={{
+            margin: 0,
+            paddingLeft: '1.2rem',
+            color: 'var(--text-main)',
+            fontSize: '1rem',
             lineHeight: '1.8',
-            listStyleType: 'disc' 
+            listStyleType: 'disc'
           }}>
             <li>예상 소요시간 : 20분</li>
             <li>진행 방식 : 영상 또는 음성 응답</li>
@@ -53,7 +53,7 @@ const LandingPage = ({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <PremiumButton 
+          <PremiumButton
             onClick={() => startInterview()}
             style={{ padding: '16px 60px', fontSize: '1.2rem' }}
           >

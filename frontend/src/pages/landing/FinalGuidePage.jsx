@@ -11,22 +11,36 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
         </div>
-        <h1 className="text-gradient">면접 준비가 완료되었습니다.</h1>
+        <h1 className="text-gradient">환경 테스트 완료</h1>
         <p style={{ marginBottom: '2rem' }}>모든 준비가 완료되었습니다. 이제 면접을 시작합니다.</p>
 
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          padding: '2rem',
-          borderRadius: '16px',
+        <div style={{ 
+          background: 'rgba(255, 255, 255, 0.03)', 
+          padding: '2rem', 
+          borderRadius: '16px', 
           marginBottom: '2rem',
           border: '1px solid var(--glass-border)'
         }}>
           <div style={{ color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: '600', marginBottom: '1rem' }}>
-            ✅ 환경 테스트 완료
+            ✅ 면접 준비가 완료되었습니다.
           </div>
           <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0, margin: 0, color: 'var(--text-muted)' }}>
-            <li style={{ marginBottom: '8px' }}>• 음성 입력 정상</li>
-            <li style={{ marginBottom: '8px' }}>• 영상 인식 정상</li>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_audio_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>음성 입력 테스트 {sessionStorage.getItem('env_audio_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_video_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>영상 인식 테스트 {sessionStorage.getItem('env_video_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
           </ul>
         </div>
 
