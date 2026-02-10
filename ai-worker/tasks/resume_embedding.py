@@ -23,6 +23,12 @@ def generate_resume_embeddings_task(self, resume_id: int):
         
     Returns:
         dict: 임베딩 생성 결과
+    
+    Raises:
+        ValueError: 
+        
+    생성자: ejm
+    생성일자: 2026-02-07
     """
     logger.info(f"[Task {self.request.id}] Resume {resume_id} 멀티 섹션 임베딩 생성 시작")
     
@@ -84,7 +90,7 @@ def generate_resume_embeddings_task(self, resume_id: int):
         # 4. ResumeSectionEmbedding 테이블에 저장
         logger.info(f"[Resume {resume_id}] 섹션 임베딩 DB 저장 중...")
         
-        from db import ResumeSectionEmbedding, ResumeSectionType, engine
+        from db import ResumeSectionEmbedding, ResumeSectionType
         
         saved_count = 0
         
@@ -254,6 +260,12 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
         
     Returns:
         dict: 검색 결과
+    
+    Raises:
+        ValueError: 검색실패
+
+    생성자: ejm
+    생성일자: 2026-02-07
     """
     logger.info(f"Resume {resume_id}에서 '{query}' 검색 시작")
     
@@ -268,8 +280,11 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
         
         # 2. DB에서 벡터 유사도 검색
         with Session(engine) as session:
-            # 기본 쿼리
-            stmt = select(ResumeSectionEmbedding).where(
+            # Distance(거리) 계산 표현식 (pgvector)
+            dist_expr = ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
+            
+            # 섹션과 거리를 함께 조회
+            stmt = select(ResumeSectionEmbedding, dist_expr.label("distance")).where(
                 ResumeSectionEmbedding.resume_id == resume_id,
                 ResumeSectionEmbedding.embedding.isnot(None)
             )
@@ -278,29 +293,27 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
             if section_types:
                 stmt = stmt.where(ResumeSectionEmbedding.section_type.in_(section_types))
             
-            # 벡터 유사도 정렬
-            stmt = stmt.order_by(
-                ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
-            ).limit(top_k)
+            # 거리순 정렬 (유사도 높은 순)
+            stmt = stmt.order_by(dist_expr).limit(top_k)
             
-            sections = session.exec(stmt).all()
+            rows = session.exec(stmt).all()
             
             # 결과 포맷팅
             results = []
-            for section in sections:
-                # 코사인 거리를 유사도로 변환 (1 - distance)
-                # pgvector의 cosine_distance는 0(동일)~2(정반대) 범위
-                distance = section.embedding.cosine_distance(query_vector)
-                similarity = 1 - (distance / 2)  # 0~1 범위로 정규화
+            for section, distance in rows:
+                # 코사인 거리를 유사도로 변환 (1 - distance/2)
+                # distance 범위: 0(일치)~2(반대)
+                similarity = 1 - (distance / 2)
                 
                 results.append({
-                    "section": section.section_type.value,
+                    "section": section.section_type.value if hasattr(section.section_type, "value") else section.section_type,
                     "section_id": section.section_id,
                     "section_index": section.section_index,
                     "text": section.content,
                     "similarity": float(similarity),
                     "si_type": section.si_type if section.section_type == ResumeSectionType.SELF_INTRODUCTION else None,
-                    "section_metadata": section.section_metadata
+                    "section_metadata": section.section_metadata,
+                    "created_at": str(section.created_at)
                 })
         
         logger.info(f"Resume {resume_id} 검색 완료: {len(results)}개 결과")

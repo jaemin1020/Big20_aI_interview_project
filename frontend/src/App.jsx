@@ -10,14 +10,14 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
-  getCurrentUser,
-  recognizeAudio
+  getCurrentUser
 } from './api/interview';
-
+import { createClient } from "@deepgram/sdk";
 
 // Layout & UI
 import Header from './components/layout/Header';
 import MainPage from './pages/main/MainPage';
+import AuthPage from './pages/auth/AuthPage';
 import LandingPage from './pages/landing/LandingPage';
 import ResumePage from './pages/landing/ResumePage';
 import EnvTestPage from './pages/setup/EnvTestPage';
@@ -25,39 +25,21 @@ import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
-import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
-import AuthPage from './pages/auth/AuthPage';
-import AccountSettingsPage from './pages/settings/AccountSettingsPage';
-import ProfileManagementPage from './pages/profile/ProfileManagementPage';
-
-// Environment variables for WebRTC/WebSocket
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
-const WEBRTC_URL = import.meta.env.VITE_WEBRTC_URL || 'http://localhost:8080';
 
 function App() {
-  const [step, setStep] = useState(() => {
-    const saved = sessionStorage.getItem('current_step');
-    const token = localStorage.getItem('token');
-    if (!token && saved === 'auth') return 'main';
-    return saved || 'main';
-  });
+  const [step, setStep] = useState('main');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
 
   const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
-  const [envTestStep, setEnvTestStep] = useState('audio'); // audio or video
-
 
   useEffect(() => {
-    localStorage.setItem('isDarkMode', isDarkMode);
     console.log("Theme changed to:", isDarkMode ? "DARK" : "LIGHT");
     if (isDarkMode) {
       document.body.classList.add('dark-theme');
-      document.documentElement.classList.add('dark-theme'); // html 태그에도 추가
     } else {
       document.body.classList.remove('dark-theme');
-      document.documentElement.classList.remove('dark-theme');
     }
   }, [isDarkMode]);
 
@@ -71,36 +53,18 @@ function App() {
     profileImage: null,
     termsAgreed: false
   });
-
-  // Interview state
-  const [interview, setInterview] = useState(() => {
-    const saved = sessionStorage.getItem('current_interview');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [questions, setQuestions] = useState(() => {
-    const saved = sessionStorage.getItem('current_questions');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [currentIdx, setCurrentIdx] = useState(() => {
-    const saved = sessionStorage.getItem('current_idx');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-  const [report, setReport] = useState(() => {
-    const saved = sessionStorage.getItem('current_report');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [interview, setInterview] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [report, setReport] = useState(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
 
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [userName, setUserName] = useState('');
-
-  const [position, setPosition] = useState(() => sessionStorage.getItem('current_position') || '');
+  const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
-  const [parsedResumeData, setParsedResumeData] = useState(() => {
-    const saved = sessionStorage.getItem('current_parsed_resume');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [parsedResumeData, setParsedResumeData] = useState(null);
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -122,13 +86,12 @@ function App() {
 
 
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -136,8 +99,14 @@ function App() {
       getCurrentUser()
         .then(u => {
           setUser(u);
-          // Restore the step from sessionStorage or respect the current step.
-          const savedStep = sessionStorage.getItem('current_step');
+          // 새로고침 시 저장된 상태 복구
+          const savedStep = sessionStorage.getItem('app_step');
+          const savedInterview = sessionStorage.getItem('app_interview');
+          const savedQuestions = sessionStorage.getItem('app_questions');
+          const savedCurrentIdx = sessionStorage.getItem('app_currentIdx');
+          const savedReport = sessionStorage.getItem('app_report');
+          const savedPosition = sessionStorage.getItem('app_position');
+          const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
           // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
           if (savedStep === 'auth') {
@@ -147,25 +116,42 @@ function App() {
             const hasInterviewData = sessionStorage.getItem('current_interview');
             const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
 
-            if (stepsRequiringInterview.includes(savedStep) && !hasInterviewData) {
-              console.warn("Invalid step state (missing interview data). Resetting to landing.");
-              setStep('landing');
+            if (savedStep) {
+              setStep(savedStep);
+              if (savedStep === 'complete' && !savedReport && savedInterview) {
+                const interviewData = JSON.parse(savedInterview);
+                pollReport(interviewData.id);
+              }
+            } else {
+              setStep('main');
             }
           }
+          isInitialized.current = true;
         })
         .catch(() => {
           localStorage.removeItem('token');
+          sessionStorage.clear();
           setStep('main');
-          sessionStorage.clear(); // 세션 만료 시 깔끔하게 초기화
           isInitialized.current = true;
         });
     } else {
-      if (step !== 'main') {
-        setStep('main');
-      }
+      setStep('main');
       isInitialized.current = true;
     }
   }, []);
+
+  // 상태 변화 시마다 sessionStorage에 저장
+  useEffect(() => {
+    if (!isInitialized.current || !user) return;
+
+    sessionStorage.setItem('app_step', step);
+    if (interview) sessionStorage.setItem('app_interview', JSON.stringify(interview));
+    if (questions.length > 0) sessionStorage.setItem('app_questions', JSON.stringify(questions));
+    sessionStorage.setItem('app_currentIdx', currentIdx.toString());
+    if (report) sessionStorage.setItem('app_report', JSON.stringify(report));
+    if (position) sessionStorage.setItem('app_position', position);
+    if (parsedResumeData) sessionStorage.setItem('app_parsedResume', JSON.stringify(parsedResumeData));
+  }, [step, user, interview, questions, currentIdx, report, position, parsedResumeData]);
 
   const handleAuth = async () => {
     setAuthError('');
@@ -268,9 +254,7 @@ function App() {
       interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
       const resumeId = parsedResumeData?.id || null;
 
-      console.log("Creating interview with:", { interviewPosition, resumeId });
-
-      const newInterview = await createInterview(interviewPosition, null, resumeId, null);
+      const newInterview = await createInterview(interviewPosition, null, null);
       setInterview(newInterview);
 
       // 2. Get Questions
@@ -278,12 +262,13 @@ function App() {
 
       // Simple retry logic
       if (!qs || qs.length === 0) {
-        setTimeout(async () => {
-          const retryQs = await getInterviewQuestions(newInterview.id);
-          setQuestions(retryQs);
-          setStep('interview');
-        }, 3000);
-        return;
+        console.log("Questions not ready, retrying in 3s...");
+        await new Promise(r => setTimeout(r, 3000));
+        qs = await getInterviewQuestions(newInterview.id);
+      }
+
+      if (!qs || qs.length === 0) {
+        throw new Error("질문 생성에 시간이 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
       }
 
       setQuestions(qs);
@@ -304,238 +289,240 @@ function App() {
     }
   };
 
-  // WebSocket Setup (Eye Tracking Only - Media Server)
-  // STT는 이제 REST API를 사용하므로 여기서 처리하지 않음
   const setupWebSocket = (sessionId) => {
-    const ws = new WebSocket(`${WS_URL}/ws/${sessionId}`);
+    const ws = new WebSocket(`ws://localhost:8080/ws/${sessionId}`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // if (data.type === 'stt_result') ... // Deprecated via WS
+        if (data.type === 'stt_result' && data.text) {
+          console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
 
-        if (data.type === 'eye_tracking') {
-          drawTracking(data.data);
+          setTranscript(prev => prev + ' ' + data.text);
         }
-      } catch (err) { console.error('[WS] Parse error:', err); }
+      } catch (err) {
+        console.error('[WebSocket] Parse error:', err);
+      }
     };
+
+    ws.onerror = (error) => console.error('[WebSocket] Error:', error);
+    ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
+  const setupDeepgram = (stream) => {
+    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      console.warn("Deepgram API Key not found");
+      return;
+    }
+
+    const deepgram = createClient(apiKey);
+    const connection = deepgram.listen.live({
+      model: "nova-2",
+      language: "ko",
+      smart_format: true,
+      encoding: "linear16",
+      sample_rate: 16000,
+    });
+
+    connection.on("Open", () => {
+      console.log("Deepgram WebSocket Connected");
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0 && connection.getReadyState() === 1) {
+          connection.send(event.data);
+        }
+      });
+      mediaRecorder.start(250);
+      mediaRecorderRef.current = mediaRecorder;
+    });
+
+    connection.on("Results", (result) => {
+      const channel = result.channel;
+      if (channel && channel.alternatives && channel.alternatives[0]) {
+        const transcriptText = channel.alternatives[0].transcript;
+        const isFinal = result.is_final;
+
+        if (transcriptText) {
+          if (isFinal) {
+            setTranscript(prev => prev + ' ' + transcriptText);
+            setSubtitle('');
+          } else {
+            setSubtitle(transcriptText);
+          }
+        }
+      }
+    });
+
+    connection.on("Error", (err) => {
+      console.error("Deepgram Error:", err);
+    });
+
+    deepgramConnectionRef.current = connection;
+  };
 
   const setupWebRTC = async (interviewId) => {
+    console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-    } catch (err) { console.warn('[WebRTC] Access failed:', err); }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
+      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
+      videoRef.current.srcObject = stream;
+
+      setupDeepgram(stream);
+
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+        console.log('[WebRTC] Added track:', track.kind, track.label);
+      });
+    } catch (err) {
+      console.warn('[WebRTC] Camera failed, trying audio-only:', err);
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
+        alert('카메라 접근 거부됨. 음성만 사용합니다.');
+      } catch (audioErr) {
+        alert('마이크 접근 실패');
+        throw audioErr;
+      }
+    }
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const response = await fetch(`${WEBRTC_URL}/offer`, {
+    console.log('[WebRTC] Sending offer to server...');
+
+    const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
-      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, session_id: interviewId }),
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp,
+        type: pc.localDescription.type,
+        session_id: interviewId
+      }),
       headers: { 'Content-Type': 'application/json' }
     });
+
+    if (!response.ok) {
+      throw new Error(`WebRTC offer failed: ${response.status}`);
+    }
+
     const answer = await response.json();
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log('[WebRTC] Connection established successfully');
   };
 
-  const toggleRecording = async () => {
+  const toggleRecording = () => {
     if (isRecording) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
       setIsRecording(false);
+      isRecordingRef.current = false;
     } else {
       setTranscript('');
-      const stream = videoRef.current?.srcObject;
-      if (!stream) {
-        console.warn("No stream found via videoRef, trying getUserMedia");
-        try {
-          const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          startRecorder(newStream);
-        } catch (e) { console.error("Mic permission error:", e); }
-        return;
-      }
-      startRecorder(stream);
-    }
-  };
-
-  const startRecorder = (stream) => {
-    try {
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        console.log("Recording stopped. Processing...");
-        setTranscript("답변 분석 중...");
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        try {
-          const result = await recognizeAudio(blob);
-          console.log("STT Result:", result);
-          setTranscript(result.text || "내용 없음");
-        } catch (err) {
-          console.error("STT Error:", err);
-          setTranscript("음성 인식 오류 발생");
-        }
-      };
-
-      recorder.start();
       setIsRecording(true);
-    } catch (e) {
-      console.error("Failed to start MediaRecorder:", e);
+      isRecordingRef.current = true;
     }
   };
 
+  const pollReport = async (interviewId) => {
+    setIsReportLoading(true);
+    const maxRetries = 20; // 약 1분간 시도 (3초 * 20)
+    let retries = 0;
+
+    const interval = setInterval(async () => {
+      try {
+        const finalReport = await getEvaluationReport(interviewId);
+        if (finalReport && finalReport.length > 0) {
+          setReport(finalReport);
+          setIsReportLoading(false);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.log("Report still generating...");
+      }
+
+      retries++;
+      if (retries >= maxRetries) {
+        setIsReportLoading(false);
+        clearInterval(interval);
+        // alert('리포트 생성 시간이 너무 오래 걸립니다. 나중에 다시 확인해주세요.');
+      }
+    }, 3000);
+  };
 
   const finishInterview = async () => {
-    setStep('loading');
+    if (wsRef.current) wsRef.current.close();
+    if (pcRef.current) pcRef.current.close();
+
     try {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-      if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-
       await completeInterview(interview.id);
-
-      // Poll for report generation (max 30 attempts, 2 seconds interval = 60 seconds total)
-      let attempts = 0;
-      const maxAttempts = 30;
-      const pollInterval = 2000; // 2 seconds
-
-      const pollForReport = async () => {
-        try {
-          const res = await getEvaluationReport(interview.id);
-          setReport(res);
-          console.log('✅ Report generated successfully');
-          // Stay on 'loading' step - user will click "결과 확인하기" button to proceed
-        } catch (err) {
-          attempts++;
-          if (attempts < maxAttempts) {
-            console.log(`⏳ Report not ready yet, retrying... (${attempts}/${maxAttempts})`);
-            setTimeout(pollForReport, pollInterval);
-          } else {
-            console.error('❌ Report generation timeout');
-            alert('리포트 생성 시간이 초과되었습니다. 나중에 다시 시도해주세요.');
-            setStep('landing');
-          }
-        }
-      };
-
-      pollForReport();
-
+      setStep('complete'); // SCR-025(면접 종료 안내 화면)으로 즉시 이동
+      pollReport(interview.id); // 백그라운드에서 리포트 폴링 시작
     } catch (err) {
-      console.error("Finish error:", err);
+      console.error('[Finish Error]:', err);
       alert('면접 종료 처리 중 오류가 발생했습니다.');
-      setStep('interview');
+      setStep('landing');
     }
-  };
-
-  const drawTracking = (trackingData) => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video || video.videoWidth === 0) return;
-
-    const ctx = canvas.getContext('2d');
-
-    // Canvas 크기를 비디오 표시 크기에 맞춤 (한 번만 설정하거나 리사이즈 이벤트 처리 필요하지만 여기선 매번 체크)
-    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-      canvas.width = video.clientWidth;
-      canvas.height = video.clientHeight;
-    }
-
-    // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Scale Factors
-    const scaleX = video.clientWidth / video.videoWidth;
-    const scaleY = video.clientHeight / video.videoHeight;
-
-    trackingData.forEach(item => {
-      // Face (Green)
-      if (item.face) {
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(
-          item.face.x * scaleX,
-          item.face.y * scaleY,
-          item.face.w * scaleX,
-          item.face.h * scaleY
-        );
-      }
-
-      // Eyes (Red)
-      if (item.eyes) {
-        item.eyes.forEach(eye => {
-          ctx.strokeStyle = '#ff0000';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(
-            eye.x * scaleX,
-            eye.y * scaleY,
-            eye.w * scaleX,
-            eye.h * scaleY
-          );
-        });
-      }
-    });
   };
 
   const nextQuestion = async () => {
-    if (isRecording) {
-      alert("답변이 기록 중입니다. 먼저 '답변 종료' 버튼을 눌러주세요.");
+    console.log('[nextQuestion] Start - Current Index:', currentIdx);
+    if (!interview || !questions || !questions[currentIdx]) {
+      console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
     }
-    const answerText = transcript.trim() || "답변 내용 없음";
-    try {
 
-      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
+    const answerText = transcript.trim() || "답변 없음";
+
+    try {
+      console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
+      // Transcript 저장 (사용자 답변)
+      await createTranscript(
+        interview.id,
+        'User',
+        answerText,
+        questions[currentIdx].id
+      );
+
+      console.log('[nextQuestion] Transcript saved successfully');
 
       if (currentIdx < questions.length - 1) {
         console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
-        // setIsRecording(false); // Already checked
+        setIsRecording(false);
       } else {
-
-        setStep('loading');
-        // if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-        if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+        console.log('[nextQuestion] Last question reached, finishing interview');
         await finishInterview();
-
       }
     } catch (err) {
-      alert('답변 제출에 실패했습니다.');
+      console.error('[Submit Error]:', err);
+      alert(`답변 제출 실패: ${err.message || 'Unknown error'}`);
     }
   };
 
-  // 면접 화면 초기화 (WebRTC, WebSocket)
   useEffect(() => {
     if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
-      setupWebRTC(interview.id);
-      setupWebSocket(interview.id); // For Eye Tracking
+      const initMedia = async () => {
+        try {
+          await setupWebRTC(interview.id);
+          setupWebSocket(interview.id);
+        } catch (err) {
+          console.error("Media init error:", err);
+        }
+      };
+      initMedia();
     }
   }, [step, interview]);
 
-  // 면접 시작 시 자동으로 녹음 시작 (Deepgram 타임아웃 방지) -> 파일 기반이므로 자동 시작 끔
-  /*
-  useEffect(() => {
-    if (step === 'interview' && questions.length > 0 && !isRecording) {
-      console.log('🎤 [AUTO] Starting recording automatically...');
-      setIsRecording(true);
-      isRecordingRef.current = true;
-    }
-  }, [step, questions]);
-  */
-
   useEffect(() => {
     return () => {
-      // if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
+      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
     };
   }, []);
 
@@ -554,6 +541,7 @@ function App() {
             setStep('main');
           }}
           isInterviewing={step === 'interview'}
+          isComplete={step === 'complete'}
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
           onProfileManagement={() => setStep('profile')}
@@ -592,7 +580,7 @@ function App() {
         </button>
       </div>
 
-      <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', paddingTop: step !== 'main' && step !== 'auth' ? '80px' : '0' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
         {step === 'main' && (
           <MainPage
             onStartInterview={() => {
@@ -609,9 +597,6 @@ function App() {
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
             onLogout={handleLogout}
-            onHistory={() => setStep('history')}
-            onAccountSettings={() => setStep('settings')}
-            onProfileManagement={() => setStep('profile')}
           />
         )}
 
@@ -634,7 +619,6 @@ function App() {
             startInterview={startInterviewFlow}
             handleLogout={handleLogout}
           />
-
         )}
 
         {step === 'resume' && (
@@ -645,18 +629,22 @@ function App() {
           />
         )}
 
-        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} onStepChange={setEnvTestStep} />}
+        {step === 'interview' && (
+          <InterviewPage
+            currentIdx={currentIdx}
+            totalQuestions={questions.length}
+            question={questions[currentIdx]?.content}
+            audioUrl={questions[currentIdx]?.audio_url}
+            isRecording={isRecording}
+            transcript={transcript}
+            toggleRecording={toggleRecording}
+            nextQuestion={nextQuestion}
+            onFinish={finishInterview}
+            videoRef={videoRef}
+          />
+        )}
 
         {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
-
-
-        {step === 'loading_questions' && (
-          <div className="card">
-            <h2>AI 면접관이 질문을 준비하고 있습니다...</h2>
-            <p>지원 직무와 이력서를 분석 중입니다. (AI 모델 로딩에 따라 최대 2분 소요)</p>
-            <div className="spinner"></div>
-          </div>
-        )}
 
         {step === 'interview' && (
           <InterviewPage
@@ -672,20 +660,24 @@ function App() {
           />
         )}
 
-        {step === 'loading' && (
+        {step === 'complete' && (
           <InterviewCompletePage
-            isReportLoading={!report}
-            onCheckResult={() => {
-              if (report) {
-                setStep('result');
-              }
-            }}
+            isReportLoading={isReportLoading}
+            onCheckResult={() => setStep('result')}
             onExit={() => {
-              setStep('landing');
-              setCurrentIdx(0);
+              setStep('main');
               setReport(null);
+              setIsReportLoading(false);
             }}
           />
+        )}
+
+        {step === 'loading' && (
+          <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
+            <h2 className="text-gradient">AI 분석 리포트 생성 중...</h2>
+            <div className="spinner" style={{ width: '60px', height: '60px', borderTopColor: 'var(--primary)' }}></div>
+            <p style={{ color: 'var(--text-muted)' }}>답변 내용을 바탕으로 정밀한 결과를 도출하고 있습니다. 잠시만 기다려주세요.</p>
+          </div>
         )}
 
         {step === 'result' && (
@@ -694,7 +686,7 @@ function App() {
             report={report}
             interview={selectedInterview}
             onReset={() => {
-              setStep('landing');
+              setStep('main');
               setCurrentIdx(0);
               setReport(null);
               setSelectedInterview(null);

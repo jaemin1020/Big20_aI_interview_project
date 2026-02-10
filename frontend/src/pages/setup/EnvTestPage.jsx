@@ -3,7 +3,7 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext, onStepChange }) => {
+const EnvTestPage = ({ onNext }) => {
   const [step, setStep] = useState('audio'); // audio, video
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
@@ -14,13 +14,6 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
-
-  // Notify parent of step change
-  useEffect(() => {
-    if (onStepChange) {
-      onStepChange(step);
-    }
-  }, [step, onStepChange]);
 
   // Real Audio Level Visualization & Deepgram STT
   useEffect(() => {
@@ -64,52 +57,50 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
           setAudioLevel(level);
         };
 
-        // 2. STT Test Setup (REST API)
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        mediaRecorderRef.current = mediaRecorder;
-        let chunks = [];
+        // 2. Deepgram STT Setup
+        const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+        if (apiKey) {
+          const deepgram = createClient(apiKey);
+          const connection = deepgram.listen.live({
+            model: "nova-2",
+            language: "ko",
+            smart_format: true,
+            encoding: "linear16",
+            sample_rate: 16000,
+            interim_results: true,
+          });
 
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
+          connection.on("Open", () => {
+            console.log("Deepgram Connected for Test");
 
-        mediaRecorder.onstop = async () => {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          chunks = [];
-          console.log("Audio recording stopped, sending to server...");
-
-          try {
-            // 동적으로 import하여 순환참조 방지
-            const { recognizeAudio } = await import('../../api/interview');
-            const result = await recognizeAudio(blob);
-            if (result && result.text) {
-              setTranscript(result.text);
-              setIsRecognitionOk(true);
-            }
-          } catch (err) {
-            console.error("STT Recognition failed:", err);
-            setTranscript("인식 실패: 다시 시도해주세요.");
-          }
-        };
-
-        // 5초마다 녹음 끊어서 전송 (단순 테스트용)
-        // 실제로는 VAD 등을 쓰면 좋지만 테스트 페이지이므로 자동 루프
-        const startLoop = () => {
-          if (mediaRecorder.state === 'inactive') {
-            mediaRecorder.start();
-            setTimeout(() => {
-              if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            mediaRecorder.addEventListener('dataavailable', (event) => {
+              if (event.data.size > 0 && connection.getReadyState() === 1) {
+                connection.send(event.data);
               }
-            }, 4000); // 4초 녹음
-          }
-        };
+            });
+            mediaRecorder.start(250);
+            mediaRecorderRef.current = mediaRecorder;
+          });
 
-        // 첫 시작
-        startLoop();
-        // 반복 (재시도 등을 위해 interval 사용 가능하지만, 여기선 한 번만 하거나 사용자 액션 유도)
-        // 일단 4초 녹음 후 멈춤. 사용자가 '다시 시도' 누르면 handleRetry에서 처리
+          connection.on("Results", (result) => {
+            const channel = result.channel;
+            if (channel && channel.alternatives && channel.alternatives[0]) {
+              const text = channel.alternatives[0].transcript;
+              if (text && text.trim().length > 0) {
+                setTranscript(prev => {
+                  // 간단한 이어붙이기 (실제로는 interim 처리 등 더 복잡할 수 있음)
+                  if (result.is_final) return prev + ' ' + text;
+                  return prev;
+                });
+                // 텍스트가 조금이라도 인식되면 성공으로 간주
+                if (result.is_final) setIsRecognitionOk(true);
+              }
+            }
+          });
 
+          deepgramConnectionRef.current = connection;
+        }
 
       } catch (err) {
         console.error("Microphone access failed:", err);
@@ -324,7 +315,7 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
           <PremiumButton variant="secondary" onClick={() => setStep('audio')}>오디오 테스트 다시 하기</PremiumButton>
         </div>
       </GlassCard>
-    </div>
+    </div >
   );
 };
 
