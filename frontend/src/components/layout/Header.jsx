@@ -1,8 +1,18 @@
 import React from 'react';
 
 const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle }) => {
-  const [isManageOpen, setIsManageOpen] = React.useState(false);
-  const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
+  const [activeMenu, setActiveMenu] = React.useState(null); // 'manage', 'myinfo', null
+
+  // Close dropdowns when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.header-dropdown-container')) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <header style={{
@@ -116,30 +126,29 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           <div
             className="header-dropdown-container"
             style={{ position: 'relative' }}
-            onMouseEnter={() => setIsManageOpen(true)}
-            onMouseLeave={() => setIsManageOpen(false)}
           >
             <button
+              onClick={() => setActiveMenu(activeMenu === 'manage' ? null : 'manage')}
               style={{
                 padding: '8px 16px',
                 borderRadius: '20px',
                 border: '1px solid var(--glass-border)',
-                background: isManageOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
+                background: activeMenu === 'manage' ? 'rgba(255,255,255,0.1)' : 'transparent',
                 color: 'var(--text-main)',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
                 outline: 'none'
               }}
             >
-              면접 관리
+              면접 관리 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'manage' ? '▲' : '▼'}</span>
             </button>
-            {isManageOpen && (
+            {activeMenu === 'manage' && (
               <div className="header-dropdown-menu" style={{
                 position: 'absolute',
                 top: '100%',
                 left: 0,
                 width: '160px',
-                marginTop: '4px',
+                marginTop: '8px',
                 background: 'var(--glass-bg)',
                 backdropFilter: 'blur(12px)',
                 border: '1px solid var(--glass-border)',
@@ -148,10 +157,11 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-                animation: 'fadeIn 0.2s ease'
+                boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                animation: 'fadeIn 0.2s ease',
+                zIndex: 1001
               }}>
-                <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
+                <button className="dropdown-item" onClick={() => { onHistory(); setActiveMenu(null); }}>면접 이력</button>
               </div>
             )}
           </div>
@@ -160,30 +170,29 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           <div
             className="header-dropdown-container"
             style={{ position: 'relative' }}
-            onMouseEnter={() => setIsMyInfoOpen(true)}
-            onMouseLeave={() => setIsMyInfoOpen(false)}
           >
             <button
+              onClick={() => setActiveMenu(activeMenu === 'myinfo' ? null : 'myinfo')}
               style={{
                 padding: '8px 16px',
                 borderRadius: '20px',
                 border: '1px solid var(--glass-border)',
-                background: isMyInfoOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
+                background: activeMenu === 'myinfo' ? 'rgba(255,255,255,0.1)' : 'transparent',
                 color: 'var(--text-main)',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
                 outline: 'none'
               }}
             >
-              내 정보
+              내 정보 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'myinfo' ? '▲' : '▼'}</span>
             </button>
-            {isMyInfoOpen && (
+            {activeMenu === 'myinfo' && (
               <div className="header-dropdown-menu" style={{
                 position: 'absolute',
                 top: '100%',
                 left: 0,
                 width: '160px',
-                marginTop: '4px',
+                marginTop: '8px',
                 background: 'var(--glass-bg)',
                 backdropFilter: 'blur(12px)',
                 border: '1px solid var(--glass-border)',
@@ -192,11 +201,12 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-                animation: 'fadeIn 0.2s ease'
+                boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                animation: 'fadeIn 0.2s ease',
+                zIndex: 1001
               }}>
-                <button className="dropdown-item" onClick={onProfileManagement}>프로필 관리</button>
-                <button className="dropdown-item" onClick={onAccountSettings}>계정 관리</button>
+                <button className="dropdown-item" onClick={() => { onProfileManagement(); setActiveMenu(null); }}>프로필 관리</button>
+                <button className="dropdown-item" onClick={() => { onAccountSettings(); setActiveMenu(null); }}>계정 관리</button>
               </div>
             )}
           </div>
