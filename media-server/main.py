@@ -53,13 +53,15 @@ def load_local_whisper():
     try:
         if WHISPER_MODEL is None:
             logger.info(f"⏳ Loading Local Whisper Model ({LOCAL_MODEL_SIZE})...")
-            # Run on GPU with FP16
-            WHISPER_MODEL = WhisperModel(LOCAL_MODEL_SIZE, device="cuda", compute_type="float16")
-            logger.info("✅ Local Whisper Model Loaded")
+            # GPU 사용 시 float16, CPU 사용 시 int8 권장
+            device = "cuda" if os.getenv("USE_GPU", "true").lower() == "true" else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+            
+            WHISPER_MODEL = WhisperModel(LOCAL_MODEL_SIZE, device=device, compute_type=compute_type)
+            logger.info(f"✅ Local Whisper Model Loaded on {device}")
     except Exception as e:
         logger.error(f"❌ Failed to load Local Whisper: {e}")
 
-import threading
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
     kind = "video"
@@ -166,116 +168,63 @@ class VideoAnalysisTrack(MediaStreamTrack):
 
         return frame
 
-async def start_stt_with_local_whisper(audio_track: MediaStreamTrack, session_id: str):
-    """Local Faster-Whisper 실시간 STT 실행 (Buffering approach)"""
+async def start_stt_with_local_whisper(track, session_id):
+    """Local Whisper를 이용한 실시간 STT 처리"""
+    logger.info(f"[{session_id}] 서버 사이드 실시간 STT 시작 (Local Whisper)")
     
-    logger.info(f"[{session_id}] ⭐ start_stt_with_local_whisper CALLED - Function entered successfully")
-    
-    # 모델 로딩 (최초 1회)
     if WHISPER_MODEL is None:
         load_local_whisper()
+
+    audio_buffer = []
+    # 약 1초 분량의 오디오를 모아서 처리 (16kHz 기준 16000 샘플)
+    BUFFER_THRESHOLD = 16000 
     
-    if WHISPER_MODEL is None:
-        logger.error(f"[{session_id}] Local Whisper Model not available.")
-        return
-
     try:
-        logger.info(f"[{session_id}] Starting Local Whisper STT Stream...")
-        loop = asyncio.get_running_loop()
-        
-        # Whisper는 16kHz, Mono, Float32 입력을 기대함
-        resampler = av.AudioResampler(format='flt', layout='mono', rate=16000)
-        
-        buffer = [] # Float32 samples accumulation
-        BUFFER_DURATION_SEC = 1.0 # [수정] 2초 → 1초로 단축 (짧은 답변 인식 개선)
-        SAMPLE_RATE = 16000
-        CHUNK_SIZE = int(SAMPLE_RATE * BUFFER_DURATION_SEC)
-        
-        # 이전 텍스트 중복 방지용
-        last_text = ""
-
-        frame_count = 0
         while True:
-            try:
-                frame = await audio_track.recv()
-                frame_count += 1
+            frame = await track.recv()
+            
+            # 오디오 데이터 추출 및 리샘플링 (av 사용)
+            # WebRTC는 대개 48kHz 사용하므로 16kHz로 변환 필요
+            # 여기서는 편의상 numpy로 변환 후 whisper가 지원하는 포맷으로 가정
+            resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+            resampled_frames = resampler.resample(frame)
+            
+            for f in resampled_frames:
+                data = f.to_ndarray()
+                # float32로 변환 (-1.0 ~ 1.0)
+                audio_buffer.append(data.astype(np.float32) / 32768.0)
                 
-                # Resample & Convert to Numpy
-                frame_resampled = resampler.resample(frame)
-                for f in frame_resampled:
-                    # to_ndarray returns (1, samples) for stereo or mono depending on layout
-                    # format='flt' -> float32
-                    chunk = f.to_ndarray()[0] 
-                    buffer.extend(chunk)
+            # 버퍼가 임계치를 넘으면 변환 실행
+            current_buffer_size = sum(len(b[0]) if b.ndim > 1 else len(b) for b in audio_buffer)
+            
+            if current_buffer_size >= BUFFER_THRESHOLD:
+                # 버퍼 병합
+                full_audio = np.concatenate(audio_buffer)
+                audio_buffer = [] # 버퍼 초기화
                 
-                # 프레임 수신 로그 (10프레임마다)
-                if frame_count % 10 == 0:
-                    logger.info(f"[{session_id}] 📊 Received {frame_count} frames, buffer size: {len(buffer)}")
+                # Whisper 추론 (비동기 틱에서 실행을 위해 루프 밖에서 처리하거나 thread 사용 고려)
+                # 여기서는 간단히 직접 호출 (모델이 무거우면 loop 지연 발생 가능)
+                segments, info = WHISPER_MODEL.transcribe(full_audio, language="ko", beam_size=5)
                 
-                # 버퍼가 일정 크기 이상 쌓이면 추론 실행
-                if len(buffer) >= CHUNK_SIZE:
-                    logger.info(f"[{session_id}] 🎤 Buffer full ({len(buffer)} samples), starting transcription...")
-                    audio_data = np.array(buffer, dtype=np.float32)
-                    buffer = [] # 버퍼 초기화 (또는 오버랩 구현 가능)
- 
-                    # VAD Filter를 켜서 무음 구간 제외하고 인식
-                    segments, info = WHISPER_MODEL.transcribe(audio_data, language="ko", vad_filter=True)
-                    
-                    text_segments = [s.text for s in segments]
-                    current_text = " ".join(text_segments).strip()
-                    
-                    if not current_text:
-                        logger.info(f"[{session_id}] 🔇 No active speech detected (Silence/VAD)")
-                    elif current_text == last_text:
-                        logger.info(f"[{session_id}] 🔁 Duplicate text (ignored): {current_text}")
-                    else:
-                        logger.info(f"[{session_id}] Local STT: {current_text}")
-                        last_text = current_text
-                        
-                        stt_data = {
-                            "session_id": session_id,
-                            "text": current_text,
-                            "type": "stt_result",
-                            "is_final": True, # 로컬 배치는 항상 Final로 취급
-                            "timestamp": time.time()
-                        }
-                        
-                        if session_id in active_websockets:
-                            ws = active_websockets[session_id]
-                            asyncio.run_coroutine_threadsafe(send_to_websocket(ws, stt_data), loop)
-
-            except Exception as e:
-                logger.error(f"[{session_id}] Local Whisper Stream Error/End: {e}", exc_info=True)
-                break
-        
-        # [중요] 스트림 종료 시 남은 버퍼 처리 (짧은 답변 보존)
-        if len(buffer) > 0:
-            logger.info(f"[{session_id}] 🔚 Processing remaining {len(buffer)} samples before stream end...")
-            try:
-                audio_data = np.array(buffer, dtype=np.float32)
-                segments, info = WHISPER_MODEL.transcribe(audio_data, language="ko", vad_filter=True)
-                text_segments = [s.text for s in segments]
-                final_text = " ".join(text_segments).strip()
+                text = ""
+                for segment in segments:
+                    text += segment.text
                 
-                if final_text and final_text != last_text:
-                    logger.info(f"[{session_id}] Local STT (final): {final_text}")
-                    stt_data = {
-                        "session_id": session_id,
-                        "text": final_text,
-                        "type": "stt_result",
-                        "is_final": True,
-                        "timestamp": time.time()
-                    }
-                    if session_id in active_websockets:
-                        ws = active_websockets[session_id]
-                        asyncio.run_coroutine_threadsafe(send_to_websocket(ws, stt_data), loop)
-            except Exception as e:
-                logger.error(f"[{session_id}] Error processing final buffer: {e}")
-                
-        logger.info(f"[{session_id}] Local Whisper Stream Finished")
+                if text.strip():
+                    logger.info(f"[{session_id}] STT Result: {text}")
+                    ws = active_websockets.get(session_id)
+                    if ws:
+                        await send_to_websocket(ws, {
+                            "type": "stt",
+                            "text": text,
+                            "final": False # 실시간 중간 결과 느낌
+                        })
 
     except Exception as e:
-        logger.error(f"[{session_id}] Local STT Init Error: {e}")
+        logger.error(f"[{session_id}] STT error: {e}")
+    finally:
+        logger.info(f"[{session_id}] STT 종료")
+
 async def send_to_websocket(ws: WebSocket, data: dict):
     """WebSocket으로 데이터 전송"""
     try:
@@ -330,6 +279,10 @@ async def offer(request: Request):
             # 비디오 트랙: 감정 분석 처리
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
+        elif track.kind == "audio":
+            # [변경] Deepgram 대신 Local Whisper 사용
+            asyncio.ensure_future(start_stt_with_local_whisper(track, session_id))
+            logger.info(f"[{session_id}] Audio track processing started (Local Whisper enabled)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
