@@ -108,21 +108,23 @@ function App() {
           const savedPosition = sessionStorage.getItem('app_position');
           const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
-          if (savedInterview) setInterview(JSON.parse(savedInterview));
-          if (savedQuestions) setQuestions(JSON.parse(savedQuestions));
-          if (savedCurrentIdx) setCurrentIdx(parseInt(savedCurrentIdx));
-          if (savedReport) setReport(JSON.parse(savedReport));
-          if (savedPosition) setPosition(savedPosition);
-          if (savedParsedResume) setParsedResumeData(JSON.parse(savedParsedResume));
-
-          if (savedStep) {
-            setStep(savedStep);
-            if (savedStep === 'complete' && !savedReport && savedInterview) {
-              const interviewData = JSON.parse(savedInterview);
-              pollReport(interviewData.id);
-            }
-          } else {
+          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
+          if (savedStep === 'auth') {
             setStep('main');
+          }
+          else {
+            const hasInterviewData = sessionStorage.getItem('current_interview');
+            const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
+
+            if (savedStep) {
+              setStep(savedStep);
+              if (savedStep === 'complete' && !savedReport && savedInterview) {
+                const interviewData = JSON.parse(savedInterview);
+                pollReport(interviewData.id);
+              }
+            } else {
+              setStep('main');
+            }
           }
           isInitialized.current = true;
         })
@@ -176,6 +178,7 @@ function App() {
         const u = await getCurrentUser();
         setUser(u);
         setStep('main');
+        setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -530,7 +533,13 @@ function App() {
         <Header
           onLogout={handleLogout}
           showLogout={!!user}
-          onLogoClick={() => setStep('main')}
+          onLogoClick={() => {
+            if (step === 'interview') {
+              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
+              return;
+            }
+            setStep('main');
+          }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
           onHistory={() => setStep('history')}
@@ -541,7 +550,7 @@ function App() {
               step === 'result' ? '면접 결과' :
                 step === 'settings' ? '계정 설정' :
                   step === 'profile' ? '프로필 관리' :
-                    step === 'env_test' ? '환경 테스트' :
+                    step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
                       null
           }
         />
@@ -593,11 +602,17 @@ function App() {
 
         {step === 'auth' && (
           <AuthPage
-            authMode={authMode} setAuthMode={setAuthMode}
-            account={account} setAccount={setAccount}
-            handleAuth={handleAuth} authError={authError}
+            authMode={authMode}
+            setAuthMode={setAuthMode}
+            account={account}
+            setAccount={setAccount}
+            handleAuth={handleAuth}
+            authError={authError}
+            onBack={() => setStep('main')}
           />
         )}
+
+
 
         {step === 'landing' && (
           <LandingPage
@@ -674,8 +689,6 @@ function App() {
               setStep('main');
               setCurrentIdx(0);
               setReport(null);
-              setReport(null);
-              setIsReportLoading(false);
               setSelectedInterview(null);
             }}
           />
