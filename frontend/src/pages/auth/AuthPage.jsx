@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
@@ -13,14 +13,42 @@ const AuthPage = ({
 }) => {
   const fileInputRef = useRef(null);
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFile = (file) => {
+    if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setAccount({ ...account, profileImage: reader.result });
       };
       reader.readAsDataURL(file);
+    } else if (file) {
+      alert("이미지 파일만 업로드 가능합니다.");
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -87,25 +115,31 @@ const AuthPage = ({
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0.5rem' }}>
               <div
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 style={{
                   width: '100px',
                   height: '100px',
                   borderRadius: '50%',
-                  background: 'var(--bg-darker)',
+                  background: isDragging ? 'rgba(99, 102, 241, 0.1)' : 'var(--bg-darker)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                   overflow: 'hidden',
-                  border: '2px dashed var(--glass-border)',
-                  position: 'relative'
+                  border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+                  position: 'relative',
+                  transition: 'all 0.3s ease',
+                  transform: isDragging ? 'scale(1.1)' : 'scale(1)',
+                  boxShadow: isDragging ? '0 0 20px rgba(99, 102, 241, 0.3)' : 'none'
                 }}
               >
                 {account.profileImage ? (
                   <img src={account.profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    📷<br />사진 업로드
+                  <div style={{ textAlign: 'center', fontSize: '0.8rem', color: isDragging ? 'var(--primary)' : 'var(--text-muted)' }}>
+                    📷<br />{isDragging ? '놓으세요!' : '사진 업로드'}
                   </div>
                 )}
               </div>
