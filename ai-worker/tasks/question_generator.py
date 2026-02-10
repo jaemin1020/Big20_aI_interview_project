@@ -147,7 +147,7 @@ class QuestionGenerator:
 @shared_task(name="tasks.question_generator.generate_questions")
 def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
     """
-    질문 생성 Task
+    질문 생성 Task (TTS 포함)
     
     Args:
         position (str): 지원 직무
@@ -155,7 +155,8 @@ def generate_questions_task(position: str, interview_id: int = None, count: int 
         count (int, optional): 생성할 질문 수. Defaults to 5.
     
     Returns:
-        List[str]: 생성된 질문 리스트
+        List[Dict[str, str]]: 생성된 질문 및 오디오 URL 리스트 
+        Example: [{"text": "질문내용", "audio_url": "/static/audio/..."}]
     
     Raises:
         Exception: 질문 생성 실패
@@ -163,9 +164,41 @@ def generate_questions_task(position: str, interview_id: int = None, count: int 
     생성자: ejm
     생성일자: 2026-02-04
     """
+    import uuid
+    from .tts import tts_engine, load_tts_engine
+
     try:
         generator = QuestionGenerator()
-        return generator.generate_questions(position, interview_id, count)
+        questions = generator.generate_questions(position, interview_id, count)
+        
+        # TTS Integration
+        results = []
+        
+        # Ensure TTS engine is ready
+        if tts_engine is None or tts_engine.tts is None:
+            load_tts_engine()
+
+        # Save directory inside container
+        save_dir = "/app/uploads/audio"
+        os.makedirs(save_dir, exist_ok=True)
+            
+        for q in questions:
+            audio_url = None
+            if tts_engine and tts_engine.tts:
+                try:
+                    filename = f"q_{uuid.uuid4().hex}.wav"
+                    filepath = os.path.join(save_dir, filename)
+                    
+                    if tts_engine.synthesize(q, filepath):
+                        # URL path for backend (mounted as /static)
+                        audio_url = f"/static/audio/{filename}"
+                except Exception as ex:
+                    logger.error(f"TTS failing for question '{q[:20]}...': {ex}")
+            
+            results.append({"text": q, "audio_url": audio_url})
+            
+        return results
+
     except Exception as e:
         logger.error(f"Task Error: {e}")
         return []
@@ -177,3 +210,4 @@ try:
     logger.info("✅ Question Generator ready for requests")
 except Exception as e:
     logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
+
