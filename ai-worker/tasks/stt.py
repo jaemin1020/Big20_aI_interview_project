@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+=======
+from celery import shared_task
+from faster_whisper import WhisperModel
+>>>>>>> origin/HEAD
 import os
 import base64
 import tempfile
@@ -24,11 +29,11 @@ try:
 except:
     pass
 
-def load_stt_pipeline():
+def load_stt_model():
     """
     Whisper 파이프라인 로드 (안정성을 위해 CPU 모드 권장)
     """
-    global stt_pipeline
+    global stt_model
     try:
         if stt_pipeline is not None:
             return
@@ -48,8 +53,8 @@ def load_stt_pipeline():
         logger.info("Whisper Pipeline loaded successfully.")
             
     except Exception as e:
-        logger.error(f"Failed to load Whisper Pipeline: {e}")
-        stt_pipeline = None
+        logger.error(f"Failed to load Faster-Whisper Model: {e}")
+        stt_model = None
 
 # 모듈 로드 시 또는 첫 실행 시 로드
 load_stt_pipeline()
@@ -59,7 +64,7 @@ def recognize_audio_task(audio_b64: str):
     """
     사용자의 오디오를 받아 텍스트로 변환 (환각 방지 필터 포함)
     """
-    global stt_pipeline
+    global stt_model
     
     start_time = time.time()
     task_id = recognize_audio_task.request.id or f"local-{datetime.datetime.now().timestamp()}"
@@ -86,11 +91,11 @@ def recognize_audio_task(audio_b64: str):
             tmp.write(audio_bytes)
             input_path = tmp.name
         
+<<<<<<< HEAD
         # [디버그용] 원본 저장 (필요시 활성화)
         try:
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             debug_path = os.path.join(DEBUG_DIR, f"{timestamp}_{task_id[-8:]}_input.webm")
-            shutil.copy(input_path, debug_path)
             logger.info(f"[{task_id}] 디버그 오디오 저장됨: {debug_path}")
         except:
             pass
@@ -144,11 +149,11 @@ def recognize_audio_task(audio_b64: str):
         
     except Exception as e:
         logger.error(f"[{task_id}] Error: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
-        
-    finally:
-        # 임시 파일 삭제
-        for path in [input_path, output_path]:
+=======
+        # Inference
+        segments, info = stt_model.transcribe(
+            temp_path, 
+            beam_size=5, 
             if path and os.path.exists(path):
                 try: os.remove(path)
                 except: pass

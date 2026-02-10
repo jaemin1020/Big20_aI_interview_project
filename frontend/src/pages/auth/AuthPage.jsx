@@ -176,11 +176,18 @@ const AuthPage = ({
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>생년월일</label>
                 <input
-                  type="date"
+                  type="text"
+                  placeholder="0000-00-00"
                   value={account.birthDate || ''}
-                  onChange={(e) => setAccount({ ...account, birthDate: e.target.value })}
-                  max="9999-12-31"
-                  style={{ colorScheme: 'dark' }}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    let result = '';
+                    if (val.length <= 4) result = val;
+                    else if (val.length <= 6) result = `${val.slice(0, 4)}-${val.slice(4)}`;
+                    else result = `${val.slice(0, 4)}-${val.slice(4, 6)}-${val.slice(6, 8)}`;
+                    setAccount({ ...account, birthDate: result });
+                  }}
+                  maxLength={10}
                 />
               </div>
 

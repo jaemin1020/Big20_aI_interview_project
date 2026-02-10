@@ -25,9 +25,13 @@ import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
+import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
+import AccountSettingsPage from './pages/settings/AccountSettingsPage';
+import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 
 function App() {
   const [step, setStep] = useState('main');
+  const [envTestStep, setEnvTestStep] = useState('audio');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
@@ -527,9 +531,9 @@ function App() {
   }, []);
 
   return (
-    <div className="container">
+    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
       {/* Header - Visible in Most Steps */}
-      {step !== 'main' && step !== 'auth' && (
+      {step !== 'auth' && (
         <Header
           onLogout={handleLogout}
           showLogout={!!user}
@@ -545,6 +549,8 @@ function App() {
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
           onProfileManagement={() => setStep('profile')}
+          onLogin={() => { setAuthMode('login'); setStep('auth'); }}
+          onRegister={() => { setAuthMode('register'); setStep('auth'); }}
           pageTitle={
             step === 'history' ? '면접 이력' :
               step === 'result' ? '면접 결과' :
@@ -623,9 +629,16 @@ function App() {
 
         {step === 'resume' && (
           <ResumePage
-            onNext={() => setStep('env_test')}
+            onNext={() => { setEnvTestStep('audio'); setStep('env_test'); }}
             onFileSelect={setResumeFile}
             onParsedData={setParsedResumeData} // Pass this to save parsed info
+          />
+        )}
+        {step === 'env_test' && (
+          <EnvTestPage
+            onNext={() => setStep('final_guide')}
+            envTestStep={envTestStep}
+            setEnvTestStep={setEnvTestStep}
           />
         )}
 
@@ -644,21 +657,7 @@ function App() {
           />
         )}
 
-        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
-
-        {step === 'interview' && (
-          <InterviewPage
-            currentIdx={currentIdx}
-            totalQuestions={questions.length}
-            question={questions[currentIdx]?.content}
-            isRecording={isRecording}
-            transcript={transcript}
-            toggleRecording={toggleRecording}
-            nextQuestion={nextQuestion}
-            onFinish={finishInterview}
-            videoRef={videoRef}
-          />
-        )}
+        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => { setEnvTestStep('video'); setStep('env_test'); }} isLoading={isLoading} />}
 
         {step === 'complete' && (
           <InterviewCompletePage
