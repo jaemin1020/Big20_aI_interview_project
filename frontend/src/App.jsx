@@ -25,9 +25,13 @@ import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
+import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
+import AccountSettingsPage from './pages/settings/AccountSettingsPage';
+import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 
 function App() {
   const [step, setStep] = useState('main');
+  const [envTestStep, setEnvTestStep] = useState('audio');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
@@ -108,21 +112,23 @@ function App() {
           const savedPosition = sessionStorage.getItem('app_position');
           const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
-          if (savedInterview) setInterview(JSON.parse(savedInterview));
-          if (savedQuestions) setQuestions(JSON.parse(savedQuestions));
-          if (savedCurrentIdx) setCurrentIdx(parseInt(savedCurrentIdx));
-          if (savedReport) setReport(JSON.parse(savedReport));
-          if (savedPosition) setPosition(savedPosition);
-          if (savedParsedResume) setParsedResumeData(JSON.parse(savedParsedResume));
-
-          if (savedStep) {
-            setStep(savedStep);
-            if (savedStep === 'complete' && !savedReport && savedInterview) {
-              const interviewData = JSON.parse(savedInterview);
-              pollReport(interviewData.id);
-            }
-          } else {
+          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
+          if (savedStep === 'auth') {
             setStep('main');
+          }
+          else {
+            const hasInterviewData = sessionStorage.getItem('current_interview');
+            const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
+
+            if (savedStep) {
+              setStep(savedStep);
+              if (savedStep === 'complete' && !savedReport && savedInterview) {
+                const interviewData = JSON.parse(savedInterview);
+                pollReport(interviewData.id);
+              }
+            } else {
+              setStep('main');
+            }
           }
           isInitialized.current = true;
         })
@@ -176,6 +182,7 @@ function App() {
         const u = await getCurrentUser();
         setUser(u);
         setStep('main');
+        setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -524,24 +531,32 @@ function App() {
   }, []);
 
   return (
-    <div className="container">
+    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
       {/* Header - Visible in Most Steps */}
-      {step !== 'main' && step !== 'auth' && (
+      {step !== 'auth' && (
         <Header
           onLogout={handleLogout}
           showLogout={!!user}
-          onLogoClick={() => setStep('main')}
+          onLogoClick={() => {
+            if (step === 'interview') {
+              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
+              return;
+            }
+            setStep('main');
+          }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
           onProfileManagement={() => setStep('profile')}
+          onLogin={() => { setAuthMode('login'); setStep('auth'); }}
+          onRegister={() => { setAuthMode('register'); setStep('auth'); }}
           pageTitle={
             step === 'history' ? '면접 이력' :
               step === 'result' ? '면접 결과' :
                 step === 'settings' ? '계정 설정' :
                   step === 'profile' ? '프로필 관리' :
-                    step === 'env_test' ? '환경 테스트' :
+                    step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
                       null
           }
         />
@@ -593,11 +608,17 @@ function App() {
 
         {step === 'auth' && (
           <AuthPage
-            authMode={authMode} setAuthMode={setAuthMode}
-            account={account} setAccount={setAccount}
-            handleAuth={handleAuth} authError={authError}
+            authMode={authMode}
+            setAuthMode={setAuthMode}
+            account={account}
+            setAccount={setAccount}
+            handleAuth={handleAuth}
+            authError={authError}
+            onBack={() => setStep('main')}
           />
         )}
+
+
 
         {step === 'landing' && (
           <LandingPage
@@ -608,21 +629,25 @@ function App() {
 
         {step === 'resume' && (
           <ResumePage
-            onNext={() => setStep('env_test')}
+            onNext={() => { setEnvTestStep('audio'); setStep('env_test'); }}
             onFileSelect={setResumeFile}
             onParsedData={setParsedResumeData} // Pass this to save parsed info
           />
         )}
-
-        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
-
-        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
+        {step === 'env_test' && (
+          <EnvTestPage
+            onNext={() => setStep('final_guide')}
+            envTestStep={envTestStep}
+            setEnvTestStep={setEnvTestStep}
+          />
+        )}
 
         {step === 'interview' && (
           <InterviewPage
             currentIdx={currentIdx}
             totalQuestions={questions.length}
             question={questions[currentIdx]?.content}
+            audioUrl={questions[currentIdx]?.audio_url}
             isRecording={isRecording}
             transcript={transcript}
             toggleRecording={toggleRecording}
@@ -631,6 +656,8 @@ function App() {
             videoRef={videoRef}
           />
         )}
+
+        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => { setEnvTestStep('video'); setStep('env_test'); }} isLoading={isLoading} />}
 
         {step === 'complete' && (
           <InterviewCompletePage
@@ -661,8 +688,6 @@ function App() {
               setStep('main');
               setCurrentIdx(0);
               setReport(null);
-              setReport(null);
-              setIsReportLoading(false);
               setSelectedInterview(null);
             }}
           />

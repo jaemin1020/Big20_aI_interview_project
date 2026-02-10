@@ -267,9 +267,18 @@ const ProfileManagementPage = ({ onBack, user }) => {
                             생년월일
                         </label>
                         <input
-                            type="date"
+                            type="text"
                             value={birthDate}
-                            onChange={(e) => setBirthDate(e.target.value)}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                let result = '';
+                                if (val.length <= 4) result = val;
+                                else if (val.length <= 6) result = `${val.slice(0, 4)}-${val.slice(4)}`;
+                                else result = `${val.slice(0, 4)}-${val.slice(4, 6)}-${val.slice(6, 8)}`;
+                                setBirthDate(result);
+                            }}
+                            placeholder="0000-00-00"
+                            maxLength={10}
                             style={{
                                 width: '100%',
                                 padding: '12px',

@@ -48,8 +48,8 @@ class ExaoneLLM:
             self.llm = Llama(
                 model_path=MODEL_PATH,
                 n_gpu_layers=-1,      # 가능한 모든 레이어를 GPU로 오프로드
-                n_ctx=4096,           # 컨텍스트 윈도우 크기
-                n_batch=512,          # 배치 크기
+                n_ctx=2048,           # 컨텍스트 윈도우 크기 (메모리 절약)
+                n_batch=128,          # 배치 크기 (CPU 반응성 향상)
                 verbose=False          # 로딩 로그 출력
             )
             logger.info("✅ EXAONE GGUF Model Initialized")
@@ -68,7 +68,7 @@ class ExaoneLLM:
         position: str,
         context: str = "",
         examples: List[str] = None,
-        count: int = 5
+        count: int = 1
     ) -> List[str]:
         """면접 질문 생성
         
@@ -76,7 +76,7 @@ class ExaoneLLM:
             position (str): 직무 포지션
             context (str, optional): 추가 컨텍스트. Defaults to "".
             examples (List[str], optional): 예시 질문. Defaults to None.
-            count (int, optional): 생성할 질문 수. Defaults to 5.
+            count (int, optional): 생성할 질문 수. Defaults to 1.
             
         Returns:
             List[str]: 생성된 질문 리스트
@@ -113,7 +113,7 @@ class ExaoneLLM:
         try:
             output = self.llm(
                 prompt,
-                max_tokens=1024,
+                max_tokens=300,
                 stop=["[|endofturn|]", "[|user|]", "생성된 질문:"],
                 temperature=0.7,
                 top_p=0.9,
@@ -145,6 +145,83 @@ class ExaoneLLM:
         except Exception as e:
             logger.error(f"질문 생성 중 오류: {e}")
             return self._get_fallback_questions(position, count)
+
+    def generate_human_like_question(
+        self,
+        name: str,
+        stage: str,
+        guide: str,
+        context_list: List[Dict]
+    ) -> str:
+        """베테랑 면접관 스타일의 단일 질문 생성 (RAG 기반)
+        
+        Args:
+            name (str): 지원자 이름
+            stage (str): 면접 단계 (예: 직무 지식 평가)
+            guide (str): 평가 의도/가이드
+            context_list (List[Dict]): RAG 검색 결과 리스트 [{'text': ...}, ...]
+            
+        Returns:
+            str: 생성된 질문
+        """
+        if not context_list:
+            return f"{name}님, 해당 직무에 지원하게 된 계기를 구체적으로 말씀해 주시겠습니까?"
+
+        # 컨텍스트 텍스트 변환
+        texts = [item['text'] for item in context_list] if isinstance(context_list[0], dict) else context_list
+        context_text = "\n".join([f"- {txt}" for txt in texts])
+
+        prompt_template = """[|system|]
+너는 15년 차 베테랑 '보안 직무 면접관'이다. 
+지금은 **면접이 한창 진행 중인 상황**이다. (자기소개는 이미 끝났다.)
+제공된 [이력서 내용]을 근거로, 해당 단계({stage})에 맞는 **날카로운 질문 1개**만 던져라.
+
+[작성 절대 금지 사항] 
+1. **"자기소개 부탁드립니다" 절대 금지.** (이미 했다고 가정)
+2. **"(잠시 침묵)", "답변 감사합니다"** 같은 가상의 지문이나 대본을 쓰지 마라.
+3. 질문 앞뒤에 사족을 붙이지 말고 **질문만 깔끔하게** 출력하라.
+
+[질문 스타일 가이드]
+1. 시작은 반드시 **"{name}님,"** 으로 부르며 시작할 것.
+2. **"이력서를 보니...", "자소서를 읽어보니 ~라고 하셨는데..."** 처럼 근거를 명확히 댈 것.
+3. 말투는 정중하면서도 예리한 면접관 톤(..하셨는데, ..설명해 주시겠습니까?)을 유지할 것.
+[|endofturn|]
+[|user|]
+# 평가 단계: {stage}
+# 평가 의도: {guide}
+# 지원자 이력서 근거:
+{context}
+
+# 요청:
+위 내용을 바탕으로 {name} 지원자에게 **단도직입적으로** 질문을 던져줘.
+[|endofturn|]
+[|assistant|]"""
+
+        prompt = prompt_template.format(
+            name=name,
+            stage=stage,
+            guide=guide,
+            context=context_text
+        )
+
+        try:
+            output = self.llm(
+                prompt,
+                max_tokens=256,
+                stop=["[|endofturn|]", "[|user|]"],
+                temperature=0.7,
+                top_p=0.9,
+                echo=False
+            )
+            
+            response_text = output['choices'][0]['text'].strip()
+            # 혹시 모를 따옴표 제거
+            response_text = response_text.strip('"\'')
+            return response_text
+            
+        except Exception as e:
+            logger.error(f"질문 생성 실패: {e}")
+            return f"{name}님, 준비하신 내용을 바탕으로 편하게 말씀해 주십시오."
 
     def evaluate_answer(
         self,
