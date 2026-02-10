@@ -8,6 +8,9 @@ import re
 from db import engine
 from sqlmodel import Session, select
 
+# EXAONE LLM import
+from utils.exaone_llm import get_exaone_llm
+
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
 class QuestionGenerator:
