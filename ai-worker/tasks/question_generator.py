@@ -1,7 +1,7 @@
 import os
 import logging
 from celery import shared_task
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 # DB 헬퍼 함수 import
 from db import engine
