@@ -614,7 +614,20 @@ function App() {
           />
         )}
 
-        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
+      {step === 'interview' && (
+        <InterviewPage 
+          currentIdx={currentIdx}
+          totalQuestions={questions.length}
+          question={questions[currentIdx]?.content}
+          audioUrl={questions[currentIdx]?.audio_url}
+          isRecording={isRecording}
+          transcript={transcript}
+          toggleRecording={toggleRecording}
+          nextQuestion={nextQuestion}
+          onFinish={finishInterview}
+          videoRef={videoRef}
+        />
+      )}
 
         {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 

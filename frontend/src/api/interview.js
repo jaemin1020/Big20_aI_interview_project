@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
 // ==================== Auth ====================
 
 export const register = async (email, username, password, fullName) => {
-    const response = await api.post('/register', {
+    const response = await api.post('/auth/register', {
         email,
         username,
         password,
@@ -118,7 +118,7 @@ export const uploadResume = async (file) => {
 };
 
 export const getResume = async (resumeId) => {
-    const response = await api.get(`/resumes/${resumeId}`);
+    const response = await api.get(`/api/resumes/${resumeId}`);
     return response.data;
 };
 

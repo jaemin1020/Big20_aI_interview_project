@@ -11,9 +11,45 @@ const InterviewPage = ({
   toggleRecording,
   nextQuestion,
   onFinish,
-  videoRef
+  videoRef,
+  audioUrl 
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
+  const audioRef = React.useRef(null);
+  
+  // Audio Auto-play effect
+  React.useEffect(() => {
+    if (audioUrl) {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        // Handle both absolute and relative URLs
+        const fullUrl = audioUrl.startsWith('http') ? audioUrl : `${apiUrl}${audioUrl}`;
+        
+        console.log("Playing question audio:", fullUrl);
+        
+        if (!audioRef.current) {
+            audioRef.current = new Audio(fullUrl);
+        } else {
+            audioRef.current.pause(); // Ensure previous audio stops
+            audioRef.current.currentTime = 0;
+            audioRef.current.src = fullUrl;
+        }
+        
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+             playPromise.catch(e => {
+                console.error("Audio playback error (Autoplay policy?):", e);
+             });
+        }
+    }
+
+    // Cleanup on unmount or question change
+    return () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    };
+  }, [audioUrl]);
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋

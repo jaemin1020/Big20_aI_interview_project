@@ -70,22 +70,33 @@ async def create_interview(
             "tasks.question_generator.generate_questions",
             args=[interview_data.position, new_interview.id, 5]
         )
-        generated_questions = task.get(timeout=180)
-        logger.info(f"Received {len(generated_questions)} questions from AI-Worker")
+        generated_data = task.get(timeout=180)
+        logger.info(f"Received {len(generated_data)} questions from AI-Worker")
+        
+        # Format check
+        if generated_data and isinstance(generated_data[0], dict):
+            generated_questions = generated_data
+        else:
+            generated_questions = [{"text": q, "audio_url": None} for q in generated_data]
         
     except Exception as e:
         logger.warning(f"AI-Worker question generation failed ({e}). Using fallback questions.")
-        generated_questions = [
+        fallback_texts = [
             f"{interview_data.position} 직무에 지원하게 된 동기를 구체적으로 말씀해주세요.",
             "가장 도전적이었던 프로젝트 경험과 그 과정에서 얻은 교훈은 무엇인가요?",
             f"{interview_data.position}로서 본인의 가장 큰 강점과 보완하고 싶은 점은 무엇인가요?",
             "갈등 상황을 해결했던 구체적인 사례가 있다면 설명해주세요.",
             "향후 5년 뒤의 커리어 목표는 무엇인가요?"
         ]
+        generated_questions = [{"text": q, "audio_url": None} for q in fallback_texts]
+
 
     # 3. Questions 및 Transcript 테이블에 저장
     try:
-        for i, q_text in enumerate(generated_questions):
+        for i, item in enumerate(generated_questions):
+            q_text = item["text"]
+            q_audio = item.get("audio_url")
+
             # 3-1. 질문 은행에 저장
             question = Question(
                 content=q_text,
@@ -93,7 +104,8 @@ async def create_interview(
                 difficulty=QuestionDifficulty.MEDIUM,
                 rubric_json={
                     "criteria": ["구체성", "직무 적합성", "논리력"], 
-                    "weight": {"content": 0.5, "communication": 0.5}
+                    "weight": {"content": 0.5, "communication": 0.5},
+                    "audio_url": q_audio 
                 },
                 position=interview_data.position
             )
@@ -195,22 +207,25 @@ async def get_interview_questions(
     생성자: ejm
     생성일자: 2026-02-06
     """
-    stmt = select(Transcript).where(
+    # Question 테이블과 조인하여 audio_url 가져오기
+    stmt = select(Transcript, Question).join(Question, Transcript.question_id == Question.id).where(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
     ).order_by(Transcript.order)
     
-    transcripts = db.exec(stmt).all()
+    results = db.exec(stmt).all()
     
     return [
         {
             "id": t.question_id,
             "content": t.text,
             "order": t.order,
-            "timestamp": t.timestamp
+            "timestamp": t.timestamp,
+            "audio_url": q.rubric_json.get("audio_url") if q.rubric_json else None
         }
-        for t in transcripts
+        for t, q in results
     ]
+
 
 # 면접의 전체 대화 기록 조회
 @router.get("/{interview_id}/transcripts")
