@@ -125,8 +125,9 @@ function App() {
             } else {
               setStep('main');
             }
-            isInitialized.current = true;
-          })
+          }
+          isInitialized.current = true;
+        })
         .catch(() => {
           localStorage.removeItem('token');
           sessionStorage.clear();
