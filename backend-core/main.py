@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from celery import Celery
 import logging
 import os
+from fastapi.staticfiles import StaticFiles
+
+# Ensure uploads directory structure exists
+os.makedirs("uploads/audio", exist_ok=True)
+
 
 from database import init_db
 # 라우터 임포트
@@ -19,6 +24,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
 
 app = FastAPI(title="AI Interview Backend v2.0")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 # DB 초기화
 @app.on_event("startup")

@@ -591,6 +591,7 @@ function App() {
           currentIdx={currentIdx}
           totalQuestions={questions.length}
           question={questions[currentIdx]?.content}
+          audioUrl={questions[currentIdx]?.audio_url}
           isRecording={isRecording}
           transcript={transcript}
           toggleRecording={toggleRecording}
