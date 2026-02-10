@@ -21,7 +21,7 @@ app = Celery(
     broker=REDIS_URL,
     backend=REDIS_URL,
     broker_connection_retry_on_startup=True,  # Celery 6.0 호환성
-    include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator', 'tasks.resume_parser', 'tasks.answer_collector', 'tasks.search_helper', 'tasks.resume_embedding', 'tasks.stt']
+    include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator', 'tasks.resume_parser', 'tasks.answer_collector', 'tasks.search_helper', 'tasks.resume_embedding', 'tasks.stt', 'tasks.tts']
 )
 
 # Task 설정
