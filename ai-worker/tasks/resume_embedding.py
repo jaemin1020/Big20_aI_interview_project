@@ -57,21 +57,29 @@ def generate_resume_embeddings_task(self, resume_id: int):
             "profile": {
                 "target_position": resume.structured_data.get("target_position", ""),
                 "target_company": resume.structured_data.get("target_company", ""),
-            }
+            },
+            # structured_data에서 데이터 매핑
+            "education": resume.structured_data.get("education", []),
+            "experience": resume.structured_data.get("experience", []),
+            "projects": resume.structured_data.get("projects", []),
+            "skills": resume.structured_data.get("skills", {}),
+            "certifications": resume.structured_data.get("certifications", []),
+            "cover_letter": resume.structured_data.get("cover_letter", {}),
+            "languages": resume.structured_data.get("languages", [])
         }
         
         # extracted_text에서 섹션 정보 추출 (간단한 예시)
         # 실제로는 더 정교한 파싱이 필요할 수 있음
-        if resume.extracted_text:
+        # if resume.extracted_text:
             # 섹션별로 분리된 데이터가 있다면 활용
             # 여기서는 기본 구조만 생성
-            resume_data["experience"] = []
-            resume_data["projects"] = []
-            resume_data["education"] = []
-            resume_data["self_introduction"] = []
-            resume_data["certifications"] = []
-            resume_data["languages"] = []
-            resume_data["skills"] = {}
+            # resume_data["experience"] = []
+            # resume_data["projects"] = []
+            # resume_data["education"] = []
+            # resume_data["self_introduction"] = []
+            # resume_data["certifications"] = []
+            # resume_data["languages"] = []
+            # resume_data["skills"] = {}
         
         # 3.1 임베딩 생성용 데이터 검증
         from utils.validation import ResumeValidator
