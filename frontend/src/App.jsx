@@ -548,6 +548,8 @@ function App() {
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
           onProfileManagement={() => setStep('profile')}
+          onLogin={() => { setAuthMode('login'); setStep('auth'); }}
+          onRegister={() => { setAuthMode('register'); setStep('auth'); }}
           pageTitle={
             step === 'history' ? '면접 이력' :
               step === 'result' ? '면접 결과' :
