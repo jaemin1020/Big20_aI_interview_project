@@ -10,14 +10,28 @@ from models import User, UserCreate, UserLogin
 from utils.auth_utils import get_password_hash, verify_password, create_access_token, get_current_user
 from utils.common import validate_email, validate_username
 
-
-router = APIRouter(prefix="", tags=["auth"])  # prefix 제거: /register, /token 직접 사용
+router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("Auth-Router")
-
 
 # 회원가입
 @router.post("/register")
 async def register(user_data: UserCreate, db: Session = Depends(get_session)):
+    """회원가입
+
+    Args:
+        user_data (UserCreate): 회원가입 정보
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+
+    Raises:
+        HTTPException: 유효하지 않은 아이디 또는 이메일
+        HTTPException: 중복된 아이디 또는 이메일
+
+    Returns:
+        dict: 회원가입 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     # 1. 유효성 검사 (길이 및 포맷)
     if not validate_username(user_data.username):
         raise HTTPException(
@@ -54,6 +68,19 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
 # 로그인
 @router.post("/token")  # /auth/token으로 변경됨 (기존 main.py에서는 /token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)):
+    """
+    로그인
+    
+    Args:
+        form_data (OAuth2PasswordRequestForm): 로그인 정보
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        
+    Returns:
+        dict: 로그인 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     # 사용자 인증
     stmt = select(User).where(User.username == form_data.username)
     user = db.exec(stmt).first()

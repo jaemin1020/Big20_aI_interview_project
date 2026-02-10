@@ -12,7 +12,7 @@ import {
   logout as apiLogout,
   getCurrentUser
 } from './api/interview';
-// import { createClient } from "@deepgram/sdk";  // TODO: Whisper로 대체 예정
+import { createClient } from "@deepgram/sdk";
 
 // Layout & UI
 import Header from './components/layout/Header';
@@ -69,6 +69,21 @@ function App() {
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
+
+  // Users selected interview for result view
+  const [selectedInterview, setSelectedInterview] = useState(null);
+
+  // Persistence Effect
+  useEffect(() => {
+    sessionStorage.setItem('current_step', step);
+    sessionStorage.setItem('current_interview', JSON.stringify(interview));
+    sessionStorage.setItem('current_questions', JSON.stringify(questions));
+    sessionStorage.setItem('current_idx', currentIdx);
+    sessionStorage.setItem('current_report', JSON.stringify(report));
+    sessionStorage.setItem('current_position', position);
+    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
+  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
+
 
   const videoRef = useRef(null);
   const pcRef = useRef(null);
@@ -225,10 +240,16 @@ function App() {
   const initInterviewSession = async () => {
     setIsLoading(true);
     try {
-      // 1. Create Interview with Parsed Position & User Name
-      const interviewPosition = parsedResumeData?.position || position || 'General';
+      // 1. Create Interview with Parsed Position & Resume ID
+      let interviewPosition = parsedResumeData?.structured_data?.target_position;
 
-      console.log("Creating interview with:", { interviewPosition });
+      // 만약 target_position이 객체라면 내부 position 필드 추출
+      if (interviewPosition && typeof interviewPosition === 'object') {
+        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
+      }
+
+      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
+      const resumeId = parsedResumeData?.id || null;
 
       const newInterview = await createInterview(interviewPosition, null, null);
       setInterview(newInterview);
@@ -292,7 +313,7 @@ function App() {
       return;
     }
 
-    // const deepgram = createClient(apiKey);  // Deepgram 대신 Whisper 사용 예정
+    const deepgram = createClient(apiKey);
     const connection = deepgram.listen.live({
       model: "nova-2",
       language: "ko",
@@ -512,6 +533,17 @@ function App() {
           onLogoClick={() => setStep('main')}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
+          onHistory={() => setStep('history')}
+          onAccountSettings={() => setStep('settings')}
+          onProfileManagement={() => setStep('profile')}
+          pageTitle={
+            step === 'history' ? '면접 이력' :
+              step === 'result' ? '면접 결과' :
+                step === 'settings' ? '계정 설정' :
+                  step === 'profile' ? '프로필 관리' :
+                    step === 'env_test' ? '환경 테스트' :
+                      null
+          }
         />
       )}
 
@@ -582,7 +614,20 @@ function App() {
           />
         )}
 
-        {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
+        {step === 'interview' && (
+          <InterviewPage
+            currentIdx={currentIdx}
+            totalQuestions={questions.length}
+            question={questions[currentIdx]?.content}
+            audioUrl={questions[currentIdx]?.audio_url}
+            isRecording={isRecording}
+            transcript={transcript}
+            toggleRecording={toggleRecording}
+            nextQuestion={nextQuestion}
+            onFinish={finishInterview}
+            videoRef={videoRef}
+          />
+        )}
 
         {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
@@ -622,14 +667,41 @@ function App() {
 
         {step === 'result' && (
           <ResultPage
-            results={report || []}
-            isReportLoading={isReportLoading}
+            results={report?.details_json || []}
+            report={report}
+            interview={selectedInterview}
             onReset={() => {
               setStep('main');
               setCurrentIdx(0);
               setReport(null);
+              setReport(null);
               setIsReportLoading(false);
+              setSelectedInterview(null);
             }}
+          />
+        )}
+
+        {step === 'history' && (
+          <InterviewHistoryPage
+            onBack={() => setStep('main')}
+            onViewResult={(reportData, interviewData) => {
+              setReport(reportData);
+              setSelectedInterview(interviewData);
+              setStep('result');
+            }}
+          />
+        )}
+
+        {step === 'settings' && (
+          <AccountSettingsPage
+            onBack={() => setStep('main')}
+          />
+        )}
+
+        {step === 'profile' && (
+          <ProfileManagementPage
+            onBack={() => setStep('main')}
+            user={user}
           />
         )}
       </div>

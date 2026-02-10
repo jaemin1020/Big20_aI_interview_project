@@ -39,6 +39,9 @@ except ImportError as e:
 # Database Connection
 # ==========================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+# db ➔ localhost
+# 5432 ➔ 1543 (Main branch uses 15432, but keeping local default 5432)
+
 engine = create_engine(DATABASE_URL)
 
 
@@ -47,7 +50,19 @@ engine = create_engine(DATABASE_URL)
 # ==========================================
 
 def get_best_questions_by_position(position: str, limit: int = 10):
+    """
+    직무별로 가장 좋은 질문을 가져옴
     
+    Args:
+        position: 직무
+        limit: 가져올 질문 수
+        
+    Returns:
+        List[Question]: 직무별로 가장 좋은 질문
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         stmt = select(Question).where(
             Question.position == position,
@@ -57,6 +72,18 @@ def get_best_questions_by_position(position: str, limit: int = 10):
         return session.exec(stmt).all()
 
 def increment_question_usage(question_id: int):
+    """
+    질문 사용 횟수 증가
+    
+    Args:
+        question_id: 질문 ID
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         question = session.get(Question, question_id)
         if question:
@@ -65,6 +92,19 @@ def increment_question_usage(question_id: int):
             session.commit()
 
 def update_question_avg_score(question_id: int, new_score: float):
+    """
+    질문 평균 점수 업데이트
+    
+    Args:
+        question_id: 질문 ID
+        new_score: 새로운 점수
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         question = session.get(Question, question_id)
         if question:
@@ -77,6 +117,20 @@ def update_question_avg_score(question_id: int, new_score: float):
             session.commit()
 
 def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emotion: str):
+    """
+    면접 스크립트 감성 분석 업데이트
+    
+    Args:
+        transcript_id: 면접 스크립트 ID
+        sentiment_score: 감성 점수
+        emotion: 감정
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
@@ -86,6 +140,19 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
             session.commit()
 
 def create_or_update_evaluation_report(interview_id: int, **kwargs):
+    """
+    면접 평가 보고서 생성 또는 업데이트
+    
+    Args:
+        interview_id: 면접 ID
+        **kwargs: 평가 보고서 데이터
+        
+    Returns:
+        EvaluationReport: 평가 보고서
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
         report = session.exec(stmt).first()
@@ -105,11 +172,35 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
         return report
 
 def get_interview_transcripts(interview_id: int):
+    """
+    면접 스크립트 가져오기
+    
+    Args:
+        interview_id: 면접 ID
+        
+    Returns:
+        List[Transcript]: 면접 스크립트
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order)
         return session.exec(stmt).all()
 
 def get_user_answers(interview_id: int):
+    """
+    사용자 답변 가져오기
+    
+    Args:
+        interview_id: 면접 ID
+        
+    Returns:
+        List[Transcript]: 사용자 답변
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         stmt = select(Transcript).where(
             Transcript.interview_id == interview_id,
@@ -118,6 +209,19 @@ def get_user_answers(interview_id: int):
         return session.exec(stmt).all()
 
 def update_interview_overall_score(interview_id: int, score: float):
+    """
+    면접 전체 점수 업데이트
+    
+    Args:
+        interview_id: 면접 ID
+        score: 전체 점수
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
         if interview:
@@ -128,7 +232,22 @@ def update_interview_overall_score(interview_id: int, score: float):
 # ==================== Company Helper Functions ====================
 
 def create_company(company_id: str, company_name: str, ideal: str = None, description: str = None, embedding: List[float] = None):
-    """회사 정보 생성"""
+    """
+    회사 정보 생성
+    
+    Args:
+        company_id: 회사 ID
+        company_name: 회사 이름
+        ideal: 이상적인 인재상
+        description: 회사 설명
+        embedding: 회사 특성 벡터
+        
+    Returns:
+        Company: 회사 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         company = Company(
             id=company_id,
@@ -143,12 +262,35 @@ def create_company(company_id: str, company_name: str, ideal: str = None, descri
         return company
 
 def get_company_by_id(company_id: str):
-    """회사 ID로 조회"""
+    """
+    회사 ID로 조회
+    
+    Args:
+        company_id: 회사 ID
+        
+    Returns:
+        Company: 회사 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         return session.get(Company, company_id)
 
 def update_company_embedding(company_id: str, embedding: List[float]):
-    """회사 특성 벡터 업데이트"""
+    """
+    회사 특성 벡터 업데이트
+    
+    Args:
+        company_id: 회사 ID
+        embedding: 회사 특성 벡터
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         company = session.get(Company, company_id)
         if company:
@@ -158,7 +300,19 @@ def update_company_embedding(company_id: str, embedding: List[float]):
             session.commit()
 
 def find_similar_companies(embedding: List[float], limit: int = 5):
-    """벡터 유사도 기반 유사 회사 검색"""
+    """
+    벡터 유사도 기반 유사 회사 검색
+    
+    Args:
+        embedding: 회사 특성 벡터
+        limit: 가져올 회사 수
+        
+    Returns:
+        List[Company]: 유사 회사
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         stmt = select(Company).where(
             Company.embedding.isnot(None)
@@ -169,7 +323,19 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         return session.exec(stmt).all()
 
 def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
-    """면접 세션의 감정 분석 결과 업데이트"""
+    """
+    면접 세션의 감정 분석 결과 업데이트
+    
+    Args:
+        interview_id: 면접 ID
+        emotion_data: 감정 분석 데이터
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
         if interview:

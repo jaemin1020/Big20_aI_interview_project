@@ -20,11 +20,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 2. pip 업그레이드
-RUN python3 -m pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 
 # 3. 나머지 의존성 설치
 COPY requirements.txt .
-RUN python3 -mpip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

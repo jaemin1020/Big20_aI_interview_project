@@ -58,13 +58,8 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             rubric=rubric
         )
         
-        tech_score = result.get("technical_score")
-        if tech_score is None:
-             tech_score = 3
-             
-        comm_score = result.get("communication_score")
-        if comm_score is None:
-             comm_score = 3
+        tech_score = result.get("technical_score", 3)
+        comm_score = result.get("communication_score", 3)
         
         # 감정/종합 점수 계산 (-1.0 ~ 1.0)
         # (5점 만점 -> -0.5 ~ 0.5 범위로 정규화 + 보정)
@@ -116,18 +111,7 @@ def generate_final_report(interview_id: int):
     # 1. Get all answers
     answers = get_user_answers(interview_id)
     if not answers:
-        logger.warning("No answers found for this interview. Generating empty report.")
-        # 빈 리포트 생성 (404 방지)
-        from db import create_or_update_evaluation_report, update_interview_overall_score
-        create_or_update_evaluation_report(
-            interview_id,
-            technical_score=0,
-            communication_score=0,
-            cultural_fit_score=0,
-            summary_text="면접 데이터가 충분하지 않아 평가를 생성할 수 없습니다. (음성 인식 실패 또는 답변 누락)",
-            details_json={"strengths": [], "weaknesses": ["No input detected"]}
-        )
-        update_interview_overall_score(interview_id, 0)
+        logger.warning("No answers found for this interview.")
         return
     
     # 2. Calculate aggregations

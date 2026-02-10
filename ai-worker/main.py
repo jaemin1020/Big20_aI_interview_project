@@ -16,6 +16,7 @@ logger = logging.getLogger("AI-Worker-Core")
 import os
 
 REDIS_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+# include=['tasks.evaluator', 'tasks.vision']를 통해 무거운 import를 분산함
 app = Celery(
     "ai_worker",
     broker=REDIS_URL,
@@ -24,7 +25,7 @@ app = Celery(
     include=['tasks.evaluator', 'tasks.vision', 'tasks.question_generator', 'tasks.resume_parser', 'tasks.answer_collector', 'tasks.search_helper', 'tasks.resume_embedding', 'tasks.stt', 'tasks.tts']
 )
 
-# Task 설정
+# 3. 성능 최적화 설정
 app.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -34,8 +35,8 @@ app.conf.update(
     task_track_started=True,
     task_time_limit=600,
     result_expires=3600,
-    worker_max_tasks_per_child=10,
-    worker_pool='solo',
+    worker_max_tasks_per_child=10, # 메모리 누수 방지 (64GB 효율 관리)
+    worker_pool='solo',  # CUDA 호환성을 위해 solo pool 사용
 )
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
-      const resumeId = uploadData.resume_id;  // 백엔드가 resume_id로 반환
+      const resumeId = uploadData.id;
       console.log('Upload basic success, ID:', resumeId);
 
       // 2. 폴링 (분석 완료 대기)
@@ -96,7 +96,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {uploadResult?.structured_data?.target_position || 'Unknown'}
+                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
               </dd>
 
               {uploadResult?.skills && uploadResult.skills.length > 0 && (

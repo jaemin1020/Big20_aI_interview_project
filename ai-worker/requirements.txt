@@ -41,6 +41,9 @@ opencv-python-headless>=4.10.0.84
 # Audio Processing
 librosa>=0.10.2
 pydub
+supertonic
+onnxruntime
+soundfile
 
 
 # PDF Processing & Document Parsing

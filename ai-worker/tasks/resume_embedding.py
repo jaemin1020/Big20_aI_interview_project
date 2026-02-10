@@ -62,47 +62,16 @@ def generate_resume_embeddings_task(self, resume_id: int):
         
         # extracted_text에서 섹션 정보 추출 (간단한 예시)
         # 실제로는 더 정교한 파싱이 필요할 수 있음
-        
-        # extracted_text에서 섹션 정보 추출 (간단한 예시)
-        # 실제로는 더 정교한 파싱이 필요할 수 있음
-        sections = resume.structured_data.get("sections", [])
-        
-        # 하위 호환성: sections가 없으면 재빨리 다시 파싱
-        if not sections and resume.extracted_text:
-            from utils.section_splitter import SectionSplitter
-            sections = SectionSplitter.split_by_sections(resume.extracted_text)
-            logger.info(f"[Resume {resume_id}] 기존 데이터에 섹션 정보가 없어 재파싱함: {len(sections)}개 섹션")
-
-        # 섹션별 데이터 매핑
-        resume_data["experience"] = []
-        resume_data["projects"] = []
-        resume_data["education"] = []
-        resume_data["self_introduction"] = []
-        resume_data["certifications"] = []
-        resume_data["languages"] = []
-        resume_data["skills"] = {}
-
-        for sec in sections:
-            stype = sec.get("section_type", "")
-            content = sec.get("content", "")
-            
-            if not content: continue
-
-            if stype == "education":
-                resume_data["education"].append({"text": content})
-            elif stype == "career_project":
-                # 경력/프로젝트 구분 모호하므로 경력에 우선 배정
-                resume_data["experience"].append({"text": content})
-                resume_data["projects"].append({"text": content}) 
-            elif stype == "skill_cert":
-                resume_data["certifications"].append({"text": content})
-                # skills는 텍스트로 처리
-                resume_data["skills"]["raw"] = content
-            elif stype == "cover_letter":
-                resume_data["self_introduction"].append({"text": content, "type": "자기소개"})
-            elif stype == "target_info":
-                # 이미 profile에 들어갔지만 텍스트로도 보존
-                pass
+        if resume.extracted_text:
+            # 섹션별로 분리된 데이터가 있다면 활용
+            # 여기서는 기본 구조만 생성
+            resume_data["experience"] = []
+            resume_data["projects"] = []
+            resume_data["education"] = []
+            resume_data["self_introduction"] = []
+            resume_data["certifications"] = []
+            resume_data["languages"] = []
+            resume_data["skills"] = {}
         
         # 3.1 임베딩 생성용 데이터 검증
         from utils.validation import ResumeValidator
@@ -121,7 +90,7 @@ def generate_resume_embeddings_task(self, resume_id: int):
         # 4. ResumeSectionEmbedding 테이블에 저장
         logger.info(f"[Resume {resume_id}] 섹션 임베딩 DB 저장 중...")
         
-        from db import ResumeSectionEmbedding, ResumeSectionType  # engine은 이미 7번째 줄에서 import됨
+        from db import ResumeSectionEmbedding, ResumeSectionType
         
         saved_count = 0
         
@@ -311,8 +280,11 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
         
         # 2. DB에서 벡터 유사도 검색
         with Session(engine) as session:
-            # 기본 쿼리
-            stmt = select(ResumeSectionEmbedding).where(
+            # Distance(거리) 계산 표현식 (pgvector)
+            dist_expr = ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
+            
+            # 섹션과 거리를 함께 조회
+            stmt = select(ResumeSectionEmbedding, dist_expr.label("distance")).where(
                 ResumeSectionEmbedding.resume_id == resume_id,
                 ResumeSectionEmbedding.embedding.isnot(None)
             )
@@ -321,29 +293,27 @@ def search_resume_sections_task(resume_id: int, query: str, top_k: int = 3, sect
             if section_types:
                 stmt = stmt.where(ResumeSectionEmbedding.section_type.in_(section_types))
             
-            # 벡터 유사도 정렬
-            stmt = stmt.order_by(
-                ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
-            ).limit(top_k)
+            # 거리순 정렬 (유사도 높은 순)
+            stmt = stmt.order_by(dist_expr).limit(top_k)
             
-            sections = session.exec(stmt).all()
+            rows = session.exec(stmt).all()
             
             # 결과 포맷팅
             results = []
-            for section in sections:
-                # 코사인 거리를 유사도로 변환 (1 - distance)
-                # pgvector의 cosine_distance는 0(동일)~2(정반대) 범위
-                distance = section.embedding.cosine_distance(query_vector)
-                similarity = 1 - (distance / 2)  # 0~1 범위로 정규화
+            for section, distance in rows:
+                # 코사인 거리를 유사도로 변환 (1 - distance/2)
+                # distance 범위: 0(일치)~2(반대)
+                similarity = 1 - (distance / 2)
                 
                 results.append({
-                    "section": section.section_type.value,
+                    "section": section.section_type.value if hasattr(section.section_type, "value") else section.section_type,
                     "section_id": section.section_id,
                     "section_index": section.section_index,
                     "text": section.content,
                     "similarity": float(similarity),
                     "si_type": section.si_type if section.section_type == ResumeSectionType.SELF_INTRODUCTION else None,
-                    "section_metadata": section.section_metadata
+                    "section_metadata": section.section_metadata,
+                    "created_at": str(section.created_at)
                 })
         
         logger.info(f"Resume {resume_id} 검색 완료: {len(results)}개 결과")
