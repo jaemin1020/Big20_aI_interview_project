@@ -1,137 +1,215 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer
+} from 'recharts';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
-const ResultPage = ({ results, onReset }) => {
-  // Calculate average score if results exist
-  const averageScore = results && results.length > 0 
+const ResultPage = ({ results, report, interview, onReset }) => {
+  const resultRef = useRef(null);
+
+  // 1. 계산: 종합 점수 (Evaluate report or calculate average)
+  const averageScore = report?.overall_score || (results && results.length > 0
     ? Math.round(results.reduce((acc, curr) => acc + (curr.evaluation?.score || 0), 0) / results.length)
-    : 0;
+    : 0);
+
+  // 2. 차트 데이터 준비 (더미 데이터 + 실제 분석 데이터 매핑 필요)
+  // 실제 API에서 세부 역량 점수가 오면 그것을 연동. 없을 경우 랜덤/기본값 사용.
+  const chartData = [
+    { subject: '기술 이해도', A: report?.technical_score || 85, fullMark: 100 },
+    { subject: '문제 해결', A: 92, fullMark: 100 }, // 예시
+    { subject: '의사소통', A: report?.communication_score || 78, fullMark: 100 },
+    { subject: '성장 가능성', A: 88, fullMark: 100 }, // 예시
+    { subject: '문화 적합성', A: report?.cultural_fit_score || 80, fullMark: 100 },
+  ];
+
+  const handleDownloadPDF = async () => {
+    if (!resultRef.current) return;
+
+    try {
+      const canvas = await html2canvas(resultRef.current, {
+        scale: 2, // 고화질
+        useCORS: true,
+        backgroundColor: '#111827' // 다크 모드 배경 유지
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`interview_report_${interview?.id || 'result'}.pdf`);
+    } catch (err) {
+      console.error("PDF Download failed:", err);
+      alert("PDF 저장 중 오류가 발생했습니다.");
+    }
+  };
 
   return (
-    <div className="result-container animate-fade-in" style={{ 
+    <div className="result-container animate-fade-in" style={{
       flex: 1,
-      width: '100%', 
-      maxWidth: '1200px', 
-      margin: '0 auto', 
-      padding: '6rem 0 4rem',
+      width: '100%',
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '4rem 1rem',
       display: 'flex',
       flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center'
+      gap: '2rem'
     }}>
-      {/* Overview Section: SCR-25 Style */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem', marginBottom: '3rem' }}>
-        <GlassCard style={{ padding: '2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem' }}>종합 분석 점수</h2>
-          <div style={{ 
-            width: '180px', 
-            height: '180px', 
-            borderRadius: '50%', 
-            border: '8px solid rgba(var(--primary-rgb, 59, 130, 246), 0.1)',
-            borderTopColor: 'var(--primary)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: '1.5rem',
-            position: 'relative'
-          }}>
-            <span style={{ fontSize: '3.5rem', fontWeight: '900', color: 'var(--text-main)' }}>{averageScore}</span>
-            <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ 100</span>
-          </div>
-          <p style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary)' }}>우수한 실무 역량 보유</p>
-        </GlassCard>
-
-        <GlassCard style={{ padding: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '2rem' }}>역량 지표 상세</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {[
-              { label: '기술 전문성', score: 85, color: '#3b82f6' },
-              { label: '문제 해결 능력', score: 92, color: '#10b981' },
-              { label: '의사소통', score: 78, color: '#f59e0b' },
-              { label: '성장 가능성', score: 88, color: '#8b5cf6' }
-            ].map((trait, i) => (
-              <div key={i}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.9rem' }}>
-                  <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{trait.label}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{trait.score}%</span>
-                </div>
-                <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
-                  <div style={{ 
-                    width: `${trait.score}%`, 
-                    height: '100%', 
-                    background: trait.color, 
-                    borderRadius: '10px',
-                    boxShadow: `0 0 10px ${trait.color}44`
-                  }}></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
+      {/* 1. 헤더 메시지 */}
+      <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+        <h1 className="text-gradient">면접 결과 분석</h1>
+        <p style={{ color: 'var(--text-muted)' }}>AI 면접관이 분석한 귀하의 면접 결과 리포트입니다.</p>
       </div>
 
-      <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', paddingLeft: '0.5rem' }}>질문별 상세 분석</h2>
-      
-      {/* Detailed Items */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {results && results.map((result, idx) => (
-          <GlassCard key={idx} style={{ padding: '2rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '1.5rem' }}>
-              <div style={{ 
-                width: '40px', 
-                height: '40px', 
-                background: 'var(--primary)', 
-                color: 'white', 
-                borderRadius: '12px', 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                fontWeight: '800',
-                fontSize: '1.1rem'
-              }}>{idx + 1}</div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', lineHeight: '1.4' }}>{result.question}</h3>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.8rem' }}>나의 답변</span>
-                    <p style={{ fontSize: '1.05rem', lineHeight: '1.6', color: 'var(--text-main)', margin: 0 }}>{result.answer || '답변 데이터가 없습니다.'}</p>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.2rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#10b981', textTransform: 'uppercase', display: 'block', marginBottom: '0.6rem' }}>AI Feedback</span>
-                      <p style={{ fontSize: '0.95rem', lineHeight: '1.5', margin: 0, color: 'var(--text-main)' }}>
-                        {result.evaluation ? (typeof result.evaluation === 'object' ? result.evaluation.feedback : result.evaluation) : '분석 중...'}
-                      </p>
-                    </div>
-                    {result.emotion && (
-                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                        <span style={{ fontSize: '1.2rem' }}>📊</span>
-                        <div>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>주요 감정</span>
-                          <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>{result.emotion.dominant_emotion}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+      <div ref={resultRef} style={{ display: 'flex', flexDirection: 'column', gap: '2rem', background: 'var(--bg-color)', padding: '1rem', borderRadius: '12px' }}>
+
+        {/* 2. 지원 정보 표시 영역 */}
+        <GlassCard style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>지원 회사</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{interview?.company_name || '회사명 미상'}</span>
+            </div>
+            <div style={{ width: '1px', height: '40px', background: 'var(--glass-border)' }}></div>
+            <div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>지원 직무</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{interview?.position || '직무 미상'}</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginRight: '10px' }}>
+              {interview?.created_at ? new Date(interview.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
+            </span>
+            <span style={{
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: '#10b98122',
+              color: '#10b981',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              border: '1px solid #10b98144'
+            }}>
+              분석 완료
+            </span>
+          </div>
+        </GlassCard>
+
+        {/* 3. 분석 안내 문구 */}
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.1)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+          padding: '1rem',
+          borderRadius: '8px',
+          textAlign: 'center',
+          color: 'var(--text-main)',
+          fontSize: '0.95rem'
+        }}>
+          💡 본 분석 결과는 지원 회사의 인재상, 비전 및 해당 직무의 핵심 요구 역량을 기준으로 AI가 종합 분석한 결과입니다.
+        </div>
+
+        {/* 4. 직무 역량 & 5. 인성 태도 평가 (Top Row) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+          <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+            <h3 style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '10px', marginBottom: '1rem' }}>직무 역량 평가</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <SkillBar label="기술 이해도" score={report?.technical_score || 85} color="#3b82f6" />
+              <SkillBar label="문제 해결 능력" score={92} color="#3b82f6" />
+              <SkillBar label="직무 관련 경험" score={88} color="#3b82f6" />
             </div>
           </GlassCard>
-        ))}
+
+          <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+            <h3 style={{ borderLeft: '4px solid #10b981', paddingLeft: '10px', marginBottom: '1rem' }}>인성 및 태도 평가</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <SkillBar label="의사소통 능력" score={report?.communication_score || 78} color="#10b981" />
+              <SkillBar label="책임감" score={95} color="#10b981" />
+              <SkillBar label="성장 의지" score={90} color="#10b981" />
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* 6. 종합 평가&차트 & 8. 종합 피드백 (Bottom Row) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginTop: '2rem' }}>
+          {/* 종합 역량 분석 (Chart) */}
+          <GlassCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <h3 style={{ alignSelf: 'flex-start', borderLeft: '4px solid var(--primary)', paddingLeft: '10px', marginBottom: '1rem' }}>종합 역량 분석</h3>
+
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
+                  <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar
+                    name="My Score"
+                    dataKey="A"
+                    stroke="var(--primary)"
+                    fill="var(--primary)"
+                    fillOpacity={0.6}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <span style={{ fontSize: '3rem', fontWeight: '900', color: 'var(--text-main)' }}>{averageScore}</span>
+              <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}> / 100</span>
+              <p style={{ color: 'var(--primary)', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                {averageScore >= 80 ? 'Excellent' : averageScore >= 60 ? 'Good' : 'Needs Improvement'}
+              </p>
+            </div>
+          </GlassCard>
+
+          {/* 종합 피드백 */}
+          <GlassCard style={{ padding: '2rem' }}>
+            <h3 style={{ borderLeft: '4px solid #f59e0b', paddingLeft: '10px', marginBottom: '1rem' }}>종합 피드백</h3>
+            <div style={{ lineHeight: '1.6', color: 'var(--text-main)', fontSize: '1rem', height: '100%', overflowY: 'auto', maxHeight: '400px' }}>
+              {report?.summary_text
+                ? report.summary_text.split('\n').map((line, i) => <p key={i} style={{ marginBottom: '0.5rem' }}>{line}</p>)
+                : <p>면접 전반에 걸쳐 우수한 역량을 보여주셨습니다. 특히 기술적인 질문에 대한 답변이 구체적이고 논리적이었습니다. 다만, 일부 상황 대처 질문에서는 조금 더 유연한 사고를 보여주면 좋겠습니다.</p>
+              }
+            </div>
+          </GlassCard>
+        </div>
+
+
+
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '3rem' }}>
-        <PremiumButton onClick={onReset} style={{ padding: '1.2rem 3rem', fontSize: '1.1rem' }}>대시보드로 돌아가기</PremiumButton>
-        <PremiumButton variant="secondary" style={{ padding: '1.2rem 3rem', fontSize: '1.1rem', border: '1px solid var(--glass-border)' }}>PDF 리포트 저장</PremiumButton>
+      {/* 9. 하단 버튼 영역 */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '2rem' }}>
+        <PremiumButton onClick={onReset} style={{ padding: '1rem 3rem' }}>
+          목록으로 돌아가기
+        </PremiumButton>
+        <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem' }}>
+          📄 PDF 리포트 저장
+        </PremiumButton>
       </div>
+
     </div>
   );
 };
+
+// Helper Component for Skill Bar
+const SkillBar = ({ label, score, color }) => (
+  <div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9rem' }}>
+      <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{label}</span>
+      <span style={{ color: 'var(--text-muted)' }}>{score}/100</span>
+    </div>
+    <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+      <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '4px' }}></div>
+    </div>
+  </div>
+);
 
 export default ResultPage;
