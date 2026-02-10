@@ -185,7 +185,7 @@ async def get_resume(
         "processing_status": resume.processing_status,
         "processed_at": resume.processed_at,
         "structured_data": resume.structured_data,
-        "position": resume.structured_data.get("target_position", {}).get("position") if resume.structured_data else None,
+        "position": resume.structured_data.get("target_position") if resume.structured_data else None,
         "skills": list(set(all_skills))  # 중복 제거
     }
 

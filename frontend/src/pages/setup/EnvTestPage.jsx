@@ -261,7 +261,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   }
 
   return (
-    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
+    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - var(--header-height))', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
       <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center', maxHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
           <div className="logo-wrapper" style={{ width: '120px' }}>

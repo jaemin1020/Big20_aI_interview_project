@@ -531,7 +531,7 @@ function App() {
   }, []);
 
   return (
-    <div className="container">
+    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
