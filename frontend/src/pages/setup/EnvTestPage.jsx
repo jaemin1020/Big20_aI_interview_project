@@ -197,7 +197,7 @@ const EnvTestPage = ({ onNext }) => {
               width: '80px',
               height: '80px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)',
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -260,23 +260,23 @@ const EnvTestPage = ({ onNext }) => {
   }
 
   return (
-    <div className="video-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
-      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-          <div className="logo-wrapper" style={{ width: '160px' }}>
+    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
+      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center', maxHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+          <div className="logo-wrapper" style={{ width: '120px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
         </div>
-        <h1 className="text-gradient">환경 테스트 - 영상</h1>
-        <p style={{ marginBottom: '2rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
+        <h1 className="text-gradient" style={{ fontSize: '1.5rem', margin: '0 0 0.5rem 0' }}>환경 테스트 - 영상</h1>
+        <p style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
 
-        <div style={{ position: 'relative', marginBottom: '2rem' }}>
+        <div style={{ position: 'relative', marginBottom: '1rem', flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            style={{ width: '100%', borderRadius: '20px', background: '#000' }}
+            style={{ width: 'auto', height: '100%', maxHeight: '50vh', objectFit: 'contain', borderRadius: '12px', background: '#000' }}
           />
           <div style={{
             position: 'absolute',
@@ -310,12 +310,12 @@ const EnvTestPage = ({ onNext }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto' }}>
           <PremiumButton onClick={handleVideoPass} style={{ flex: 1 }}>다음 단계 진행</PremiumButton>
           <PremiumButton variant="secondary" onClick={() => setStep('audio')}>오디오 테스트 다시 하기</PremiumButton>
         </div>
       </GlassCard>
-    </div>
+    </div >
   );
 };
 
