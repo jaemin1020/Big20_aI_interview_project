@@ -11,18 +11,22 @@ const InterviewPage = ({
   toggleRecording,
   nextQuestion,
   onFinish,
+<<<<<<< HEAD
   videoRef,
   isLoading
+=======
+  videoRef
+>>>>>>> origin/lsj
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
+  const [showTooltip, setShowTooltip] = React.useState(false);
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
   }, [currentIdx]);
 
   React.useEffect(() => {
-    // 타이머 기능 일시 중지 (사용자 요청)
-    /*
+    // 타이머 기능 활성화
     if (timeLeft <= 0) {
       if (!isRecording) nextQuestion();
       return;
@@ -33,7 +37,7 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-    */
+
   }, [timeLeft, nextQuestion, isRecording]);
 
   const formatTime = (seconds) => {
@@ -43,6 +47,7 @@ const InterviewPage = ({
   };
 
   return (
+<<<<<<< HEAD
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
 
       {/* Loading Overlay */}
@@ -71,6 +76,9 @@ const InterviewPage = ({
           `}</style>
         </div>
       )}
+=======
+    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '0.5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--header-height))', boxSizing: 'border-box', overflow: 'hidden' }}>
+>>>>>>> origin/lsj
 
       {/* Rectangular Timer Box: White background with Icon */}
       <div style={{
@@ -99,7 +107,7 @@ const InterviewPage = ({
       </div>
 
       {/* Header Card: Question & Video Only */}
-      <GlassCard style={{ padding: '1.5rem 2rem', marginBottom: '1rem' }}>
+      <GlassCard style={{ padding: '1rem 2rem', marginBottom: '0.5rem', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem', alignItems: 'center' }}>
 
           {/* Left: Question Area */}
@@ -128,12 +136,17 @@ const InterviewPage = ({
 
           {/* Right: Video Area */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+<<<<<<< HEAD
             <div style={{ position: 'relative', width: '100%', paddingTop: '75%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
+=======
+            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
+>>>>>>> origin/lsj
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
+<<<<<<< HEAD
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
               <div style={{
@@ -152,11 +165,32 @@ const InterviewPage = ({
                 <div style={{
                   width: '6px',
                   height: '6px',
+=======
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+              <div style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                padding: '6px 14px',
+                borderRadius: '50px',
+                background: 'rgba(0,0,0,0.6)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                border: '1px solid rgba(255,255,255,0.2)'
+              }}>
+                <div style={{
+                  width: '10px',
+                  height: '10px',
+>>>>>>> origin/lsj
                   borderRadius: '50%',
                   background: isRecording ? '#ef4444' : '#10b981',
+                  boxShadow: isRecording ? '0 0 8px #ef4444' : 'none'
                 }}></div>
-                <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'white' }}>
-                  {isRecording ? 'REC' : 'IDLE'}
+                <span style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white', letterSpacing: '0.05em' }}>
+                  {isRecording ? 'LIVE REC' : 'READY'}
                 </span>
               </div>
             </div>
@@ -197,6 +231,47 @@ const InterviewPage = ({
           </p>
         </div>
 
+        {/* Status Indicator */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          padding: '0 0.5rem'
+        }}>
+          <div style={{
+            padding: '6px 16px',
+            borderRadius: '20px',
+            background: isRecording ? 'rgba(239, 68, 68, 0.1)' : (transcript ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.05)'),
+            border: isRecording ? '1px solid rgba(239, 68, 68, 0.2)' : (transcript ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--glass-border)'),
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.3s ease'
+          }}>
+            <div style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: isRecording ? '#ef4444' : (transcript ? '#10b981' : 'var(--text-muted)'),
+              boxShadow: isRecording ? '0 0 8px #ef4444' : 'none',
+              animation: isRecording ? 'pulse 1.5s infinite' : 'none'
+            }}></div>
+            <span style={{
+              fontSize: '0.85rem',
+              fontWeight: '700',
+              color: isRecording ? '#ef4444' : (transcript ? '#10b981' : 'var(--text-muted)')
+            }}>
+              {isRecording ? '답변 수집 중...' : (transcript ? '답변 완료' : '답변 대기 중')}
+            </span>
+          </div>
+          <style>{`
+            @keyframes pulse {
+              0% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.5; transform: scale(1.2); }
+              100% { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+        </div>
+
         {/* Buttons */}
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', paddingBottom: '1rem' }}>
           <PremiumButton
@@ -206,6 +281,7 @@ const InterviewPage = ({
           >
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}
           </PremiumButton>
+<<<<<<< HEAD
           <PremiumButton
             onClick={nextQuestion}
             style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
@@ -219,6 +295,69 @@ const InterviewPage = ({
           >
             면접 종료
           </PremiumButton>
+=======
+          {currentIdx < totalQuestions - 1 && (
+            <PremiumButton
+              onClick={nextQuestion}
+              style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            >
+              다음 질문
+            </PremiumButton>
+          )}
+          <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
+            {showTooltip && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translate(-50%, -10px)',
+                background: 'rgba(15, 23, 42, 0.95)',
+                backdropFilter: 'blur(8px)',
+                color: 'white',
+                padding: '14px 18px',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                lineHeight: '1.6',
+                textAlign: 'center',
+                whiteSpace: 'pre-line',
+                zIndex: 2000,
+                width: 'max-content',
+                maxWidth: '320px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                pointerEvents: 'none',
+                animation: 'tooltipFadeIn 0.3s ease-out forwards'
+              }}>
+                {"면접을 종료하면 결과를 확인할 수 없으며,\n동일한 면접에 대한 재응시는 어렵습니다.\n처음부터 다시 시작해야 하니 주의해 주세요."}
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  borderWidth: '8px',
+                  borderStyle: 'solid',
+                  borderColor: 'rgba(15, 23, 42, 0.95) transparent transparent transparent'
+                }}></div>
+              </div>
+            )}
+            <style>{`
+              @keyframes tooltipFadeIn {
+                from { opacity: 0; transform: translate(-50%, 0); }
+                to { opacity: 1; transform: translate(-50%, -10px); }
+              }
+            `}</style>
+
+            <PremiumButton
+              variant="secondary"
+              onClick={onFinish}
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+              style={{ width: '100%', padding: '1rem', fontSize: '1rem', fontWeight: '700', border: '1px solid var(--glass-border)' }}
+            >
+              면접 종료
+            </PremiumButton>
+          </div>
+>>>>>>> origin/lsj
         </div>
       </div>
 

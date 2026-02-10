@@ -144,6 +144,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+node_modules/
 
 # Spyder project settings
 .spyderproject
@@ -223,3 +224,4 @@ docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
 .agent/
+lsj/

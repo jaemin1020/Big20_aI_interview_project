@@ -10,7 +10,14 @@ logger = logging.getLogger("ResumeTools")
 
 
 class ResumeTool:
-    """이력서 정보 조회 및 처리 도구"""
+    """이력서 정보 조회 및 처리 도구
+    
+    Attributes:
+        logger (Logger): 로거 인스턴스
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     
     @staticmethod
     def get_resume_by_interview(interview_id: int) -> Dict:
@@ -28,6 +35,12 @@ class ResumeTool:
                 "has_resume": bool,
                 "processing_status": str
             }
+        
+        Raises:
+            ValueError: 면접 ID로 이력서 조회 실패
+        
+        생성자: ejm
+        생성일자: 2026-02-04
         """
         with Session(engine) as session:
             # Interview 조회
@@ -161,6 +174,9 @@ class ResumeTool:
             
         Returns:
             str: LLM에 전달할 포맷팅된 텍스트
+        
+        생성자: ejm
+        생성일자: 2026-02-04
         """
         if not resume_info.get("has_resume"):
             return "이력서 정보 없음"

@@ -26,7 +26,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
-      const resumeId = uploadData.resume_id;
+      const resumeId = uploadData.id;
       console.log('Upload basic success, ID:', resumeId);
 
       // 2. 폴링 (분석 완료 대기)
@@ -96,6 +96,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
+<<<<<<< HEAD
                 <input
                   type="text"
                   value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
@@ -140,9 +141,15 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               </dd>
 
               {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
+=======
+                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+              </dd>
+              
+              {uploadResult?.skills && uploadResult.skills.length > 0 && (
+>>>>>>> origin/lsj
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
-                  <dd>{uploadResult.structured_data.skills.join(', ')}</dd>
+                  <dd>{uploadResult.skills.join(', ')}</dd>
                 </>
               )}
 

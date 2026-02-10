@@ -19,7 +19,21 @@ async def create_transcript(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """실시간 대화 기록 저장 (STT 결과)"""
+    """
+    대화 기록 저장
+    실시간 대화 기록 저장 (STT 결과)
+    
+    Args:
+        transcript_data (TranscriptCreate): 대화 기록 데이터
+        db (Session): 데이터베이스 세션
+        current_user (User): 현재 사용자
+        
+    Returns:
+        dict: 대화 기록 저장 결과
+    
+    생성자: ejm
+    생성일자: 2026-02-06
+    """
     
     transcript = Transcript(
         interview_id=transcript_data.interview_id,

@@ -28,6 +28,7 @@ logger = logging.getLogger("AI-Worker-Evaluator")
 
 @shared_task(name="tasks.evaluator.analyze_answer")
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
+<<<<<<< HEAD
     """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
     # 🔗 즉시 다음 질문 생성 트리거 (분석 완료를 기다리지 않고 바로 생성 시작)
@@ -47,6 +48,27 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     except Exception as e:
         logger.error(f"Failed to trigger next question task: {e}")
 
+=======
+    """
+    개별 답변 평가 및 점수 반영 (EXAONE-3.5-7.8B-Instruct 사용)
+    
+    Args:
+        transcript_id (int): 트랜스크립트 ID
+        question_text (str): 질문 텍스트
+        answer_text (str): 답변 텍스트
+        rubric (dict, optional): 평가 기준. Defaults to None.
+        question_id (int, optional): 질문 ID. Defaults to None.
+    
+    Returns:
+        dict: 평가 결과
+    
+    Raises:
+        ValueError: 답변이 없는 경우
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
+>>>>>>> origin/lsj
     logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
     
     if not answer_text or not answer_text.strip():
@@ -104,6 +126,21 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
 
 @shared_task(name="tasks.evaluator.generate_final_report")
 def generate_final_report(interview_id: int):
+    """
+    최종 평가 보고서 생성
+    
+    Args:
+        interview_id (int): 인터뷰 ID
+    
+    Returns:
+        None
+    
+    Raises:
+        ValueError: 답변이 없는 경우
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     logger.info(f"Generating Final Report for Interview {interview_id}")
     from db import create_or_update_evaluation_report, update_interview_overall_score, get_interview_transcripts
     

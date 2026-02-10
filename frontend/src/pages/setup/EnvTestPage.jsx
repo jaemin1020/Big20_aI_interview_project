@@ -3,8 +3,9 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext, onStepChange }) => {
-  const [step, setStep] = useState('audio'); // audio, video
+const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
+  const step = envTestStep;
+  const setStep = setEnvTestStep;
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -14,13 +15,6 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const deepgramConnectionRef = useRef(null);
-
-  // Notify parent of step change
-  useEffect(() => {
-    if (onStepChange) {
-      onStepChange(step);
-    }
-  }, [step, onStepChange]);
 
   // Real Audio Level Visualization & Deepgram STT
   useEffect(() => {
@@ -64,52 +58,50 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
           setAudioLevel(level);
         };
 
-        // 2. STT Test Setup (REST API)
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        mediaRecorderRef.current = mediaRecorder;
-        let chunks = [];
+        // 2. Deepgram STT Setup
+        const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+        if (apiKey) {
+          const deepgram = createClient(apiKey);
+          const connection = deepgram.listen.live({
+            model: "nova-2",
+            language: "ko",
+            smart_format: true,
+            encoding: "linear16",
+            sample_rate: 16000,
+            interim_results: true,
+          });
 
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
+          connection.on("Open", () => {
+            console.log("Deepgram Connected for Test");
 
-        mediaRecorder.onstop = async () => {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          chunks = [];
-          console.log("Audio recording stopped, sending to server...");
-
-          try {
-            // 동적으로 import하여 순환참조 방지
-            const { recognizeAudio } = await import('../../api/interview');
-            const result = await recognizeAudio(blob);
-            if (result && result.text) {
-              setTranscript(result.text);
-              setIsRecognitionOk(true);
-            }
-          } catch (err) {
-            console.error("STT Recognition failed:", err);
-            setTranscript("인식 실패: 다시 시도해주세요.");
-          }
-        };
-
-        // 5초마다 녹음 끊어서 전송 (단순 테스트용)
-        // 실제로는 VAD 등을 쓰면 좋지만 테스트 페이지이므로 자동 루프
-        const startLoop = () => {
-          if (mediaRecorder.state === 'inactive') {
-            mediaRecorder.start();
-            setTimeout(() => {
-              if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            mediaRecorder.addEventListener('dataavailable', (event) => {
+              if (event.data.size > 0 && connection.getReadyState() === 1) {
+                connection.send(event.data);
               }
-            }, 4000); // 4초 녹음
-          }
-        };
+            });
+            mediaRecorder.start(250);
+            mediaRecorderRef.current = mediaRecorder;
+          });
 
-        // 첫 시작
-        startLoop();
-        // 반복 (재시도 등을 위해 interval 사용 가능하지만, 여기선 한 번만 하거나 사용자 액션 유도)
-        // 일단 4초 녹음 후 멈춤. 사용자가 '다시 시도' 누르면 handleRetry에서 처리
+          connection.on("Results", (result) => {
+            const channel = result.channel;
+            if (channel && channel.alternatives && channel.alternatives[0]) {
+              const text = channel.alternatives[0].transcript;
+              if (text && text.trim().length > 0) {
+                setTranscript(prev => {
+                  // 간단한 이어붙이기 (실제로는 interim 처리 등 더 복잡할 수 있음)
+                  if (result.is_final) return prev + ' ' + text;
+                  return prev;
+                });
+                // 텍스트가 조금이라도 인식되면 성공으로 간주
+                if (result.is_final) setIsRecognitionOk(true);
+              }
+            }
+          });
 
+          deepgramConnectionRef.current = connection;
+        }
 
       } catch (err) {
         console.error("Microphone access failed:", err);
@@ -169,7 +161,23 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
     setIsRecognitionOk(false);
   };
 
-  const handleNext = () => {
+  const handleVideoPass = () => {
+    // Save video test result
+    if (isFaceDetected) {
+      sessionStorage.setItem('env_video_ok', 'true');
+    } else {
+      sessionStorage.setItem('env_video_ok', 'false');
+    }
+    onNext();
+  };
+
+  // Save audio test result when moving to video step
+  const handleAudioPass = () => {
+    if (isRecognitionOk) {
+      sessionStorage.setItem('env_audio_ok', 'true');
+    } else {
+      sessionStorage.setItem('env_audio_ok', 'false');
+    }
     setStep('video');
   };
 
@@ -186,17 +194,25 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
           <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
 
           <div style={{ margin: '2rem 0' }}>
-            <img
-              src="/mic_icon.png"
-              alt="Microphone"
-              style={{
-                width: '64px',
-                height: '64px',
-                objectFit: 'contain',
-                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
-                marginBottom: '1.5rem'
-              }}
-            />
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.5rem auto',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </div>
             <p style={{ fontSize: '1.4rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '12px' }}>
               "AI 모의면접 진행할 준비가 되었습니다. "
             </p>
@@ -233,7 +249,7 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
               테스트 다시 진행
             </PremiumButton>
             <PremiumButton
-              onClick={handleNext}
+              onClick={handleAudioPass}
               style={{ flex: 1 }}
             >
               다음 진행
@@ -245,23 +261,23 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
   }
 
   return (
-    <div className="video-test animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 0' }}>
-      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-          <div className="logo-wrapper" style={{ width: '160px' }}>
+    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - var(--header-height))', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
+      <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center', maxHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+          <div className="logo-wrapper" style={{ width: '120px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
         </div>
-        <h1 className="text-gradient">환경 테스트 - 영상</h1>
-        <p style={{ marginBottom: '2rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
+        <h1 className="text-gradient" style={{ fontSize: '1.5rem', margin: '0 0 0.5rem 0' }}>환경 테스트 - 영상</h1>
+        <p style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>카메라를 확인하고 얼굴이 프레임 안에 들어오도록 맞춰주세요.</p>
 
-        <div style={{ position: 'relative', marginBottom: '2rem' }}>
+        <div style={{ position: 'relative', marginBottom: '1rem', flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            style={{ width: '100%', borderRadius: '20px', background: '#000' }}
+            style={{ width: 'auto', height: '100%', maxHeight: '50vh', objectFit: 'contain', borderRadius: '12px', background: '#000' }}
           />
           <div style={{
             position: 'absolute',
@@ -295,12 +311,12 @@ const EnvTestPage = ({ onNext, onStepChange }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <PremiumButton onClick={onNext} style={{ flex: 1 }}>다음 단계 진행</PremiumButton>
+        <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto' }}>
+          <PremiumButton onClick={handleVideoPass} style={{ flex: 1 }}>다음 단계 진행</PremiumButton>
           <PremiumButton variant="secondary" onClick={() => setStep('audio')}>오디오 테스트 다시 하기</PremiumButton>
         </div>
       </GlassCard>
-    </div>
+    </div >
   );
 };
 
