@@ -3,8 +3,9 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { createClient } from "@deepgram/sdk";
 
-const EnvTestPage = ({ onNext }) => {
-  const [step, setStep] = useState('audio'); // audio, video
+const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
+  const step = envTestStep;
+  const setStep = setEnvTestStep;
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -260,7 +261,7 @@ const EnvTestPage = ({ onNext }) => {
   }
 
   return (
-    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
+    <div className="video-test animate-fade-in" style={{ height: 'calc(100vh - var(--header-height))', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden', padding: '0.5rem', boxSizing: 'border-box' }}>
       <GlassCard style={{ maxWidth: '800px', width: '100%', textAlign: 'center', maxHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
           <div className="logo-wrapper" style={{ width: '120px' }}>
