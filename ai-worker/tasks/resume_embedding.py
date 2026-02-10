@@ -90,7 +90,7 @@ def generate_resume_embeddings_task(self, resume_id: int):
         # 4. ResumeSectionEmbedding 테이블에 저장
         logger.info(f"[Resume {resume_id}] 섹션 임베딩 DB 저장 중...")
         
-        from db import ResumeSectionEmbedding, ResumeSectionType, engine
+        from db import ResumeSectionEmbedding, ResumeSectionType
         
         saved_count = 0
         

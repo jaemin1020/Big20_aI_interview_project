@@ -1,0 +1,2 @@
+#!/bin/sh
+python lala_test/edit_log/update_dev_log.py

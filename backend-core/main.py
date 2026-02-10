@@ -1,8 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from celery import Celery
 import logging
 import os
+from fastapi.staticfiles import StaticFiles
+
+# Ensure uploads directory structure exists
+os.makedirs("uploads/audio", exist_ok=True)
+
 
 from database import init_db
 # 라우터 임포트
@@ -19,6 +27,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backend-Core")
 
 app = FastAPI(title="AI Interview Backend v2.0")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import json
+    try:
+        body = await request.json()
+    except:
+        body = "Could not parse body"
+    logger.error(f"Validation Error: {exc}")
+    # logger.error(f"Request Body: {body}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}, # Body logging optional
+    )
+
 
 # DB 초기화
 @app.on_event("startup")
