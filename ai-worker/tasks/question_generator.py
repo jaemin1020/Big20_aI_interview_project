@@ -150,13 +150,17 @@ class QuestionGenerator:
                      break
 
         # 부족분 채우기
-            # 만약 결과가 부족하면 Fallback 질문으로 채움
-            if len(questions) < count:
-                logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count}). Fallback으로 보충합니다.")
-                fallback = self.llm._get_fallback_questions(position, count - len(questions))
-                questions.extend(fallback)
+        if len(questions) < count:
+            logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count}). Fallback으로 보충합니다.")
+            fallback_candidates = self.llm._get_fallback_questions(position, count + 5) # 충분히 가져오기
+            
+            for fq in fallback_candidates:
+                if len(questions) >= count:
+                    break
+                if fq not in questions:
+                    questions.append(fq)
              
-            return questions[:count]
+        return questions[:count]
 
     def _retrieve_context(self, resume_id: int, query: str, filter_category: str, top_k: int = 2) -> List[Dict]:
         """내부 RAG 검색 로직"""
@@ -196,7 +200,7 @@ class QuestionGenerator:
             return []
 
 @shared_task(name="tasks.question_generator.generate_questions")
-def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
+def generate_questions_task(position: str, interview_id: int = None, count: int = 1):
     """
     질문 생성 Task (TTS 포함)
     
