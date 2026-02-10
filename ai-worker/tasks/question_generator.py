@@ -4,11 +4,7 @@ from celery import shared_task
 from typing import Optional, List
 
 # DB 헬퍼 함수 import
-from db import (
-    get_best_questions_by_position,
-    increment_question_usage,
-    engine
-)
+from db import engine
 from sqlmodel import Session, select
 
 # EXAONE LLM import
@@ -18,16 +14,13 @@ logger = logging.getLogger("AI-Worker-QuestionGen")
 
 class QuestionGenerator:
     """
-    하이브리드 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
-    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
+    RAG 기반 심층 면접 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
+    면접 단계별 시나리오(Plan)에 따라 이력서 내용을 참조하여 질문 생성
     
     Attributes:
         _instance (QuestionGenerator): 싱글톤 인스턴스
         _initialized (bool): 초기화 여부
-        llm (LLM): EXAONE LLM 인스턴스
-
-    생성자: ejm
-    생성일자: 2026-02-04
+        llm (ExaoneLLM): EXAONE LLM 인스턴스
     """
     _instance = None
     
@@ -41,107 +34,162 @@ class QuestionGenerator:
         if self._initialized:
             return
             
-        logger.info("Initializing Question Generator with EXAONE model")
+        logger.info("Initializing RAG Question Generator")
         self.llm = get_exaone_llm()
         self._initialized = True
         logger.info("✅ Question Generator Initialized")
 
-    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
+    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5) -> List[str]:
         """
-        하이브리드 질문 생성 로직 (이력서 및 회사 정보 기반)
-        1. DB에서 검증된 질문 일부 재활용 (Reuse)
-        2. 이력서 + 회사 정보로 컨텍스트 구성
-        3. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
+        면접 단계별 RAG 기반 질문 생성
         
         Args:
             position: 지원 직무
-            interview_id: 면접 ID (이력서/회사 정보 조회용)
+            interview_id: 면접 ID
             count: 생성할 총 질문 수
-            reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
-        
-        Returns:
-            List[str]: 생성된 질문 리스트
-        
-        Raises:
-            ValueError: 재활용 비율이 유효하지 않을 경우
-        
-        생성자: ejm
-        생성일자: 2026-02-04
         """
-        from tools import ResumeTool, CompanyTool
-        
         questions = []
-        reuse_count = int(count * reuse_ratio)
-        generate_count = count - reuse_count
         
-        # 1. 컨텍스트 수집 (이력서 + 회사 정보)
-        context_parts = []
+        # 1. 이력서 ID 및 지원자 정보 조회
+        resume_id = None
+        candidate_name = "지원자"
         
         if interview_id:
-            # 이력서 정보
-            resume_info = ResumeTool.get_resume_by_interview(interview_id)
-            if resume_info.get("has_resume"):
-                context_parts.append(ResumeTool.format_for_llm(resume_info))
-                logger.info(f"이력서 정보 로드 완료: {resume_info.get('summary', '')[:50]}...")
+            try:
+                with Session(engine) as session:
+                    # Circular import 방지를 위해 함수 내부 import
+                    from db import Interview, Resume
+                    interview = session.get(Interview, interview_id)
+                    if interview and interview.resume_id:
+                        resume_id = interview.resume_id
+                        resume = session.get(Resume, resume_id)
+                        # 이력서에서 지원자 이름 추출 시도 (헤더 정보 등)
+                        if resume and resume.structured_data:
+                            candidate_name = resume.structured_data.get("target_company", {}).get("name", "지원자")
+                            # structured_data 구조에 따라 다를 수 있음. 안전하게 처리
+                            if isinstance(resume.structured_data.get("header"), dict):
+                                candidate_name = resume.structured_data["header"].get("name", "지원자")
+            except Exception as e:
+                logger.warning(f"이력서 정보 조회 실패: {e}")
+        
+        # 2. RAG 불가능 시 기본 생성 로직으로 Fallback
+        if not resume_id:
+            logger.info("Resume ID not found. Using generic generation.")
+            return self.llm.generate_questions(position=position, count=count)
+        
+        # 3. 면접 시나리오 정의 (Step 8 기반)
+        interview_plan = [
+            {
+                "stage": "1. 직무 지식 평가",
+                "search_query": f"{position} 핵심 기술 스킬 도구 원리",
+                "filter_category": "metric", # 자격증/스킬
+                "guide": "지원자가 사용한 기술(Tool, Language)의 구체적인 설정법이나, 기술적 원리(Deep Dive)를 물어볼 것."
+            },
+            {
+                "stage": "2. 직무 경험 평가",
+                "search_query": "프로젝트 성과 달성 문제해결",
+                "filter_category": "project",
+                "guide": "프로젝트에서 달성한 수치적 성과(%)의 결정적 요인이 무엇인지, 구체적으로 어떤 데이터를 다뤘는지 물어볼 것."
+            },
+            {
+                "stage": "3. 문제 해결 능력 평가",
+                "search_query": "기술적 난관 극복 트러블슈팅",
+                "filter_category": "project",
+                "guide": "직면한 한계점이나 문제 상황을 어떻게 정의했고, 어떤 논리적 사고 과정을 통해 해결책을 도출했는지 물어볼 것."
+            },
+            {
+                "stage": "4. 의사소통 및 협업 평가",
+                "search_query": "협업 갈등 해결 커뮤니케이션",
+                "filter_category": "narrative",
+                "guide": "팀원과의 의견 대립 상황에서 본인의 주장을 관철시키기 위해 어떤 객관적 근거를 사용했는지 대화 과정을 물어볼 것."
+            },
+            {
+                "stage": "5. 직무 적합성 및 성장 가능성",
+                "search_query": f"{position} 트렌드 성장 계획",
+                "filter_category": "narrative",
+                "guide": "직무와 관련된 최신 트렌드를 어떻게 학습하고 있으며, 이를 실무에 어떻게 적용할 것인지 물어볼 것."
+            }
+        ]
+        
+        # 4. 시나리오 반복하며 질문 생성
+        # count가 plan보다 크면 plan을 반복, 작으면 앞에서부터 자름
+        generated_count = 0
+        plan_idx = 0
+        
+        while generated_count < count:
+            step = interview_plan[plan_idx % len(interview_plan)]
+            plan_idx += 1
             
-            # 회사 정보
-            company_info = CompanyTool.get_company_by_interview(interview_id)
-            if company_info.get("has_company"):
-                context_parts.append(CompanyTool.format_for_llm(company_info))
-                logger.info(f"회사 정보 로드 완료: {company_info.get('name', '')}")
-        
-        context = "\n\n".join(context_parts) if context_parts else ""
-        
-        # 2. DB에서 기존 질문 재활용 (Reuse)
-        if reuse_count > 0:
-            reused = self._reuse_questions_from_db(position, reuse_count)
-            questions.extend(reused)
-            logger.info(f"✅ DB에서 {len(reused)}개 질문 재활용")
-        
-        # 3. EXAONE LLM으로 새 질문 생성 (Create with Context)
-        if generate_count > 0:
-            generated = self.llm.generate_questions(
-                position=position,
-                context=context,
-                examples=questions,  # Few-shot 예시로 재활용된 질문 사용
-                count=generate_count
+            # RAG 검색
+            contexts = self._retrieve_context(
+                resume_id=resume_id,
+                query=step['search_query'],
+                filter_category=step['filter_category'],
+                top_k=2
             )
-            questions.extend(generated)
-            logger.info(f"✅ EXAONE으로 {len(generated)}개 질문 생성 (컨텍스트 포함)")
-        
-        return questions[:count]  # 정확히 count개만 반환
-    
-    def _reuse_questions_from_db(self, position: str, count: int):
-        """
-        DB에서 검증된 질문 가져오기
-        
-        Args:
-            position (str): 지원 직무
-            count (int): 가져올 질문 수
-        
-        Returns:
-            List[str]: DB에서 가져온 질문 리스트
-        
-        Raises:
-            Exception: DB 조회 실패
-        
-        생성자: ejm
-        생성일자: 2026-02-04
-        """
-        
+            
+            # 질문 생성
+            if contexts:
+                q = self.llm.generate_human_like_question(
+                    name=candidate_name,
+                    stage=step['stage'],
+                    guide=step['guide'] + f" (지원 직무: {position})",
+                    context_list=contexts
+                )
+                if q not in questions: # 중복 방지
+                    questions.append(q)
+                    generated_count += 1
+            else:
+                # 컨텍스트 없으면 Fallback 질문 하나 추가
+                logger.info(f"컨텍스트 없음: {step['stage']}")
+                # 그냥 다음 단계로 넘어가거나 기본 질문 추가
+                # 여기서는 스킵하고 계속 진행 (while loop)
+                # 무한 루프 방지: 시도를 너무 많이 하면 중단
+                if plan_idx > count * 3:
+                     break
+
+        # 부족분 채우기
+        if len(questions) < count:
+             fallback = self.llm._get_fallback_questions(position, count - len(questions))
+             questions.extend(fallback)
+             
+        return questions[:count]
+
+    def _retrieve_context(self, resume_id: int, query: str, filter_category: str, top_k: int = 2) -> List[Dict]:
+        """내부 RAG 검색 로직"""
         try:
-            db_questions = get_best_questions_by_position(position, limit=count)
+            from db import ResumeSectionEmbedding, ResumeSectionType
+            from utils.vector_utils import get_embedding_generator
             
-            # 재활용 시 사용량 증가
-            for q in db_questions:
-                try:
-                    increment_question_usage(q.id)
-                except Exception as e:
-                    logger.warning(f"Question {q.id} 사용량 증가 실패: {e}")
-            
-            return [q.content for q in db_questions]
+            # 카테고리 매핑
+            category_map = {
+                "metric": [ResumeSectionType.CERTIFICATION, ResumeSectionType.SKILL, ResumeSectionType.LANGUAGE, ResumeSectionType.EDUCATION],
+                "project": [ResumeSectionType.PROJECT, ResumeSectionType.EXPERIENCE],
+                "narrative": [ResumeSectionType.SELF_INTRODUCTION]
+            }
+            target_types = category_map.get(filter_category)
+
+            # 임베딩
+            generator = get_embedding_generator()
+            query_vector = generator.encode_query(query)
+
+            # 검색
+            with Session(engine) as session:
+                dist_expr = ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
+                stmt = select(ResumeSectionEmbedding, dist_expr.label("distance")).where(
+                    ResumeSectionEmbedding.resume_id == resume_id,
+                    ResumeSectionEmbedding.embedding.isnot(None)
+                )
+                if target_types:
+                    stmt = stmt.where(ResumeSectionEmbedding.section_type.in_(target_types))
+                
+                stmt = stmt.order_by(dist_expr).limit(top_k)
+                rows = session.exec(stmt).all()
+                
+                return [{"text": row[0].content, "similarity": 1 - (row[1]/2)} for row in rows]
+                
         except Exception as e:
-            logger.warning(f"DB 질문 조회 실패: {e}. 빈 리스트 반환")
+            logger.error(f"RAG 검색 실패: {e}")
             return []
 
 @shared_task(name="tasks.question_generator.generate_questions")
