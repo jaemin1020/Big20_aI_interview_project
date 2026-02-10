@@ -24,9 +24,18 @@ class EmbeddingGenerator:
     
     def __init__(self):
         if self._model is None:
+            cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
+            os.makedirs(cache_dir, exist_ok=True)
+            
             logger.info(f"Loading embedding model: {MODEL_NAME}")
+            logger.info(f"📂 Cache path: {cache_dir}")
+            
             # trust_remote_code=True 권장 (KURE 모델)
-            self._model = SentenceTransformer(MODEL_NAME, trust_remote_code=True)
+            self._model = SentenceTransformer(
+                MODEL_NAME, 
+                trust_remote_code=True,
+                cache_folder=cache_dir
+            )
             logger.info("✅ Embedding model loaded")
     
     def encode(self, text: str, is_query: bool = True) -> List[float]:

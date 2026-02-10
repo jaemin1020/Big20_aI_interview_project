@@ -38,14 +38,18 @@ class ExaoneLLM:
 
         # Llama.cpp 모델 로드
         try:
+            # 환경변수에서 GPU 레이어 설정 로드 (기본값 -1: 전체 GPU 사용)
+            gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
+            logger.info(f"⚙️ Configured N_GPU_LAYERS: {gpu_layers}")
+
             self.llm = Llama(
                 model_path=MODEL_PATH,
-                n_gpu_layers=-1,      # 가능한 모든 레이어를 GPU로 오프로드
+                n_gpu_layers=gpu_layers,
                 n_ctx=4096,           # 컨텍스트 윈도우 크기
                 n_batch=512,          # 배치 크기
                 verbose=False          # 로딩 로그 출력
             )
-            logger.info("✅ EXAONE GGUF Model Initialized")
+            logger.info(f"✅ EXAONE GGUF Model Initialized (GPU Layers: {gpu_layers})")
         except Exception as e:
             logger.error(f"❌ 모델 로드 실패: {e}")
             raise e
@@ -201,10 +205,5 @@ class ExaoneLLM:
 def get_exaone_llm() -> ExaoneLLM:
     return ExaoneLLM()
 
-# Warmup
-try:
-    if os.path.exists(MODEL_PATH):
-        logger.info("🔥 GGUF Model Warmup...")
-        _ = get_exaone_llm()
-except Exception as e:
-    logger.warning(f"Warmup skipped: {e}")
+# [최적화] 모듈 임포트 시 즉시 로딩(Warmup) 제거. 
+# 이제 각 워커가 실제 태스크를 수행할 때 필요에 따라 로드함.

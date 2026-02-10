@@ -22,22 +22,22 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
-    
+
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
       const resumeId = uploadData.resume_id;
       console.log('Upload basic success, ID:', resumeId);
-      
+
       // 2. 폴링 (분석 완료 대기)
       let pollCount = 0;
-      const maxPolls = 90; // 최대 180초 (2초 * 90) - 첫 실행 시 모델 로딩으로 인해 오래 걸릴 수 있음
-      
+      const maxPolls = 150; // 최대 300초 (2초 * 150) - 첫 실행 시 모델 로딩(KURE-v1) 시간이 꽤 걸릴 수 있음
+
       const poll = async () => {
         try {
           const result = await getResume(resumeId);
           console.log('Polling result:', result.processing_status);
-          
+
           if (result.processing_status === 'completed') {
             setUploadResult(result);
             if (onParsedData) {
@@ -59,9 +59,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
           alert(err.message || "이력서 분석 중 오류가 발생했습니다.");
         }
       };
-      
+
       setTimeout(poll, 1000); // 1초 뒤 첫 폴링 시작
-      
+
     } catch (err) {
       console.error(err);
       setIsUploading(false);
@@ -83,9 +83,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             업로드하신 이력서에서 추출된 정보입니다. 내용이 맞다면 면접 진행을 눌러주세요.
           </p>
 
-          <div style={{ 
-            background: 'rgba(255, 255, 255, 0.03)', 
-            padding: '2rem', 
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            padding: '2rem',
             borderRadius: '16px',
             marginBottom: '2rem',
             border: '1px solid var(--glass-border)'
@@ -93,20 +93,60 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
               <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
-              
+
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {uploadResult?.structured_data?.target_position || uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    setUploadResult(prev => ({
+                      ...prev,
+                      position: newRole,
+                      structured_data: {
+                        ...prev.structured_data,
+                        header: {
+                          ...prev.structured_data.header,
+                          target_role: newRole
+                        }
+                      }
+                    }));
+                    // 부모 컴포넌트의 position 상태를 업데이트하여 면접 생성 시 사용되도록 함
+                    if (onParsedData) {
+                      onParsedData({
+                        ...uploadResult,
+                        position: newRole,
+                        structured_data: {
+                          ...uploadResult.structured_data,
+                          header: { ...uploadResult.structured_data.header, target_role: newRole }
+                        }
+                      });
+                    }
+                  }}
+                  placeholder="지원 직무를 직접 입력해주세요"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--primary)',
+                    color: 'var(--primary)',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    width: '100%',
+                    padding: '4px 0',
+                    outline: 'none'
+                  }}
+                />
               </dd>
-              
+
               {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
                   <dd>{uploadResult.structured_data.skills.join(', ')}</dd>
                 </>
               )}
-              
-             {/* If additional parsed info exists, add here */}
+
+              {/* If additional parsed info exists, add here */}
             </dl>
           </div>
 
@@ -130,10 +170,10 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         <h1 className="text-gradient">이력서를 업로드 해주세요.</h1>
         <p style={{ marginBottom: '2rem' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
-        <div 
-          style={{ 
-            border: '2px dashed var(--glass-border)', 
-            borderRadius: '20px', 
+        <div
+          style={{
+            border: '2px dashed var(--glass-border)',
+            borderRadius: '20px',
             padding: '3rem 2rem',
             marginBottom: '2rem',
             cursor: 'pointer',
@@ -156,17 +196,17 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
             </>
           )}
-          <input 
-            id="resume-input" 
-            type="file" 
-            accept=".pdf" 
-            hidden 
-            onChange={handleFileChange} 
+          <input
+            id="resume-input"
+            type="file"
+            accept=".pdf"
+            hidden
+            onChange={handleFileChange}
           />
         </div>
 
-        <PremiumButton 
-          disabled={!file || isUploading} 
+        <PremiumButton
+          disabled={!file || isUploading}
           onClick={handleUpload}
           style={{ width: '100%', padding: '16px' }}
         >

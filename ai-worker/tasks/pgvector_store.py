@@ -90,9 +90,9 @@ def store_embeddings(resume_id, embedded_chunks):
 if __name__ == "__main__":
     try:
         # Step 1(load_resume)은 제거됨
-        from step2_parse_resume import parse_resume_final
-        from step4_chunking import chunk_resume
-        from step5_embedding import embed_chunks
+        from parse_resume import parse_resume_final
+        from chunking import chunk_resume
+        from embedding import embed_chunks
     except ImportError as e:
         print(f"❌ 모듈 Import 실패: {e}")
         sys.exit(1)

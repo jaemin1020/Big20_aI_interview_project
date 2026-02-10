@@ -12,20 +12,35 @@ from langchain_huggingface import HuggingFaceEmbeddings
 # -----------------------------------------------------------
 EMBEDDING_MODEL = "nlpai-lab/KURE-v1" 
 
+# 2. 임베딩 모델 싱글톤 관리
+_embedder = None
+
+def get_embedder(device):
+    global _embedder
+    if _embedder is None:
+        cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        print(f"🚀 [STEP5] 임베딩 모델 상주 작업 시작 (모델: {EMBEDDING_MODEL})...")
+        print(f"📂 캐시 경로: {cache_dir} (첫 실행 시 다운로드로 인해 3~5분 소요될 수 있습니다)")
+        
+        _embedder = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            model_kwargs={'device': device},
+            encode_kwargs={'normalize_embeddings': True},
+            cache_folder=cache_dir
+        )
+        print("✅ 임베딩 모델 메모리 상주 완료!")
+    return _embedder
+
 def embed_chunks(chunks):
-    print(f"\n[STEP5] 임베딩 시작 (모델: {EMBEDDING_MODEL})...")
-    
     # 1. 장치 설정 (GPU 우선)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"👉 사용 장치: {device}")
-
-    # 2. 임베딩 모델 로드 (최신 방식)
-    # encode_kwargs: 임베딩 정규화 (코사인 유사도 계산 시 필수)
-    embedder = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={'device': device},
-        encode_kwargs={'normalize_embeddings': True}
-    )
+    
+    # 2. 임베딩 모델 가져오기 (이미 로드되어 있으면 즉시 반환)
+    print(f"📡 [STEP5] 모델 상태 확인 중...")
+    embedder = get_embedder(device)
+    print(f"👉 사용 장치: {device} (Warm Start 적용짐)")
 
     # 3. 텍스트 추출
     texts = [c["text"] for c in chunks]
@@ -62,8 +77,8 @@ def embed_chunks(chunks):
 if __name__ == "__main__":
     # 이전 단계 모듈 import
     try:
-        from step2_parse_resume import parse_resume_final 
-        from step4_chunking import chunk_resume
+        from parse_resume import parse_resume_final 
+        from chunking import chunk_resume
     except ImportError as e:
         print(f"❌ 모듈 Import 실패: {e}")
         sys.exit(1)

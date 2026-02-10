@@ -171,7 +171,7 @@ def chunk_resume(parsed_data):
 # -----------------------------------------------------------
 if __name__ == "__main__":
     import os
-    from step2_parse_resume import parse_resume_final
+    from parse_resume import parse_resume_final
     
     # 테스트할 파일 경로 확인
     target_pdf = "resume.pdf"

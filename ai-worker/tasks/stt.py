@@ -14,29 +14,34 @@ MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo")
 
 def load_stt_pipeline():
     global stt_pipeline
+    
+    # [최적화] GPU 워커(질문 생성 전용)는 STT 모델을 로드할 필요가 없음
+    gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
+    if gpu_layers == -1:
+        logger.info("⏩ [SKIP] GPU Worker detected. Skipping Whisper Pipeline loading.")
+        return
+
     try:
-        # cuDNN 에러 방지를 위해 CPU 사용 강제 (Docker Slim 이미지 한계)
-        # GPU 사용을 원할 경우 nvidia/cuda 베이스 이미지 사용 필요
+        # cuDNN 에러 방지를 위해 CPU 사용 강제
         device = "cpu" 
         torch_dtype = torch.float32
 
-        logger.info(f"Loading Whisper Pipeline ({MODEL_ID}) on {device} (dtype={torch_dtype})...")
+        logger.info(f"🚀 [LOADING] Whisper Pipeline ({MODEL_ID}) on {device}...")
         
-        # Transformers Pipeline 초기화
         stt_pipeline = pipeline(
             "automatic-speech-recognition",
             model=MODEL_ID,
             torch_dtype=torch_dtype,
             device=device,
-            chunk_length_s=30, # 30초 이상 오디오 처리 가능하도록 설정
+            chunk_length_s=30,
         )
-        logger.info("Whisper Pipeline loaded successfully.")
+        logger.info("✅ Whisper Pipeline loaded successfully.")
     except Exception as e:
-        logger.error(f"Failed to load Whisper Pipeline: {e}")
+        logger.error(f"❌ Failed to load Whisper Pipeline: {e}")
         stt_pipeline = None
 
-# 모듈 로드 시 시도
-load_stt_pipeline()
+# 모듈 로드 시 전역 호출 제거 (실제 태스크 수행 시 로드하도록 수정)
+# load_stt_pipeline()
 
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
