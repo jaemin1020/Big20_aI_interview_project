@@ -194,3 +194,39 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             
             session.add(interview)
             session.commit()
+
+def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
+    """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
+    from models import QuestionDifficulty, Transcript, Speaker
+    with Session(engine) as session:
+        # 1. Question 테이블 저장
+        question = Question(
+            content=content,
+            category=category,
+            difficulty=QuestionDifficulty.MEDIUM,
+            question_type=stage,
+            rubric_json={"guide": guide},
+            is_active=True
+        )
+        session.add(question)
+        session.commit()
+        session.refresh(question)
+        
+        # 2. Transcript 테이블에 AI 질문으로 저장 (이게 되어야 프론트에서 보임)
+        # 현재 면접의 마지막 순서를 파악
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+        last_transcript = session.exec(stmt).first()
+        next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
+
+        new_transcript = Transcript(
+            interview_id=interview_id,
+            speaker=Speaker.AI,
+            text=content,
+            question_id=question.id,
+            order=next_order,
+            timestamp=datetime.utcnow()
+        )
+        session.add(new_transcript)
+        session.commit()
+        
+        return question.id

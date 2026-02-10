@@ -255,12 +255,17 @@ function App() {
     setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & Resume ID
-      const interviewPosition = parsedResumeData?.structured_data?.target_position || parsedResumeData?.position || position || 'General';
-      const resumeId = parsedResumeData?.id || null;
+      const structuredBase = parsedResumeData?.structured_data;
+      const interviewPosition = position ||
+        structuredBase?.header?.target_role ||
+        structuredBase?.target_position ||
+        parsedResumeData?.position ||
+        "보안 엔지니어";
 
-      console.log("Creating interview with:", { interviewPosition, resumeId });
+      console.log("🚀 [Session Init] Final Position:", interviewPosition);
+      console.log("🚀 [Session Init] Resume ID:", parsedResumeData?.id);
 
-      const newInterview = await createInterview(interviewPosition, null, resumeId, null);
+      const newInterview = await createInterview(interviewPosition, null, parsedResumeData?.id, null);
       setInterview(newInterview);
 
       // 2. Get Questions
@@ -482,24 +487,44 @@ function App() {
     }
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
-
+      setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
       await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
 
+      // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
-        console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
-        // setIsRecording(false); // Already checked
+        setIsLoading(false);
       } else {
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
+        console.log('[nextQuestion] Polling for next AI-generated question...');
+        let foundNew = false;
+        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
+          await new Promise(r => setTimeout(r, 2000));
+          const updatedQs = await getInterviewQuestions(interview.id);
 
-        setStep('loading');
-        // if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-        if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-        await finishInterview();
+          if (updatedQs.length > questions.length) {
+            setQuestions(updatedQs);
+            setCurrentIdx(prev => prev + 1);
+            setTranscript('');
+            foundNew = true;
+            break;
+          }
+        }
 
+        if (!foundNew) {
+          // 더 이상 질문이 없으면 면접 종료
+          console.log('[nextQuestion] No more questions found. Finishing interview.');
+          setStep('loading');
+          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+          await finishInterview();
+        }
+        setIsLoading(false);
       }
     } catch (err) {
+      console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');
+      setIsLoading(false);
     }
   };
 
@@ -659,6 +684,7 @@ function App() {
             nextQuestion={nextQuestion}
             onFinish={finishInterview}
             videoRef={videoRef}
+            isLoading={isLoading}
           />
         )}
 

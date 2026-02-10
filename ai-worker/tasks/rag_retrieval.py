@@ -30,19 +30,31 @@ except ImportError:
 # -----------------------------------------------------------
 EMBEDDING_MODEL = "nlpai-lab/KURE-v1" 
 
-# GPU/CPU 자동 설정
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f"[STEP7] 임베딩 모델 로드 중 ({EMBEDDING_MODEL}) on {device}...")
+_embedder = None
 
-try:
-    embedder = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={'device': device},
-        encode_kwargs={'normalize_embeddings': True}
-    )
-except Exception as e:
-    print(f"❌ 임베딩 모델 로드 실패: {e}")
-    sys.exit(1)
+def get_embedder():
+    global _embedder
+    if _embedder is None:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        print(f"[STEP7] 임베딩 모델 로드 중 ({EMBEDDING_MODEL}) on {device}...")
+        print(f"📂 캐시 경로: {cache_dir}")
+        
+        try:
+            _embedder = HuggingFaceEmbeddings(
+                model_name=EMBEDDING_MODEL,
+                model_kwargs={'device': device},
+                encode_kwargs={'normalize_embeddings': True},
+                cache_folder=cache_dir
+            )
+            print("✅ RAG 임베딩 모델 로드 완료!")
+        except Exception as e:
+            print(f"❌ 임베딩 모델 로드 실패: {e}")
+            # 여기서 sys.exit(1)을 하면 워커 자체가 죽으므로 주의
+            return None
+    return _embedder
 
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (하이브리드 검색 적용)
@@ -56,6 +68,12 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
         filter_category (str): 'project', 'narrative', 'activity' 등 (없으면 전체 검색)
     """
     print(f"\n🔍 [RAG 검색] 키워드: '{query}' (필터: {filter_category})")
+    
+    # 임베딩 모델 가져오기 (지연 로딩)
+    embedder = get_embedder()
+    if not embedder:
+        print("❌ 임베딩 모델을 사용할 수 없습니다.")
+        return []
     
     # 1. 검색어(Query)를 벡터로 변환
     try:
@@ -103,6 +121,11 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
                 })
 
             print(f"   👉 {len(results)}개의 관련 내용을 찾았습니다.")
+            for i, res in enumerate(results):
+                # 텍스트가 너무 길 수 있으므로 앞부분 80자만 출력
+                preview = res['text'].replace('\n', ' ')[:80]
+                category = res['meta'].get('category', 'N/A')
+                print(f"      [{i+1}] ({category}): {preview}...")
 
     except Exception as e:
         print(f"❌ DB 검색 실패: {e}")

@@ -13,10 +13,10 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 class InterviewStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    SCHEDULED = "SCHEDULED"
+    LIVE = "LIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 class QuestionCategory(str, Enum):
     TECHNICAL = "technical"
