@@ -546,7 +546,13 @@ function App() {
         <Header
           onLogout={handleLogout}
           showLogout={!!user}
-          onLogoClick={() => setStep('main')}
+          onLogoClick={() => {
+            if (step === 'interview') {
+              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
+              return;
+            }
+            setStep('main');
+          }}
           isInterviewing={step === 'interview'}
           onHistory={() => setStep('history')}
           onAccountSettings={() => setStep('settings')}
@@ -617,18 +623,11 @@ function App() {
             setAccount={setAccount}
             handleAuth={handleAuth}
             authError={authError}
+            onBack={() => setStep('main')}
           />
         )}
 
-        {step === 'history' && (
-          <InterviewHistoryPage
-            onBack={() => setStep('landing')}
-            onViewResult={(reportData) => {
-              setReport(reportData);
-              setStep('result');
-            }}
-          />
-        )}
+
 
         {step === 'landing' && (
           <LandingPage
