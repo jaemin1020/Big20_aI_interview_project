@@ -18,15 +18,24 @@ def load_stt_model():
     """
     global stt_model
     try:
-        # GPU 사용 여부 확인
         use_gpu = os.getenv("USE_GPU", "false").lower() == "true"
-        device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
+        device = "cuda" if use_gpu else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
 
-        logger.info(f"Loading Faster-Whisper Model ({MODEL_SIZE}) on {device} (compute_type={compute_type})...")
+        logger.info(f"Attempting to load Faster-Whisper ({MODEL_SIZE}) on {device}...")
         
-        stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
-        logger.info("Faster-Whisper Model loaded successfully.")
+        try:
+             stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
+             logger.info(f"✅ Faster-Whisper loaded on {device}")
+        except Exception as e:
+             if device == "cuda":
+                 logger.warning(f"Failed to load on CUDA: {e}. Falling back to CPU.")
+                 device = "cpu"
+                 compute_type = "int8"
+                 stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
+                 logger.info(f"✅ Faster-Whisper loaded on CPU (Fallback)")
+             else:
+                 raise e
     except Exception as e:
         logger.error(f"Failed to load Faster-Whisper Model: {e}")
         stt_model = None
