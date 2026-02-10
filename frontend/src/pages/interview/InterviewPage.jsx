@@ -41,7 +41,7 @@ const InterviewPage = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
   return (
-    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '1rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '0.5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--header-height))', boxSizing: 'border-box', overflow: 'hidden' }}>
 
       {/* Rectangular Timer Box: White background with Icon */}
       <div style={{
@@ -229,41 +229,47 @@ const InterviewPage = ({
           )}
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (
-              <div className="animate-fade-in" style={{
+              <div style={{
                 position: 'absolute',
                 bottom: '100%',
                 left: '50%',
                 transform: 'translate(-50%, -10px)',
-                background: 'rgba(0, 0, 0, 0.9)',
-                backdropFilter: 'blur(4px)',
+                background: 'rgba(15, 23, 42, 0.95)',
+                backdropFilter: 'blur(8px)',
                 color: 'white',
-                padding: '12px',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                lineHeight: '1.4',
+                padding: '14px 18px',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                lineHeight: '1.6',
                 textAlign: 'center',
                 whiteSpace: 'pre-line',
-                zIndex: 100,
+                zIndex: 2000,
                 width: 'max-content',
-                maxWidth: '300px',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                pointerEvents: 'none'
+                maxWidth: '320px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                pointerEvents: 'none',
+                animation: 'tooltipFadeIn 0.3s ease-out forwards'
               }}>
-                면접을 종료하면 결과를 확인 수 없으며,
-                동일한 면접에 대한 재응시는 어렵습니다.
-                면접을 다시 진행하려면 처음부터 다시 시작해야 합니다.
+                {"면접을 종료하면 결과를 확인할 수 없으며,\n동일한 면접에 대한 재응시는 어렵습니다.\n처음부터 다시 시작해야 하니 주의해 주세요."}
                 <div style={{
                   position: 'absolute',
                   top: '100%',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  borderWidth: '6px',
+                  borderWidth: '8px',
                   borderStyle: 'solid',
-                  borderColor: 'rgba(0, 0, 0, 0.9) transparent transparent transparent'
+                  borderColor: 'rgba(15, 23, 42, 0.95) transparent transparent transparent'
                 }}></div>
               </div>
             )}
+            <style>{`
+              @keyframes tooltipFadeIn {
+                from { opacity: 0; transform: translate(-50%, 0); }
+                to { opacity: 1; transform: translate(-50%, -10px); }
+              }
+            `}</style>
+
             <PremiumButton
               variant="secondary"
               onClick={onFinish}
