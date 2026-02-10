@@ -96,7 +96,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-<<<<<<< HEAD
                 <input
                   type="text"
                   value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
@@ -141,12 +140,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               </dd>
 
               {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
-=======
-                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
-              </dd>
-              
-              {uploadResult?.skills && uploadResult.skills.length > 0 && (
->>>>>>> origin/lsj
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
                   <dd>{uploadResult.skills.join(', ')}</dd>

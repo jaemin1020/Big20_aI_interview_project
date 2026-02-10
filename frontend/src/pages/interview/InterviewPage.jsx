@@ -11,12 +11,8 @@ const InterviewPage = ({
   toggleRecording,
   nextQuestion,
   onFinish,
-<<<<<<< HEAD
   videoRef,
   isLoading
-=======
-  videoRef
->>>>>>> origin/lsj
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
@@ -47,7 +43,6 @@ const InterviewPage = ({
   };
 
   return (
-<<<<<<< HEAD
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
 
       {/* Loading Overlay */}
@@ -76,9 +71,6 @@ const InterviewPage = ({
           `}</style>
         </div>
       )}
-=======
-    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '0.5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--header-height))', boxSizing: 'border-box', overflow: 'hidden' }}>
->>>>>>> origin/lsj
 
       {/* Rectangular Timer Box: White background with Icon */}
       <div style={{
@@ -136,17 +128,12 @@ const InterviewPage = ({
 
           {/* Right: Video Area */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-<<<<<<< HEAD
             <div style={{ position: 'relative', width: '100%', paddingTop: '75%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
-=======
-            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
->>>>>>> origin/lsj
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-<<<<<<< HEAD
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
               <div style={{
@@ -165,26 +152,6 @@ const InterviewPage = ({
                 <div style={{
                   width: '6px',
                   height: '6px',
-=======
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-              <div style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                padding: '6px 14px',
-                borderRadius: '50px',
-                background: 'rgba(0,0,0,0.6)',
-                backdropFilter: 'blur(10px)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                border: '1px solid rgba(255,255,255,0.2)'
-              }}>
-                <div style={{
-                  width: '10px',
-                  height: '10px',
->>>>>>> origin/lsj
                   borderRadius: '50%',
                   background: isRecording ? '#ef4444' : '#10b981',
                   boxShadow: isRecording ? '0 0 8px #ef4444' : 'none'
@@ -281,29 +248,12 @@ const InterviewPage = ({
           >
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}
           </PremiumButton>
-<<<<<<< HEAD
           <PremiumButton
             onClick={nextQuestion}
             style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
           >
             {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
           </PremiumButton>
-          <PremiumButton
-            variant="secondary"
-            onClick={onFinish}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700', border: '1px solid var(--glass-border)' }}
-          >
-            면접 종료
-          </PremiumButton>
-=======
-          {currentIdx < totalQuestions - 1 && (
-            <PremiumButton
-              onClick={nextQuestion}
-              style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
-            >
-              다음 질문
-            </PremiumButton>
-          )}
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (
               <div style={{
@@ -357,7 +307,6 @@ const InterviewPage = ({
               면접 종료
             </PremiumButton>
           </div>
->>>>>>> origin/lsj
         </div>
       </div>
 

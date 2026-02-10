@@ -248,7 +248,6 @@ function App() {
     setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & Resume ID
-<<<<<<< HEAD
       const structuredBase = parsedResumeData?.structured_data;
       const interviewPosition = position ||
         structuredBase?.header?.target_role ||
@@ -260,19 +259,6 @@ function App() {
       console.log("🚀 [Session Init] Resume ID:", parsedResumeData?.id);
 
       const newInterview = await createInterview(interviewPosition, null, parsedResumeData?.id, null);
-=======
-      let interviewPosition = parsedResumeData?.structured_data?.target_position;
-
-      // 만약 target_position이 객체라면 내부 position 필드 추출
-      if (interviewPosition && typeof interviewPosition === 'object') {
-        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
-      }
-
-      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
-      const resumeId = parsedResumeData?.id || null;
-
-      const newInterview = await createInterview(interviewPosition, null, null);
->>>>>>> origin/lsj
       setInterview(newInterview);
 
       // 2. Get Questions
@@ -491,33 +477,17 @@ function App() {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
     }
-<<<<<<< HEAD
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
-      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
-=======
-
-    const answerText = transcript.trim() || "답변 없음";
-
-    try {
       console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
-      // Transcript 저장 (사용자 답변)
-      await createTranscript(
-        interview.id,
-        'User',
-        answerText,
-        questions[currentIdx].id
-      );
-
+      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
       console.log('[nextQuestion] Transcript saved successfully');
->>>>>>> origin/lsj
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
-<<<<<<< HEAD
         setIsLoading(false);
       } else {
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
@@ -549,16 +519,6 @@ function App() {
       console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');
       setIsLoading(false);
-=======
-        setIsRecording(false);
-      } else {
-        console.log('[nextQuestion] Last question reached, finishing interview');
-        await finishInterview();
-      }
-    } catch (err) {
-      console.error('[Submit Error]:', err);
-      alert(`답변 제출 실패: ${err.message || 'Unknown error'}`);
->>>>>>> origin/lsj
     }
   };
 
