@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, pageTitle }) => {
+const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, onHistory, onAccountSettings, onProfileManagement, pageTitle }) => {
   const [isManageOpen, setIsManageOpen] = React.useState(false);
   const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
 
@@ -15,9 +15,9 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
       left: 0,
       right: 0,
       zIndex: 1000,
-      background: (isInterviewing || isComplete) ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
+      background: isInterviewing ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
       backdropFilter: 'blur(10px)',
-      borderBottom: (isInterviewing || isComplete) ? '1px solid var(--glass-border)' : 'none'
+      borderBottom: isInterviewing ? '1px solid var(--glass-border)' : 'none'
     }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div
@@ -68,7 +68,7 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
         )}
       </div>
 
-      {showLogout && !isInterviewing && !isComplete && (
+      {showLogout && !isInterviewing && (
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
           {/* 면접 관리 드롭다운 */}
