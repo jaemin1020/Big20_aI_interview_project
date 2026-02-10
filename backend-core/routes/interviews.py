@@ -66,22 +66,6 @@ async def create_interview(
     logger.info(f"Interview record created: ID={interview_id}")
     
     try:
-<<<<<<< HEAD
-        from utils.interview_helpers import get_candidate_info, generate_template_question
-        from utils import get_initial_stages
-        from sqlalchemy import text
-        
-        # 지원자 정보 조회 (직무 정보 포함)
-        candidate_info = get_candidate_info(db, interview_data.resume_id)
-        logger.info(f"✅ Candidate Info extracted: {candidate_info}")
-        
-        initial_stages = get_initial_stages()
-        
-        for stage_config in initial_stages:
-            question_text = generate_template_question(stage_config["template"], candidate_info)
-            
-            # Question 저장
-=======
         logger.info("Requesting question generation from AI-Worker...")
         task = celery_app.send_task(
             "tasks.question_generator.generate_questions",
@@ -115,21 +99,15 @@ async def create_interview(
             q_audio = item.get("audio_url")
 
             # 3-1. 질문 은행에 저장
->>>>>>> origin/lsj
             question = Question(
                 content=question_text,
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config["stage"], # 단계 매칭을 위해 추가
                 rubric_json={
-<<<<<<< HEAD
-                    "criteria": ["명확성", "진정성", "직무 이해도"],
-                    "weight": {"content": 0.6, "communication": 0.4}
-=======
                     "criteria": ["구체성", "직무 적합성", "논리력"], 
                     "weight": {"content": 0.5, "communication": 0.5},
                     "audio_url": q_audio 
->>>>>>> origin/lsj
                 },
                 position=interview_data.position
             )
@@ -375,7 +353,6 @@ async def get_evaluation_report(
     
     return report
 
-<<<<<<< HEAD
 # --- Transcript Route (별도 파일로 할 수도 있지만 interview와 밀접하므로 여기에 포함) ---
 # 기존 main.py에서는 /transcripts 였지만 여기서는 /interviews 하위가 아님.
 # 따라서 별도 라우터(`transcripts_router`)로 분리하거나, prefix 없는 별도 라우터를 정의해야 함.
@@ -494,5 +471,3 @@ async def create_realtime_interview(
         end_time=new_interview.end_time,
         overall_score=new_interview.overall_score
     )
-=======
->>>>>>> origin/lsj
