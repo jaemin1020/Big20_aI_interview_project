@@ -26,7 +26,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
-      const resumeId = uploadData.id;
+      const resumeId = uploadData.resume_id;
       console.log('Upload basic success, ID:', resumeId);
       
       // 2. 폴링 (분석 완료 대기)
@@ -46,12 +46,14 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             setStep('confirm');
             setIsUploading(false);
           } else if (result.processing_status === 'failed') {
-            throw new Error("분석에 실패했습니다.");
+             setIsUploading(false);
+             alert("이력서 분석에 실패했습니다.");
           } else if (pollCount < maxPolls) {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
-            throw new Error("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
+             setIsUploading(false);
+             alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
           }
         } catch (err) {
           console.error('Polling error:', err);
