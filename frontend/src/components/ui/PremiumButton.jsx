@@ -1,10 +1,11 @@
 import React from 'react';
 
-const PremiumButton = ({ 
-  children, 
-  variant = 'primary', 
-  className = '', 
-  ...props 
+const PremiumButton = ({
+  children,
+  variant = 'primary',
+  className = '',
+  as: Component = 'button',
+  ...props
 }) => {
   const baseStyles = {
     borderRadius: '50px',
@@ -44,13 +45,13 @@ const PremiumButton = ({
   const combinedStyle = { ...baseStyles, ...variants[variant], ...propsStyle };
 
   return (
-    <button 
+    <Component
       style={combinedStyle}
       className={`premium-button ${className}`}
       {...otherProps}
     >
       {children}
-    </button>
+    </Component>
   );
 };
 
