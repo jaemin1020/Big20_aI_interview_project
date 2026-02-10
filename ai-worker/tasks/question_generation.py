@@ -78,15 +78,23 @@ def generate_human_like_question(exaone, name, position, stage, guide, context_l
         # 보다 정교한 프롬프트를 위해 직접 generate 호출 가능하나, 여기서는 일관성을 위해 랩핑
         system_msg = f"당신은 15년 차 베테랑 {position} 전문 면접관이다. 지금은 면접이 한창 진행 중인 상황이다."
         user_msg = f"""지원자 {name}님에게 {stage} 단계의 면접 질문을 던지세요.
-평가 의도: {guide}
-지원자 이력서 근거 (RAG):
+
+[평가 의도 - 반드시 이 관점으로 질문할 것]
+{guide}
+
+[지원자 이력서 근거]
 {context_text}
 
 [요구사항]
 1. 시작은 반드시 "{name}님," 으로 부를 것.
-2. 이력서 내용을 바탕으로 이해하기 쉬운 **간결한 질문 1개**만 던질 것.
-3. 반드시 **150자 이내(두 문장 이내)**로 짧고 명확하게 물어볼 것. 사족 금지.
+2. **이력서에 나온 구체적인 프로젝트명/회사명/기술명을 반드시 언급**할 것.
+   예: "{name}님, 이력서를 보니 오픈소스 기반 침입 탐지 프로젝트를 하셨네요~"
+3. **평가 의도(guide)에 맞는 질문**을 할 것.
+   - 예: guide가 "구체적인 역할과 기여도"라면 → "이 프로젝트에서 달성한 구체적인 역할과 기여도가 어떻게 되나요?"
+4. 반드시 **150자 이내(두 문장 이내)**로 짧고 명확하게 물어볼 것.
+5. [프로젝트], [회사명] 같은 자리표시자를 절대 사용하지 말 것.
 """
+
         prompt = exaone._create_prompt(system_msg, user_msg)
         output = exaone.llm(
             prompt,
@@ -178,10 +186,10 @@ def generate_next_question_task(interview_id: int):
         try:
             exaone = get_exaone_llm()
             
-            # 컨텍스트 준비 (일반 AI 질문 vs 꼬리질문)
+            # 컨텍스트 준비: 꼬리질문 vs 일반 AI 질문 명확히 분리
             contexts = []
             if stage_type == "followup":
-                # 꼬리질문의 경우 RAG 대신 '직전 답변'을 컨텍스트로 사용
+                # 꼬리질문: 오직 이전 답변만 사용 (RAG 검색 안 함)
                 user_stmt = select(Transcript).where(
                     Transcript.interview_id == interview_id,
                     Transcript.speaker == Speaker.USER
@@ -190,13 +198,16 @@ def generate_next_question_task(interview_id: int):
                 if last_user_ans:
                     contexts = [{"text": f"이전 답변: {last_user_ans.text}", "meta": {"category": "followup"}}]
                     logger.info(f"📌 Follow-up context prepared from last answer.")
-            
-            # RAG 검색 (꼬리질문이 아니거나, 꼬리질문인데 컨텍스트를 못 찾은 경우)
-            if not contexts:
+                else:
+                    logger.warning("⚠️ No previous answer found for followup question!")
+                    contexts = [{"text": "이전 답변을 찾을 수 없습니다.", "meta": {}}]
+            else:
+                # 일반 AI 질문: 이력서 RAG 검색
                 from .rag_retrieval import retrieve_context
                 query_tmpl = next_stage_data.get("query_template", "{target_role}")
                 query = query_tmpl.format(target_role=interview.position)
                 contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+
             
             from utils.interview_helpers import get_candidate_info
             from db import Resume

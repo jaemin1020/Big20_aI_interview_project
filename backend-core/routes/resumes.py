@@ -92,7 +92,8 @@ async def upload_resume(
     try:
         celery_app.send_task(
             "tasks.resume_pipeline.process_resume_pipeline",
-            args=[resume.id, file_path]
+            args=[resume.id, file_path],
+            queue='gpu_queue'
         )
         logger.info(f"Resume {resume.id} 처리 파이프라인 전송 완료")
     except Exception as e:
@@ -204,7 +205,8 @@ async def reprocess_resume(
     try:
         celery_app.send_task(
             "tasks.resume_pipeline.process_resume_pipeline",
-            args=[resume_id, resume.file_path]
+            args=[resume_id, resume.file_path],
+            queue='gpu_queue'
         )
         
         # 상태 업데이트
