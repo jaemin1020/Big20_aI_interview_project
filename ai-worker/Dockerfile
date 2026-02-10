@@ -43,11 +43,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install "numpy>=1.23.0,<2.0.0" "Cython"
 
 # 4. llama-cpp-python GPU 빌드 (cuBLAS 활성화)
-# CUDA stubs 경로 추가 + pip 캐시 사용
-RUN --mount=type=cache,target=/root/.cache/pip \
+# CUDA stubs 경로 추가 + libcuda.so.1 심볼릭 링크 생성 (빌드 시 링킹 오류 해결)
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+    && LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH \
     CMAKE_ARGS="-DGGML_CUDA=on" \
-    LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LIBRARY_PATH \
-    pip3 install llama-cpp-python>=0.3.5
+    pip3 install --no-cache-dir llama-cpp-python>=0.3.5
 
 # 4.5 PyTorch GPU 버전 먼저 설치 (CUDA 12.1 호환)
 # 대용량 파일이므로 캐시 효과가 가장 큼
