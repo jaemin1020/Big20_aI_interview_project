@@ -58,7 +58,7 @@ const EnvTestPage = ({ onNext }) => {
         };
 
         // 2. Deepgram STT Setup
-        const apiKey = import.meta.env.DEEPGRAM_API_KEY;
+        const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
         if (apiKey) {
           const deepgram = createClient(apiKey);
           const connection = deepgram.listen.live({
