@@ -70,7 +70,25 @@ class Resume(SQLModel, table=True):
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = None
     is_active: bool = Field(default=True)
+    processed_at: Optional[datetime] = None
+    is_active: bool = Field(default=True)
     processing_status: str = Field(default="pending")
+
+class SectionType(str, Enum):
+    SKILL_CERT = "skill_cert"
+    CAREER_PROJECT = "career_project"
+    COVER_LETTER = "cover_letter"
+
+class ResumeChunk(SQLModel, table=True):
+    __tablename__ = "resume_chunks"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    resume_id: int = Field(foreign_key="resumes.id", index=True)
+    chunk_index: int
+    content: str
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
+    section_type: Optional[SectionType] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Interview(SQLModel, table=True):
     __tablename__ = "interviews"

@@ -1,5 +1,5 @@
 from sqlmodel import Session, create_engine, select
-from models import Resume, ResumeChunk, SectionType
+from db import Resume, ResumeChunk, SectionType
 from utils.section_classifier import ResumeSectionClassifier
 import os
 import logging

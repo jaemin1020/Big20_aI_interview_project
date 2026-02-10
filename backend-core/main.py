@@ -173,11 +173,24 @@ async def get_resume(
         raise HTTPException(status_code=403, detail="Not authorized to access this resume")
         
     # 모든 기술 스택 통합
+    # 모든 기술 스택 통합
     all_skills = []
+    
+    # JSON 문자열인 경우 파싱 (SQLModel 이슈 대비)
+    import json
+    if isinstance(resume.structured_data, str):
+        try:
+            resume.structured_data = json.loads(resume.structured_data)
+        except:
+            resume.structured_data = {}
+            
     if resume.structured_data and "skills" in resume.structured_data:
-        for cat, skills_list in resume.structured_data["skills"].items():
-            if isinstance(skills_list, list):
-                all_skills.extend(skills_list)
+        # skills가 딕셔너리인지 확인
+        skills_data = resume.structured_data["skills"]
+        if isinstance(skills_data, dict):
+            for cat, skills_list in skills_data.items():
+                if isinstance(skills_list, list):
+                    all_skills.extend(skills_list)
                 
     return {
         "id": resume.id,
@@ -185,7 +198,7 @@ async def get_resume(
         "processing_status": resume.processing_status,
         "processed_at": resume.processed_at,
         "structured_data": resume.structured_data,
-        "position": resume.structured_data.get("target_position", {}).get("position") if resume.structured_data else None,
+        "position": resume.structured_data.get("target_position", {}).get("position") if isinstance(resume.structured_data, dict) else None,
         "skills": list(set(all_skills))  # 중복 제거
     }
 
