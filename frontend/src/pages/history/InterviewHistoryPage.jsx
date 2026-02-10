@@ -77,11 +77,19 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
 
     const handleViewDetail = async (interviewId) => {
         try {
-            // 리포트 데이터 가져오기
-            const report = await getEvaluationReport(interviewId);
-            onViewResult(report);
+            const interview = interviews.find(i => i.id === interviewId);
+            try {
+                // 리포트 데이터 가져오기 시도
+                const report = await getEvaluationReport(interviewId);
+                onViewResult(report, interview);
+            } catch (err) {
+                console.warn("Report fetch failed, showing placeholder:", err);
+                // 리포트가 없어도 결과 페이지로 이동 (더미 데이터 사용)
+                onViewResult(null, interview);
+            }
         } catch (err) {
-            alert("아직 분석 결과가 생성되지 않았거나, 불러올 수 없습니다.");
+            console.error("Error in handleViewDetail:", err);
+            alert("상세 정보를 불러오는 중 오류가 발생했습니다.");
         }
     };
 
