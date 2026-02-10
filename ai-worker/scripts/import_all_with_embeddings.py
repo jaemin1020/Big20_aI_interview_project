@@ -72,6 +72,21 @@ DATA_FILE_NAME_OLD = "preprocessed_data.json"
 DATA_FILE_NAME_CORP = "corp_data.json"
 
 def find_file(filename):
+    """
+    주어진 파일명을 가능한 데이터 디렉토리에서 찾음
+    
+    Args:
+        filename (str): 찾을 파일명
+    
+    Returns:
+        str: 파일의 절대 경로 또는 None
+    
+    Raises:
+        ValueError: 파일이 발견되지 않을 경우
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     for directory in POSSIBLE_DATA_DIRS:
         filepath = os.path.join(directory, filename)
         if os.path.exists(filepath):
@@ -87,6 +102,18 @@ DATA_FILE_CORP = find_file(DATA_FILE_NAME_CORP) or "corp_data.json"
 # ==========================================
 
 def get_engine():
+    """
+    데이터베이스 엔진을 생성하고 테스트
+    
+    Returns:
+        engine: 데이터베이스 엔진
+    
+    Raises:
+        Exception: 데이터베이스 연결 실패
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     try:
         engine = create_engine(DATABASE_URL)
         with Session(engine) as session:
@@ -97,6 +124,24 @@ def get_engine():
         return None
 
 def import_questions(session, file_path, source_name, generator):
+    """
+    JSON 파일에서 질문을 읽고 데이터베이스에 저장
+    
+    Args:
+        session (_type_): 데이터베이스세션
+        file_path (_type_): 파일위치
+        source_name (_type_): 데이터소스명
+        generator (_type_): 임베딩 생성기
+
+    Raises:
+        Exception: 파일이 발견되지 않을 경우
+        
+    Returns:
+        None
+    
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     if not os.path.exists(file_path):
         print(f"⚠️ Warning: File not found at {file_path}. Skipping {source_name}.")
         return
@@ -116,7 +161,21 @@ def import_questions(session, file_path, source_name, generator):
     duplicates = 0
 
     def classify_question(text):
-        """키워드 기반 간단한 분류 (데이터에 카테고리가 없을 경우 사용)"""
+        """
+        키워드 기반 간단한 분류 (데이터에 카테고리가 없을 경우 사용)
+        
+        Args:
+            text (str): 분류할 텍스트
+        
+        Returns:
+            tuple: (카테고리, 분류명)
+        
+        Raises:
+            ValueError: 텍스트가 비어있을 경우
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         text = text.lower()
         
         # 1. 인성/문화 적합성 (CULTURAL_FIT)
@@ -131,7 +190,21 @@ def import_questions(session, file_path, source_name, generator):
         return QuestionCategory.TECHNICAL, "직무지식"
     
     def auto_classify_by_subcategory(subcategory, text):
-        """소분류 정보를 기반으로 카테고리 자동 분류"""
+        """소분류 정보를 기반으로 카테고리 자동 분류
+        
+        Args:
+            subcategory (str): 소분류
+            text (str): 분류할 텍스트
+        
+        Returns:
+            QuestionCategory: 카테고리
+        
+        Raises:
+            ValueError: 텍스트가 비어있을 경우
+        
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         subcategory_lower = subcategory.lower()
         
         # 인성/문화 관련 소분류
@@ -251,6 +324,20 @@ def import_questions(session, file_path, source_name, generator):
         print(f"❌ Failed to commit {source_name}: {e}")
 
 def import_companies(session, file_path, generator):
+    """
+    회사정보를 DB에 저장하는 함수
+
+    Args:
+        session (Session): DB 세션
+        file_path (str): JSON 파일 경로
+        generator (EmbeddingGenerator): 임베딩 생성기
+    
+    Raises:
+        Exception: 파일이 발견되지 않을 경우
+
+    Returns:
+        None
+    """
     if not os.path.exists(file_path):
         print(f"⚠️ Warning: File not found at {file_path}. Skipping Companies.")
         return

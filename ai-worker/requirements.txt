@@ -39,11 +39,22 @@ tensorflow
 tf-keras>=2.16.0
 opencv-python-headless>=4.9.0.8
 
+<<<<<<< HEAD
 # Audio Processing (if needed)
 librosa>=0.10.1
 
 # Data Processing
 numpy>=1.23.0,<2.0.0
+=======
+
+# Audio Processing
+librosa>=0.10.2
+supertonic
+onnxruntime
+soundfile
+
+
+>>>>>>> origin/HEAD
 
 
 # PDF Processing & Document Parsing
@@ -55,5 +66,14 @@ python-docx>=1.1.2
 pydantic>=2.0.0
 
 # Remote Kernel Connectivity
+<<<<<<< HEAD
 ipykernel>=6.0.0
 langchain-ollama>=0.1.0
+=======
+ipykernel>=6.29.0
+
+# STT Optimization
+faster-whisper==1.0.3
+
+
+>>>>>>> origin/HEAD

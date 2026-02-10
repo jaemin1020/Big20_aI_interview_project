@@ -10,8 +10,12 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
+<<<<<<< HEAD
   getCurrentUser 
   recognizeAudio
+=======
+  getCurrentUser
+>>>>>>> origin/HEAD
 } from './api/interview';
 import { createClient } from "@deepgram/sdk";
 
@@ -26,6 +30,9 @@ import FinalGuidePage from './pages/landing/FinalGuidePage';
 import InterviewPage from './pages/interview/InterviewPage';
 import InterviewCompletePage from './pages/interview/InterviewCompletePage';
 import ResultPage from './pages/result/ResultPage';
+import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
+import AccountSettingsPage from './pages/settings/AccountSettingsPage';
+import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 
 function App() {
   const [step, setStep] = useState('main');
@@ -71,6 +78,24 @@ function App() {
   const [allInterviews, setAllInterviews] = useState([]);
   const [selectedInterviewForReview, setSelectedInterviewForReview] = useState(null);
 
+<<<<<<< HEAD
+=======
+  // Users selected interview for result view
+  const [selectedInterview, setSelectedInterview] = useState(null);
+
+  // Persistence Effect
+  useEffect(() => {
+    sessionStorage.setItem('current_step', step);
+    sessionStorage.setItem('current_interview', JSON.stringify(interview));
+    sessionStorage.setItem('current_questions', JSON.stringify(questions));
+    sessionStorage.setItem('current_idx', currentIdx);
+    sessionStorage.setItem('current_report', JSON.stringify(report));
+    sessionStorage.setItem('current_position', position);
+    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
+  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
+
+
+>>>>>>> origin/HEAD
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
@@ -94,6 +119,7 @@ function App() {
           const savedPosition = sessionStorage.getItem('app_position');
           const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
+<<<<<<< HEAD
           if (savedInterview) setInterview(JSON.parse(savedInterview));
           if (savedQuestions) setQuestions(JSON.parse(savedQuestions));
           if (savedCurrentIdx) setCurrentIdx(parseInt(savedCurrentIdx));
@@ -108,7 +134,25 @@ function App() {
               pollReport(interviewData.id);
             }
           } else {
+=======
+          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
+          if (savedStep === 'auth') {
+>>>>>>> origin/HEAD
             setStep('main');
+          }
+          else {
+            const hasInterviewData = sessionStorage.getItem('current_interview');
+            const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
+
+            if (savedStep) {
+              setStep(savedStep);
+              if (savedStep === 'complete' && !savedReport && savedInterview) {
+                const interviewData = JSON.parse(savedInterview);
+                pollReport(interviewData.id);
+              }
+            } else {
+              setStep('main');
+            }
           }
           isInitialized.current = true;
         })
@@ -162,6 +206,7 @@ function App() {
         const u = await getCurrentUser();
         setUser(u);
         setStep('main');
+        setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -226,11 +271,25 @@ function App() {
   const initInterviewSession = async () => {
     setIsLoading(true);
     try {
+<<<<<<< HEAD
       // 1. Create Interview with Parsed Position & User Name
       const interviewPosition = parsedResumeData?.position || position || 'General';
 
       console.log("Creating interview with:", { interviewPosition });
 
+=======
+      // 1. Create Interview with Parsed Position & Resume ID
+      let interviewPosition = parsedResumeData?.structured_data?.target_position;
+
+      // 만약 target_position이 객체라면 내부 position 필드 추출
+      if (interviewPosition && typeof interviewPosition === 'object') {
+        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
+      }
+
+      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
+      const resumeId = parsedResumeData?.id || null;
+
+>>>>>>> origin/HEAD
       const newInterview = await createInterview(interviewPosition, null, null);
       setInterview(newInterview);
 
@@ -506,13 +565,38 @@ function App() {
   return (
     <div className="container">
       {/* Header - Visible in Most Steps */}
+<<<<<<< HEAD
       {step !== 'main' && step !== 'auth' && (
         <Header
           onLogout={handleLogout}
           showLogout={!!user}
           onLogoClick={() => setStep('main')}
+=======
+      {step !== 'auth' && (
+        <Header
+          onLogout={handleLogout}
+          showLogout={!!user}
+          onLogoClick={() => {
+            if (step === 'interview') {
+              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
+              return;
+            }
+            setStep('main');
+          }}
+>>>>>>> origin/HEAD
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
+          onHistory={() => setStep('history')}
+          onAccountSettings={() => setStep('settings')}
+          onProfileManagement={() => setStep('profile')}
+          pageTitle={
+            step === 'history' ? '면접 이력' :
+              step === 'result' ? '면접 결과' :
+                step === 'settings' ? '계정 설정' :
+                  step === 'profile' ? '프로필 관리' :
+                    step === 'env_test' ? (envTestStep === 'audio' ? '음성 테스트' : '영상 테스트') :
+                      null
+          }
         />
       )}
 
@@ -562,6 +646,7 @@ function App() {
 
         {step === 'auth' && (
           <AuthPage
+<<<<<<< HEAD
             authMode={authMode} setAuthMode={setAuthMode}
             account={account} setAccount={setAccount}
             handleAuth={handleAuth} authError={authError}
@@ -586,6 +671,56 @@ function App() {
         {step === 'env_test' && <EnvTestPage onNext={() => setStep('final_guide')} />}
 
         {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
+=======
+            authMode={authMode}
+            setAuthMode={setAuthMode}
+            account={account}
+            setAccount={setAccount}
+            handleAuth={handleAuth}
+            authError={authError}
+            onBack={() => setStep('main')}
+          />
+        )}
+
+
+
+        {step === 'landing' && (
+          <LandingPage
+            startInterview={startInterviewFlow}
+            handleLogout={handleLogout}
+          />
+        )}
+
+        {step === 'resume' && (
+          <ResumePage
+            onNext={() => setStep('env_test')}
+            onFileSelect={setResumeFile}
+            onParsedData={setParsedResumeData} // Pass this to save parsed info
+          />
+        )}
+>>>>>>> origin/HEAD
+
+        {step === 'interview' && (
+          <InterviewPage
+            currentIdx={currentIdx}
+            totalQuestions={questions.length}
+            question={questions[currentIdx]?.content}
+<<<<<<< HEAD
+=======
+            audioUrl={questions[currentIdx]?.audio_url}
+>>>>>>> origin/HEAD
+            isRecording={isRecording}
+            transcript={transcript}
+            toggleRecording={toggleRecording}
+            nextQuestion={nextQuestion}
+            onFinish={finishInterview}
+            videoRef={videoRef}
+          />
+        )}
+
+<<<<<<< HEAD
+=======
+        {step === 'final_guide' && <FinalGuidePage onNext={initInterviewSession} onPrev={() => setStep('env_test')} isLoading={isLoading} />}
 
         {step === 'interview' && (
           <InterviewPage
@@ -601,6 +736,7 @@ function App() {
           />
         )}
 
+>>>>>>> origin/HEAD
         {step === 'complete' && (
           <InterviewCompletePage
             isReportLoading={isReportLoading}
@@ -623,16 +759,53 @@ function App() {
 
         {step === 'result' && (
           <ResultPage
+<<<<<<< HEAD
             results={report || []}
             isReportLoading={isReportLoading}
+=======
+            results={report?.details_json || []}
+            report={report}
+            interview={selectedInterview}
+>>>>>>> origin/HEAD
             onReset={() => {
               setStep('main');
               setCurrentIdx(0);
               setReport(null);
+<<<<<<< HEAD
               setIsReportLoading(false);
             }}
           />
         )}
+=======
+              setSelectedInterview(null);
+            }}
+          />
+        )}
+
+        {step === 'history' && (
+          <InterviewHistoryPage
+            onBack={() => setStep('main')}
+            onViewResult={(reportData, interviewData) => {
+              setReport(reportData);
+              setSelectedInterview(interviewData);
+              setStep('result');
+            }}
+          />
+        )}
+
+        {step === 'settings' && (
+          <AccountSettingsPage
+            onBack={() => setStep('main')}
+          />
+        )}
+
+        {step === 'profile' && (
+          <ProfileManagementPage
+            onBack={() => setStep('main')}
+            user={user}
+          />
+        )}
+>>>>>>> origin/HEAD
       </div>
     </div>
   );
