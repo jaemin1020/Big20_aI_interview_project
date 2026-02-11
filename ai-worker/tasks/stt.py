@@ -16,32 +16,26 @@ def load_stt_model():
     """
     Faster-Whisper 모델 로드
     """
-    global stt_pipeline
+    global stt_model
     
-    # [최적화] GPU 워커(질문 생성 전용)는 STT 모델을 로드할 필요가 없음
+    # [최적화] GPU 워커(질문 생성 전용, N_GPU_LAYERS=-1)는 STT 모델을 로드할 필요가 없음
     gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
-    if gpu_layers == -1:
-        logger.info("⏩ [SKIP] GPU Worker detected. Skipping Whisper Pipeline loading.")
+    if gpu_layers == -1: 
+        logger.info("⏩ [SKIP] GPU Worker detected. Skipping Whisper Model loading for VRAM optimization.")
         return
 
     try:
-        # cuDNN 에러 방지를 위해 CPU 사용 강제
-        device = "cpu" 
-        torch_dtype = torch.float32
+        use_gpu = os.getenv("USE_GPU", "false").lower() == "true"
+        device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
 
-        logger.info(f"🚀 [LOADING] Whisper Pipeline ({MODEL_ID}) on {device}...")
+        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device}...")
         
-        stt_pipeline = pipeline(
-            "automatic-speech-recognition",
-            model=MODEL_ID,
-            torch_dtype=torch_dtype,
-            device=device,
-            chunk_length_s=30,
-        )
-        logger.info("✅ Whisper Pipeline loaded successfully.")
+        stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
+        logger.info(f"✅ Faster-Whisper loaded successfully on {device}.")
     except Exception as e:
-        logger.error(f"❌ Failed to load Whisper Pipeline: {e}")
-        stt_pipeline = None
+        logger.error(f"❌ Failed to load Faster-Whisper Model: {e}")
+        stt_model = None
 
 # 모듈 로드 시 전역 호출 제거 (실제 태스크 수행 시 로드하도록 수정)
 # load_stt_pipeline()

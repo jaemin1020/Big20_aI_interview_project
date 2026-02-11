@@ -258,7 +258,15 @@ def generate_next_question_task(interview_id: int):
                 from .rag_retrieval import retrieve_context
                 query_tmpl = next_stage_data.get("query_template", "{target_role}")
                 query = query_tmpl.format(target_role=interview.position)
-                contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                
+                # 시나리오의 category를 필터로 전달하여 검색 범위 최적화
+                stage_category = next_stage_data.get("category")
+                contexts = retrieve_context(
+                    query, 
+                    resume_id=interview.resume_id, 
+                    top_k=3,
+                    filter_category=stage_category
+                )
 
             
             # 지원자 정보 및 직무 정보 가져오기 보강 (JSON header/metadata 우선)
