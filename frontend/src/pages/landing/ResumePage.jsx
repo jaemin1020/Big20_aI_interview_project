@@ -128,65 +128,82 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             marginBottom: '2rem',
             border: '1px solid var(--glass-border)'
           }}>
-            <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
-              <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
-              <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
+            <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0, alignItems: 'start' }}>
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>파일 분석</dt>
+              <dd style={{ fontWeight: '600', padding: '4px 0' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
 
-              <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
-              <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 회사</dt>
+              <dd>
                 <input
                   type="text"
-                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
-                  onChange={(e) => {
-                    const newRole = e.target.value;
-                    setUploadResult(prev => ({
-                      ...prev,
-                      position: newRole,
-                      structured_data: {
-                        ...prev.structured_data,
-                        header: {
-                          ...prev.structured_data.header,
-                          target_role: newRole
-                        }
-                      }
-                    }));
-                    // 부모 컴포넌트의 position 상태를 업데이트하여 면접 생성 시 사용되도록 함
-                    if (onParsedData) {
-                      onParsedData({
-                        ...uploadResult,
-                        position: newRole,
-                        structured_data: {
-                          ...uploadResult.structured_data,
-                          header: { ...uploadResult.structured_data.header, target_role: newRole }
-                        }
-                      });
-                    }
-                  }}
-                  placeholder="지원 직무를 직접 입력해주세요"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: '1px solid var(--primary)',
-                    color: 'var(--primary)',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    width: '100%',
-                    padding: '4px 0',
-                    outline: 'none'
-                  }}
+                  value={uploadResult?.structured_data?.header?.target_company || uploadResult?.target_company || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
                 />
               </dd>
 
-              {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
-                <>
-                  <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
-                  <dd>{uploadResult.skills.join(', ')}</dd>
-                </>
-              )}
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 직무</dt>
+              <dd>
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
+                  style={{ color: 'var(--primary)', fontWeight: '600' }}
+                />
+              </dd>
 
-              {/* If additional parsed info exists, add here */}
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력 요약</dt>
+              <dd>
+                <div
+                  className="confirm-input readonly"
+                  style={{ minHeight: '60px', whiteSpace: 'pre-wrap', lineHeight: '1.5', padding: '4px 0' }}
+                >
+                  {uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'}
+                </div>
+              </dd>
+
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>전공</dt>
+              <dd>
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.education?.[0]?.major || uploadResult?.major || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
+                />
+              </dd>
+
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>관련 기술</dt>
+              <dd>
+                <div
+                  className="confirm-input readonly"
+                  style={{ padding: '4px 0', lineHeight: '1.5' }}
+                >
+                  {Array.isArray(uploadResult?.skills) ? uploadResult.skills.join(', ') : (uploadResult?.skills || '정보 없음')}
+                </div>
+              </dd>
             </dl>
           </div>
+
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            .confirm-input {
+              background: transparent;
+              border: none;
+              border-bottom: 1px solid var(--glass-border);
+              color: var(--text-main);
+              font-size: 1rem;
+              width: 100%;
+              padding: 4px 0;
+              outline: none;
+              transition: all 0.3s ease;
+              font-family: inherit;
+            }
+            .confirm-input:focus {
+              border-bottom-color: var(--primary);
+              background: rgba(255, 255, 255, 0.02);
+            }
+          `}} />
 
           <div style={{ display: 'flex', gap: '1rem' }}>
             <PremiumButton onClick={onNext} style={{ flex: 1 }}>면접 진행</PremiumButton>
