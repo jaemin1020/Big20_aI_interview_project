@@ -1,78 +1,73 @@
 import os
 import base64
 import tempfile
-import logging
-import datetime
-import shutil
-import time
-import subprocess
 from celery import shared_task
-from transformers import pipeline
-import torch
+from faster_whisper import WhisperModel
 
 # 로깅 설정
 logger = logging.getLogger("STT-Task")
 
-# 1. 모델 설정 (사용자가 원하는 Whisper Turbo 모델)
-MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo")
-stt_pipeline = None
+# 전역 모델 변수
+stt_model = None
+# 모델 사이즈: tiny, base, small, medium, large-v3-turbo. 
+# CPU 환경을 위해 기본값은 'medium' 또는 'small' 권장.
+MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 
 def load_stt_pipeline():
     """
-    Transformers Pipeline 로드 (어제 작업한 방식 그대로)
+    Faster-Whisper 모델을 로드합니다. (싱글톤 패턴)
+    Compute Type: int8 (CPU 성능 최적화)
     """
-    global stt_pipeline
-    try:
-        if stt_pipeline is not None:
-            return
-            
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        torch_dtype = torch.float16 if device == "cuda" else torch.float32
-        
-        logger.info(f"Loading Transformers Pipeline ({MODEL_ID}) on {device}...")
-        
-        stt_pipeline = pipeline(
-            "automatic-speech-recognition",
-            model=MODEL_ID,
-            torch_dtype=torch_dtype,
-            device=device,
-            chunk_length_s=30,
-        )
-        logger.info("Transformers Pipeline loaded successfully.")
-    except Exception as e:
-        logger.error(f"Failed to load Transformers Pipeline: {e}")
-        stt_pipeline = None
+    global stt_model
+    
+    if stt_model is not None:
+        return
 
-# 모듈 로드 시 전역 호출 제거 (실제 태스크 수행 시 로드하도록 수정)
-# load_stt_pipeline()
+    try:
+        device = "cpu"
+        # CPU에서 int8 양자화 사용 시 속도 대폭 향상
+        compute_type = "int8" 
+        
+        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device} (compute_type={compute_type})...")
+        
+        # 모델 로드 (최초 실행 시 다운로드됨)
+        stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
+        
+        logger.info("✅ Faster-Whisper loaded successfully.")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Faster-Whisper: {e}", exc_info=True)
+        stt_model = None
 
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
     """
-    STT 변환 작업 (Transformers Pipeline 사용)
+    Faster-Whisper를 사용하여 오디오(Base64)를 텍스트로 변환합니다.
+    Args:
+        audio_b64 (str): Base64 인코딩된 오디오 데이터 (헤더 포함될 수 있음)
     """
     global stt_pipeline
     
-    start_time = time.time()
-    task_id = recognize_audio_task.request.id or f"local-{datetime.datetime.now().timestamp()}"
-    logger.info(f"[{task_id}] STT Task Started")
-    
-    if stt_pipeline is None:
-        load_stt_pipeline()
-        if stt_pipeline is None:
-            return {"status": "error", "message": "Model load failed"}
-
-    input_path = None
-    output_path = None
+    # 모델 로드 (지연 로딩)
+    if stt_model is None:
+        load_stt_model()
+        if stt_model is None:
+             return {"status": "error", "message": "STT Model loading failed"}
 
     try:
         if not audio_b64:
-             return {"status": "error", "message": "Empty audio data"}
-
-        # 1. Decode Base64
-        audio_bytes = base64.b64decode(audio_b64)
+            return {"status": "error", "message": "Empty audio data"}
+            
+        # Base64 헤더 처리 (data:audio/webm;base64,...)
+        if "," in audio_b64:
+            audio_b64 = audio_b64.split(",")[1]
+            
+        try:
+            audio_bytes = base64.b64decode(audio_b64)
+        except Exception as e:
+            return {"status": "error", "message": f"Base64 decode failed: {e}"}
         
-        # 2. Save Temporary File (.webm)
+        # 임시 파일 저장 (faster-whisper는 파일 경로 입력 권장)
+        # suffix는 webm으로 가정하나, ffmpeg가 알아서 처리함
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             input_path = tmp.name
@@ -88,42 +83,33 @@ def recognize_audio_task(audio_b64: str):
             output_path
         ]
         
-        process = subprocess.run(cmd, capture_output=True, text=True)
-        if process.returncode != 0:
-            logger.error(f"[{task_id}] ffmpeg failed: {process.stderr}")
-            return {"status": "error", "message": "FFmpeg conversion failed"}
-
-        # 4. Inference
-        logger.info(f"[{task_id}] Running Inference...")
-        
-        result = stt_pipeline(
-            output_path,
-            generate_kwargs={
-                "language": "ko",
-                "task": "transcribe",
-                "max_new_tokens": 128
-            }
+        # Inference
+        # segments는 generator이므로 순회해야 실제 추론이 수행됨
+        segments, info = stt_model.transcribe(
+            temp_path, 
+            beam_size=5, 
+            language="ko", 
+            vad_filter=True, # 음성 구간 감지 활성화 (무음 제거)
+            vad_parameters=dict(min_silence_duration_ms=500)
         )
         
-        text = result.get("text", "").strip()
-        logger.info(f"[{task_id}] Result: {text}")
-
-        # 5. Hallucination Filter
-        filters = ["MBC 뉴스", "시청해 주셔서", "구독과 좋아요", "자막 제공", "SUBTITLES BY"]
-        if any(f in text for f in filters):
-            logger.warning(f"[{task_id}] Filtered: {text}")
-            text = ""
-
-        elapsed = time.time() - start_time
-        return {"status": "success", "text": text}
-
+        full_text = ""
+        for segment in segments:
+            full_text += segment.text
+        
+        full_text = full_text.strip()
+        logger.info(f"STT Success: {len(full_text)} chars. Preview: {full_text[:50]}")
+        
+        return {"status": "success", "text": full_text}
+        
     except Exception as e:
         logger.error(f"[{task_id}] Error: {e}")
         return {"status": "error", "message": str(e)}
         
     finally:
-        # Cleanup
-        for p in [input_path, output_path]:
-            if p and os.path.exists(p):
-                try: os.remove(p)
-                except: pass
+        # 임시 파일 정리
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass

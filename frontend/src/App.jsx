@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import {
   createInterview,
@@ -12,7 +13,6 @@ import {
   logout as apiLogout,
   getCurrentUser
 } from './api/interview';
-import { createClient } from "@deepgram/sdk";
 
 // Layout & UI
 import Header from './components/layout/Header';
@@ -93,7 +93,6 @@ function App() {
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-  const deepgramConnectionRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
 
@@ -326,12 +325,6 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
-  const setupDeepgram = (stream) => {
-    // Deepgram Logic Removed for Local AI Project
-    // We will use backend STT later.
-    console.log("Deepgram integration disabled.");
-  };
-
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
@@ -343,8 +336,6 @@ function App() {
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
-
-      setupDeepgram(stream);
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
@@ -507,7 +498,6 @@ function App() {
       if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
     };
   }, []);
 
