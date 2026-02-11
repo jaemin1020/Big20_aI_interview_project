@@ -77,18 +77,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
-<<<<<<< HEAD
-      - MODEL_PATH=/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf
-      - N_GPU_LAYERS=-1 # GPU 가속 활성화 (모든 레이어 오프로드)
-      - USE_GPU=true
-      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-
-=======
       - N_GPU_LAYERS=-1
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - HF_HOME=/app/models/.cache
       - DEEPFACE_HOME=/app/models/.deepface
->>>>>>> Phase_3
     depends_on:
       - redis
       - db

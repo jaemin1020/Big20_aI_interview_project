@@ -31,8 +31,5 @@ deepgram-sdk>=5.0.0
 # Data Processing
 numpy>=1.23.0,<2.0.0
 
-<<<<<<< HEAD
-=======
 # Local STT
 faster-whisper
->>>>>>> Phase_3
