@@ -72,7 +72,7 @@ class ExaoneLLM:
         target_role: str,
         context: str = "",
         examples: List[str] = None,
-        count: int = 5
+        count: int = 1
     ) -> List[str]:
         """면접 질문 생성
         
@@ -80,7 +80,7 @@ class ExaoneLLM:
             target_role (str): 직무 포지션
             context (str, optional): 추가 컨텍스트. Defaults to "".
             examples (List[str], optional): 예시 질문. Defaults to None.
-            count (int, optional): 생성할 질문 수. Defaults to 5.
+            count (int, optional): 생성할 질문 수. Defaults to 1.
             
         Returns:
             List[str]: 생성된 질문 리스트
