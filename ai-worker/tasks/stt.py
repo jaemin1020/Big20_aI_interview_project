@@ -1,29 +1,20 @@
 from celery import shared_task
-from transformers import pipeline
-import torch
+from faster_whisper import WhisperModel
 import os
 import logging
 import base64
 import tempfile
+import torch
 
 logger = logging.getLogger("STT-Task")
 
-# 전역 파이프라인 변수
-stt_pipeline = None
-MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo") 
+# 전역 모델 변수
+stt_model = None
+MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo") 
 
-def load_stt_pipeline():
+def load_stt_model():
     """
-    Whisper 파이프라인 로드
-    
-    Returns:
-        None
-    
-    Raises:
-        Exception: 파이프라인 로드 실패
-    
-    생성자: ejm
-    생성일자: 2026-02-08
+    Faster-Whisper 모델 로드
     """
     global stt_pipeline
     
@@ -58,25 +49,19 @@ def load_stt_pipeline():
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
     """
-    Transformers Pipeline을 사용한 로컬 STT Task
+    Faster-Whisper를 사용한 통합 STT Task (파일/청크)
     
     Args:
         audio_b64: Base64 encoded audio string
         
     Returns:
         dict: {"status": "success", "text": "..."}
-    
-    Raises:
-        Exception: STT 실패
-    
-    생성자: ejm
-    생성일자: 2026-02-08
     """
-    global stt_pipeline
+    global stt_model
     
-    if stt_pipeline is None:
-        load_stt_pipeline()
-        if stt_pipeline is None:
+    if stt_model is None:
+        load_stt_model()
+        if stt_model is None:
              return {"status": "error", "message": "Model loading failed"}
 
     temp_path = None
@@ -87,25 +72,30 @@ def recognize_audio_task(audio_b64: str):
         # Base64 decoding & Save to Temp File
         audio_bytes = base64.b64decode(audio_b64)
         
-        # Transformers Pipeline은 파일 경로를 입력받는 것이 안정적 (ffmpeg 사용)
+        # 파일 저장 (faster-whisper는 파일 경로 또는 binary stream 지원)
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             temp_path = tmp.name
         
         # Inference
-        # generate_kwargs={"language": "korean"} 추가하여 한국어 강제 가능 (선택 사항)
-        result = stt_pipeline(
+        segments, info = stt_model.transcribe(
             temp_path, 
-            generate_kwargs={"language": "korean"}
+            beam_size=5, 
+            language="ko", # 한국어 강제
+            vad_filter=True # 음성 활동 감지 사용
         )
         
-        text = result.get("text", "").strip()
-        logger.info(f"STT Pipeline Success: {len(text)} chars")
+        full_text = ""
+        for segment in segments:
+            full_text += segment.text
         
-        return {"status": "success", "text": text}
+        full_text = full_text.strip()
+        logger.info(f"STT Success: {len(full_text)} chars")
+        
+        return {"status": "success", "text": full_text}
         
     except Exception as e:
-        logger.error(f"STT Pipeline Error: {e}", exc_info=True)
+        logger.error(f"STT Error: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
         
     finally:
