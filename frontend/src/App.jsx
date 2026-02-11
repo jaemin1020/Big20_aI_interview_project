@@ -69,6 +69,7 @@ function App() {
   const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
   const [parsedResumeData, setParsedResumeData] = useState(null);
+  const [visionData, setVisionData] = useState(null); // [NEW] Vision Analysis Data
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -302,19 +303,8 @@ function App() {
           setTranscript(prev => prev + ' ' + data.text);
 
         } else if (data.type === 'vision_analysis') {
-          // [NEW] MediaPipe 통합 데이터 수신
-          // data.data { emotion, gaze, head, scores: {smile, anxiety...} }
-          const result = data.data;
-
-          // 1. 디버깅용 로그 (나중에 UI 연결 시 제거 가능)
-          // console.log(`[Vision] Emo:${result.emotion} Gaze:${result.gaze} Head:${result.head}`);
-
-          // 2. 점수/상태 업데이트 (필요 시 State에 저장)
-          // 예: setVisionState(result);
-
-          if (result.emotion === 'anxious') {
-            console.log("😟 긴장 감지! Smile Score:", result.scores.smile);
-          }
+          // [NEW] Update Vision Data State
+          setVisionData(data.data);
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -626,6 +616,7 @@ function App() {
             onFinish={finishInterview}
             videoRef={videoRef}
             isLoading={isLoading}
+            visionData={visionData} // [NEW] Pass vision data
           />
         )}
 
