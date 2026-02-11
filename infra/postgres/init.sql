@@ -29,10 +29,18 @@ END;
 $$ language 'plpgsql';
 
 -- Evaluation_Reports의 updated_at 자동 업데이트 트리거
-CREATE TRIGGER update_evaluation_reports_updated_at 
-    BEFORE UPDATE ON evaluation_reports
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- (SQLModel이 테이블을 생성한 후에 수동으로 실행하거나, DB 재시작 시 안전하게 실행되도록 변경)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'evaluation_reports') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_evaluation_reports_updated_at') THEN
+            CREATE TRIGGER update_evaluation_reports_updated_at 
+                BEFORE UPDATE ON evaluation_reports
+                FOR EACH ROW
+                EXECUTE FUNCTION update_updated_at_column();
+        END IF;
+    END IF;
+END $$;
 
 -- 6. 샘플 데이터 삽입 (선택적 - 개발용)
 -- INSERT INTO job_postings (title, description, requirements, position)
