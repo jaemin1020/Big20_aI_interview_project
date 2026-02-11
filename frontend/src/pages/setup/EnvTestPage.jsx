@@ -21,50 +21,60 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
     let audioContext;
     let analyser;
     let microphone;
-    let javascriptNode;
+    let animationFrameId; // [NEW] animation frame ID
     let stream;
 
     const startAudioAnalysis = async () => {
       if (step !== 'audio') return;
 
       try {
+        console.log("🎤 Requesting Microphone Access...");
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Microphone Access Granted");
 
-        // 1. Audio Level Visualization
+        // 1. Audio Level Visualization (Modern Approach)
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // 브라우저 정책으로 Suspended 상태일 경우 Resume
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
         analyser.smoothingTimeConstant = 0.8;
         analyser.fftSize = 1024;
 
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
+        microphone.connect(analyser); // Source -> Analyser
 
-        javascriptNode.onaudioprocess = () => {
-          const array = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(array);
-          let values = 0;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-          const length = array.length;
-          for (let i = 0; i < length; i++) {
-            values += array[i];
+        const updateLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
           }
 
-          const average = values / length;
-          const level = Math.min(100, Math.max(0, average * 2));
+          const average = sum / dataArray.length;
+          // 시각화 감도 조절 (x2.5)
+          const level = Math.min(100, Math.max(0, average * 2.5));
+
           setAudioLevel(level);
+          animationFrameId = requestAnimationFrame(updateLevel);
         };
 
+        // 애니메이션 시작
+        updateLevel();
+
         // 2. Deepgram STT Setup (Removed for Local AI Project)
-        // Only Audio Level Visualization is used to verify microphone.
-        setIsRecognitionOk(true); // 마이크가 켜지면 일단 통과 가능하게 설정
+        setIsRecognitionOk(true);
 
       } catch (err) {
-        console.error("Microphone access failed:", err);
-        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
+        console.error("❌ Microphone access failed:", err);
+        alert("마이크 접근이 차단되었거나 찾을 수 없습니다. 설정에서 권한을 확인해주세요.");
       }
     };
 
@@ -73,15 +83,14 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
     }
 
     return () => {
-      // Clean up Audio Context
-      if (javascriptNode) javascriptNode.disconnect();
+      // Clean up
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (microphone) microphone.disconnect();
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
 
       // Clean up Deepgram & MediaRecorder (Removed)
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      // if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
 
       // Stop Tracks
       if (stream) stream.getTracks().forEach(track => track.stop());
