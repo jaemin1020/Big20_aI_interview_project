@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
-import { createClient } from "@deepgram/sdk";
+// import { createClient } from "@deepgram/sdk";
 
 const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const step = envTestStep;
@@ -58,50 +58,9 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
           setAudioLevel(level);
         };
 
-        // 2. Deepgram STT Setup
-        const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-        if (apiKey) {
-          const deepgram = createClient(apiKey);
-          const connection = deepgram.listen.live({
-            model: "nova-2",
-            language: "ko",
-            smart_format: true,
-            encoding: "linear16",
-            sample_rate: 16000,
-            interim_results: true,
-          });
-
-          connection.on("Open", () => {
-            console.log("Deepgram Connected for Test");
-
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            mediaRecorder.addEventListener('dataavailable', (event) => {
-              if (event.data.size > 0 && connection.getReadyState() === 1) {
-                connection.send(event.data);
-              }
-            });
-            mediaRecorder.start(250);
-            mediaRecorderRef.current = mediaRecorder;
-          });
-
-          connection.on("Results", (result) => {
-            const channel = result.channel;
-            if (channel && channel.alternatives && channel.alternatives[0]) {
-              const text = channel.alternatives[0].transcript;
-              if (text && text.trim().length > 0) {
-                setTranscript(prev => {
-                  // 간단한 이어붙이기 (실제로는 interim 처리 등 더 복잡할 수 있음)
-                  if (result.is_final) return prev + ' ' + text;
-                  return prev;
-                });
-                // 텍스트가 조금이라도 인식되면 성공으로 간주
-                if (result.is_final) setIsRecognitionOk(true);
-              }
-            }
-          });
-
-          deepgramConnectionRef.current = connection;
-        }
+        // 2. Deepgram STT Setup (Removed for Local AI Project)
+        // Only Audio Level Visualization is used to verify microphone.
+        setIsRecognitionOk(true); // 마이크가 켜지면 일단 통과 가능하게 설정
 
       } catch (err) {
         console.error("Microphone access failed:", err);
@@ -120,9 +79,9 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
 
-      // Clean up Deepgram & MediaRecorder
+      // Clean up Deepgram & MediaRecorder (Removed)
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
+      // if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
 
       // Stop Tracks
       if (stream) stream.getTracks().forEach(track => track.stop());
