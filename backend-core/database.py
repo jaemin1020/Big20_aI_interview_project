@@ -61,6 +61,23 @@ def init_db():
             
             logger.info("✅ 데이터베이스 테이블 생성 및 연결 성공")
             
+            # 트리거 생성 (테이블이 생성된 후 실행)
+            with Session(engine) as session:
+                session.exec(text("""
+                    DO $$ 
+                    BEGIN 
+                        IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'evaluation_reports') THEN
+                            IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_evaluation_reports_updated_at') THEN
+                                CREATE TRIGGER update_evaluation_reports_updated_at 
+                                BEFORE UPDATE ON evaluation_reports
+                                FOR EACH ROW
+                                EXECUTE FUNCTION update_updated_at_column();
+                            END IF;
+                        END IF;
+                    END $$;
+                """))
+                session.commit()
+            
             # 초기 데이터 시딩
             seed_initial_data()
             return
