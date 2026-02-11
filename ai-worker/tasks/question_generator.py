@@ -70,50 +70,9 @@ PROMPT_TEMPLATE = """[|system|]
 # -----------------------------------------------------------
 # [3. 질문 생성 핵심 함수]
 # -----------------------------------------------------------
-def generate_human_like_question(exaone, name, position, stage, guide, context_list):
-    """
-    ExaoneLLM 인스턴스를 사용하여 질문 생성
-    """
-    if not context_list:
-        return f"❌ (관련 내용을 찾지 못해 질문을 생성할 수 없습니다)"
-
-    texts = [item['text'] for item in context_list] if isinstance(context_list[0], dict) else context_list
-    context_text = "\n".join([f"- {txt}" for txt in texts])
-    
-    try:
-        # ExaoneLLM의 generate_questions 메서드 활용 (단일 질문 생성을 위해 count=1)
-        # 보다 정교한 프롬프트를 위해 직접 generate 호출 가능하나, 여기서는 일관성을 위해 랩핑
-        system_msg = f"당신은 15년 차 베테랑 {position} 전문 면접관이다. 지금은 면접이 한창 진행 중인 상황이다."
-        user_msg = f"""지원자 {name}님에게 {stage} 단계의 면접 질문을 던지세요.
-
-[평가 의도 - 반드시 이 관점으로 질문할 것]
-{guide}
-
-[지원자 이력서 근거]
-{context_text}
-
-[요구사항]
-1. 시작은 반드시 "{name}님," 으로 부를 것.
-2. **이력서에 나온 구체적인 프로젝트명/회사명/기술명을 반드시 언급**할 것.
-   예: "{name}님, 이력서를 보니 오픈소스 기반 침입 탐지 프로젝트를 하셨네요~"
-3. **평가 의도(guide)에 맞는 질문**을 할 것.
-   - 예: guide가 "구체적인 역할과 기여도"라면 → "이 프로젝트에서 달성한 구체적인 역할과 기여도가 어떻게 되나요?"
-4. 반드시 **150자 이내(두 문장 이내)**로 짧고 명확하게 물어볼 것.
-5. [프로젝트], [회사명] 같은 자리표시자를 절대 사용하지 말 것.
-"""
-
-        prompt = exaone._create_prompt(system_msg, user_msg)
-        output = exaone.llm(
-            prompt,
-            max_tokens=512,
-            stop=["[|endofturn|]", "[|user|]"],
-            temperature=0.4,
-            echo=False
-        )
-        return output['choices'][0]['text'].strip()
-    except Exception as e:
-        logger.error(f"질문 생성 실패: {e}")
-        return f"면접을 이어가겠습니다. {name}님, 다음 질문입니다."
+# generate_human_like_question 함수는 더 이상 사용되지 않으므로 제거합니다.
+# 대신 ExaoneLLM 클래스에 invoke 메서드를 추가하고,
+# generate_next_question_task에서 PROMPT_TEMPLATE과 invoke 메서드를 사용합니다.
 
 # -----------------------------------------------------------
 # [4. Celery Task] - 기존 일괄 생성 태스크 (필요 시 유지)
@@ -282,14 +241,25 @@ def generate_next_question_task(interview_id: int):
 
             logger.info(f"Target Candidate Name: {candidate_name}, Role: {target_role}")
             
-            # AI 질문 생성 실행
-            content = exaone.generate_human_like_question(
-                name=candidate_name,
+            # 1. 컨텍스트 텍스트 조립
+            context_text = "\n".join([f"- {c['text']}" for c in contexts]) if contexts else "이력서 근거 부족"
+            
+            # 2. PROMPT_TEMPLATE을 사용하여 최종 프롬프트 생성 (사용자 요청 반영)
+            full_prompt = PROMPT_TEMPLATE.format(
                 position=target_role,
+                name=candidate_name,
                 stage=stage_name,
                 guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                context_list=contexts
+                context=context_text
             )
+            
+            logger.info(f"Generated Full Prompt length: {len(full_prompt)}")
+            
+            # 3. AI 질문 생성 실행 (엔진에게는 생성만 위임)
+            content = exaone.invoke(full_prompt, max_tokens=256, temperature=0.6)
+            
+            if not content:
+                content = f"{candidate_name}님, 준비하신 내용을 토대로 해당 역량에 대해 더 말씀해주실 수 있나요?"
             
             # 시나리오의 카테고리를 DB Enum에 맞게 매핑
             category_raw = next_stage_data.get("category", "technical")
