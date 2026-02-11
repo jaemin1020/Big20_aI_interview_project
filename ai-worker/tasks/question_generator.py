@@ -20,8 +20,8 @@ logger = logging.getLogger("AI-Worker-QuestionGen")
 # -----------------------------------------------------------
 # [1. 모델 및 경로 설정]
 # -----------------------------------------------------------
-local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+docker_path = "/app/ai_models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 model_path = local_path if os.path.exists(local_path) else docker_path
 

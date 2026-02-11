@@ -60,7 +60,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     
     # 🔗 즉시 다음 질문 생성 트리거 (분석 완료를 기다리지 않고 바로 생성 시작)
     try:
-        from tasks.question_generation import generate_next_question_task
+        from tasks.question_generator import generate_next_question_task
         interview_id = None
         with Session(engine) as session:
             t = session.get(Transcript, transcript_id)
@@ -68,8 +68,8 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
                 interview_id = t.interview_id
         
         if interview_id:
-            generate_next_question_task.delay(interview_id)
-            logger.info(f"🚀 [IMMEDIATE] delay() called for Interview {interview_id}")
+            generate_next_question_task.apply_async(args=[interview_id], queue='gpu_queue')
+            logger.info(f"🚀 [IMMEDIATE] apply_async(queue='gpu_queue') called for Interview {interview_id}")
         else:
             logger.error(f"Could not find interview_id for transcript {transcript_id}")
     except Exception as e:
