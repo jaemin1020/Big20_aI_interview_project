@@ -16,7 +16,11 @@ def load_stt_model():
     """
     Faster-Whisper 모델 로드
     """
+<<<<<<< HEAD
     global stt_model
+=======
+    global stt_pipeline
+>>>>>>> main
     
     # [최적화] GPU 워커(질문 생성 전용, N_GPU_LAYERS=-1)는 STT 모델을 로드할 필요가 없음
     gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
