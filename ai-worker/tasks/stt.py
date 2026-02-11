@@ -46,6 +46,7 @@ def load_stt_pipeline():
 # 초기 로드
 load_stt_pipeline()
 
+
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
     """

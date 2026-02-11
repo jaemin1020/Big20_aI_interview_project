@@ -136,8 +136,9 @@ async def upload_resume(
         
         # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
         celery_app.send_task(
-            "parse_resume_pdf",
-            args=[new_resume.id, str(file_path)]
+            "tasks.resume_pipeline.process_resume_pipeline",
+            args=[new_resume.id, str(file_path)],
+            queue='gpu_queue'
         )
         logger.info(f"Resume parsing task sent for ID={new_resume.id}")
         

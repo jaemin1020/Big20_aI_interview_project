@@ -45,14 +45,24 @@ class ExaoneLLM:
 
         # Llama.cpp 모델 로드
         try:
+            # 환경변수에서 GPU 레이어 설정 로드 (기본값 -1: 전체 GPU 사용)
+            gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
+            logger.info(f"⚙️ Configured N_GPU_LAYERS: {gpu_layers}")
+
             self.llm = Llama(
                 model_path=MODEL_PATH,
+<<<<<<< HEAD
                 n_gpu_layers=-1,      # 가능한 모든 레이어를 GPU로 오프로드
                 n_ctx=2048,           # 컨텍스트 윈도우 크기 (메모리 절약)
                 n_batch=128,          # 배치 크기 (CPU 반응성 향상)
+=======
+                n_gpu_layers=gpu_layers,
+                n_ctx=4096,           # 컨텍스트 윈도우 크기
+                n_batch=512,          # 배치 크기
+>>>>>>> Phase_3
                 verbose=False          # 로딩 로그 출력
             )
-            logger.info("✅ EXAONE GGUF Model Initialized")
+            logger.info(f"✅ EXAONE GGUF Model Initialized (GPU Layers: {gpu_layers})")
         except Exception as e:
             logger.error(f"❌ 모델 로드 실패: {e}")
             raise e
@@ -65,7 +75,7 @@ class ExaoneLLM:
 
     def generate_questions(
         self,
-        position: str,
+        target_role: str,
         context: str = "",
         examples: List[str] = None,
         count: int = 1
@@ -73,7 +83,7 @@ class ExaoneLLM:
         """면접 질문 생성
         
         Args:
-            position (str): 직무 포지션
+            target_role (str): 직무 포지션
             context (str, optional): 추가 컨텍스트. Defaults to "".
             examples (List[str], optional): 예시 질문. Defaults to None.
             count (int, optional): 생성할 질문 수. Defaults to 1.
@@ -92,48 +102,56 @@ class ExaoneLLM:
         
         context_str = f"\n\n추가 컨텍스트:\n{context}" if context else ""
         
-        system_msg = "당신은 한국 기업의 면접관이자 채용 전문가입니다. 주어진 정보를 바탕으로 정중하고 핵심적인 면접 질문을 생성하세요."
-        user_msg = f"""다음 정보를 바탕으로 {position} 직무 면접 질문 {count}개를 생성하세요.
-
+        system_msg = "당신은 지원자의 이력서를 꼼꼼히 읽고 날카로운 질문을 던지는 면접관입니다. 일반적인 질문은 배제하고, 반드시 이력서에 기재된 구체적인 사실(프로젝트, 경력, 학력 등)을 근거로 질문하세요."
+        user_msg = f"""[지원 직무]: {target_role}
+[지원자 이력서 내용]: 
 {context_str}
 
-기존 질문 예시:
-{few_shot}
+위 지원자의 이력서 내용을 바탕으로 맞춤형 면접 질문 {count}개를 생성하세요.
 
-[요구사항]
-1. 반드시 한국어로 작성하세요.
-2. 번호나 불필요한 기호 없이 질문 내용만 한 줄씩 작성하세요.
-3. 기술적인 깊이가 있는 질문을 포함하세요.
-4. 총 {count}개의 질문을 생성하세요.
+[필수 요구사항]
+1. **이력서에 없는 내용은 묻지 마세요.** (예: 하지도 않은 클라우드 경험을 묻는 등)
+2. 반드시 **"이력서에 ~라고 기재하셨는데", "~ 프로젝트에서 ~를 하셨다고 했는데"**와 같이 이력서 내용을 직접 언급하며 질문을 시작하세요.
+3. 지원자의 **실제 기술 스택과 활동**에 집중해서 질문하세요.
+4. 질문은 한 줄에 하나씩, 총 {count}개를 작성하세요.
+5. 질문 이외의 사족은 생략하세요.
 
-생성된 질문:"""
+질문 리스트:"""
 
         prompt = self._create_prompt(system_msg, user_msg)
         
         try:
             output = self.llm(
                 prompt,
+<<<<<<< HEAD
                 max_tokens=300,
                 stop=["[|endofturn|]", "[|user|]", "생성된 질문:"],
+=======
+                max_tokens=1024,
+                stop=["[|endofturn|]", "[|user|]"],
+>>>>>>> Phase_3
                 temperature=0.7,
                 top_p=0.9,
                 echo=False
             )
             
-            response_text = output['choices'][0]['text']
+            response_text = output['choices'][0]['text'].strip()
             
-            # 후처리: 줄별 분리 및 정제
+            # 후처리 개선
             questions = []
             for line in response_text.split('\n'):
                 line = line.strip()
-                if not line: continue
+                if not line or len(line) < 5: continue
                 
-                # 번호 제거 (1. 질문 -> 질문)
+                # 불필요한 서두 제거
                 line = re.sub(r'^\d+[\.\)]\s*', '', line)
-                line = line.strip('"\'')
+                line = re.sub(r'^[-\*\+]\s*', '', line) 
+                line = line.strip('"\' ')
                 
-                if len(line) > 10 and '?' in line: # 최소 길이 및 질문 형태 확인
+                if '?' in line:
                     questions.append(line)
+            
+            logger.info(f"✅ AI 맞춤형 질문 생성 성공: {len(questions)}개")
             
             # 부족하면 fallback
             if len(questions) < count:
@@ -144,7 +162,7 @@ class ExaoneLLM:
             
         except Exception as e:
             logger.error(f"질문 생성 중 오류: {e}")
-            return self._get_fallback_questions(position, count)
+            return self._get_fallback_questions(target_role, count)
 
     def generate_human_like_question(
         self,
@@ -297,11 +315,11 @@ class ExaoneLLM:
             logger.error(f"평가 중 오류: {e}")
             return {"technical_score": 3, "communication_score": 3, "feedback": "평가 중 시스템 오류 발생"}
 
-    def _get_fallback_questions(self, position: str, count: int) -> List[str]:
+    def _get_fallback_questions(self, target_role: str, count: int) -> List[str]:
         """기본 질문 생성
         
         Args:
-            position (str): 직무 포지션
+            target_role (str): 직무 포지션
             count (int): 생성할 질문 수
             
         Returns:
@@ -311,7 +329,7 @@ class ExaoneLLM:
         생성일자: 2026-02-07
         """
         base_qs = [
-            f"{position} 직무에 지원하게 된 구체적인 동기는 무엇인가요?",
+            f"{target_role} 직무에 지원하게 된 구체적인 동기는 무엇인가요?",
             "본인의 가장 큰 강점과 약점은 무엇이라고 생각하나요?",
             "입사 후 3년, 5년, 10년 후의 커리어 계획은 무엇인가요?",
             "동료와 의견 충돌이 발생했을 때 어떻게 대처하시나요?",
@@ -330,10 +348,5 @@ def get_exaone_llm() -> ExaoneLLM:
     """
     return ExaoneLLM()
 
-# Warmup
-try:
-    if os.path.exists(MODEL_PATH):
-        logger.info("🔥 GGUF Model Warmup...")
-        _ = get_exaone_llm()
-except Exception as e:
-    logger.warning(f"Warmup skipped: {e}")
+# [최적화] 모듈 임포트 시 즉시 로딩(Warmup) 제거. 
+# 이제 각 워커가 실제 태스크를 수행할 때 필요에 따라 로드함.

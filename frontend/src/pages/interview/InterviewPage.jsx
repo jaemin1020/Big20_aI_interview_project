@@ -11,7 +11,8 @@ const InterviewPage = ({
   toggleRecording,
   nextQuestion,
   onFinish,
-  videoRef
+  videoRef,
+  isLoading
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
@@ -39,8 +40,36 @@ const InterviewPage = ({
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
   return (
-    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '0.5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--header-height))', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '20px',
+          color: 'white'
+        }}>
+          <div className="spinner" style={{ marginBottom: '1.5rem', width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <h3 style={{ fontSize: '1.5rem', fontWeight: '700' }}>AI 면접관이 다음 질문을 생각 중입니다...</h3>
+          <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>이력서 내용을 바탕으로 질문을 생성하고 있습니다. 잠시만 기다려주세요.</p>
+          <style>{`
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          `}</style>
+        </div>
+      )}
 
       {/* Rectangular Timer Box: White background with Icon */}
       <div style={{
@@ -98,30 +127,30 @@ const InterviewPage = ({
 
           {/* Right: Video Area */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
+            <div style={{ position: 'relative', width: '100%', paddingTop: '75%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
               <div style={{
                 position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                padding: '6px 14px',
+                top: '0.8rem',
+                right: '0.8rem',
+                padding: '4px 10px',
                 borderRadius: '50px',
-                background: 'rgba(0,0,0,0.6)',
+                background: 'rgba(0,0,0,0.5)',
                 backdropFilter: 'blur(10px)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                border: '1px solid rgba(255,255,255,0.2)'
+                gap: '6px',
+                border: '1px solid rgba(255,255,255,0.1)'
               }}>
                 <div style={{
-                  width: '10px',
-                  height: '10px',
+                  width: '6px',
+                  height: '6px',
                   borderRadius: '50%',
                   background: isRecording ? '#ef4444' : '#10b981',
                   boxShadow: isRecording ? '0 0 8px #ef4444' : 'none'
@@ -218,14 +247,12 @@ const InterviewPage = ({
           >
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}
           </PremiumButton>
-          {currentIdx < totalQuestions - 1 && (
-            <PremiumButton
-              onClick={nextQuestion}
-              style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
-            >
-              다음 질문
-            </PremiumButton>
-          )}
+          <PremiumButton
+            onClick={nextQuestion}
+            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+          >
+            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
+          </PremiumButton>
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (
               <div style={{
