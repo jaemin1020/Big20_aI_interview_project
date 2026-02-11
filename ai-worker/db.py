@@ -79,6 +79,17 @@ class SectionType(str, Enum):
     CAREER_PROJECT = "career_project"
     COVER_LETTER = "cover_letter"
 
+# [추가: 2026-02-10] resume_embedding.py 호환성 확보
+class ResumeSectionType(str, Enum):
+    PROFILE = "profile"
+    EXPERIENCE = "experience"
+    PROJECT = "project"
+    EDUCATION = "education"
+    SELF_INTRODUCTION = "self_introduction"
+    CERTIFICATION = "certification"
+    LANGUAGE = "language"
+    SKILL = "skill"
+
 class ResumeChunk(SQLModel, table=True):
     __tablename__ = "resume_chunks"
     
@@ -88,6 +99,21 @@ class ResumeChunk(SQLModel, table=True):
     content: str
     embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
     section_type: Optional[SectionType] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ResumeSectionEmbedding(SQLModel, table=True):
+    """이력서 섹션별 임베딩 테이블"""
+    __tablename__ = "resume_section_embeddings"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    resume_id: int = Field(foreign_key="resumes.id", index=True)
+    section_type: ResumeSectionType
+    section_index: int
+    section_id: str
+    content: str
+    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
+    section_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
+    si_type: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Interview(SQLModel, table=True):
