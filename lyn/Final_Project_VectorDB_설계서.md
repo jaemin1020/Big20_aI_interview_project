@@ -10,8 +10,8 @@
 
 * **지원자 데이터**: 이력서 텍스트 기반 성과 및 역량 데이터
 * **평가 지식 기반**: 직무별 면접 질문 예시 및 평가 루브릭
-* **RAG 파이프라인**: 검색 컨텍스트 제공을 위한 벡터 검색 엔진 (`tasks/rag_retrieval.py`)
-* **저장 거점**: PostgreSQL pgvector 기반의 벡터 저장소 (`tasks/pgvector_store.py`)
+* **RAG 파이프라인**: LangChain `Retriever` 인터페이스를 통한 벡터 검색 엔진 (`tasks/rag_retrieval.py`)
+* **저장 거점**: LangChain `PGVector` 기반의 벡터 저장소 (`tasks/pgvector_store.py`)
 
 ---
 
@@ -90,9 +90,9 @@ VectorDB는 LLM 응답 생성을 위한 **'외부 지식 저장소(Knowledge Bas
 
 이 모듈은 AI 모델을 메모리에 로드하고 텍스트를 수학적 벡터로 변환하는 순수 연산 로직을 담당합니다.
 
-* **모델 기동**: `langchain_huggingface`를 통해 `KURE-v1` 모델을 로드하며, GPU가 가용할 경우 `cuda` 장치에 상주시켜 연산 속도를 극대화합니다.
-* **벡터 변환**: `embed_documents` 메서드를 사용하여 한 번의 호출로 여러 청크를 일괄 변환(Batch Processing)함으로써 모델 추론 오버헤드를 최소화합니다.
-* **정규화(Normalization)**: 출력된 1024차원 벡터를 L2 정규화하여, 고가의 코사인 유사도 연산을 단순 내적 연산으로 대체 가능하게 최적화합니다.
+* **모델 기동**: `langchain_huggingface`를 통해 `KURE-v1` 모델을 로드하며, GPU 가용 시 `cuda` 장치를 우선 할당합니다.
+* **벡터 변환**: LangChain의 `Embeddings` 인터페이스를 구현하여, 체인 내부에서 투명하게 벡터 변환을 수행합니다.
+* **정규화(Normalization)**: `normalize_embeddings=True` 설정을 통해 코사인 유사도 연산에 최적화된 결과물을 산출합니다.
 
 ### 5.2 비동기 오케스트레이터 (`tasks/resume_embedding.py`)
 
@@ -102,19 +102,16 @@ VectorDB는 LLM 응답 생성을 위한 **'외부 지식 저장소(Knowledge Bas
 * **대표 벡터(Representative Vector)**: 전체 청크 중 첫 번째 청크(보통 헤더 및 요약)를 추출하여 `Resumes` 테이블의 `embedding` 컬럼에 별도로 저장, 빠른 필터링에 활용합니다.
 * **상태 추적 (Status Tracking)**: 작업의 시작과 성공/실패 여부를 `processing_status` 컬럼에 실시간 업데이트하여 시스템 안정성을 확보합니다.
 
-### 5.3 최종 벡터 저장소 스키마 (`tasks/pgvector_store.py`)
-
-변환된 결과값은 PostgreSQL의 `pgvector` 확장을 사용한 전용 테이블에 영속화됩니다.
+변환된 결과값은 LangChain 전용 테이블 스키마에 영속화됩니다.
 
 ```sql
-CREATE TABLE IF NOT EXISTS resume_embeddings (
-    id SERIAL PRIMARY KEY,            -- 청크 식별자
-    resume_id INTEGER,                -- 원본 이력서 연계 ID
-    chunk_type TEXT,                  -- 데이터 성격 (Education, Project 등)
-    chunk_text TEXT,                  -- [Prefix]가 포함된 원문
-    metadata JSONB,                   -- 상세 필터링용 속성 (JSON 데이터)
-    embedding vector(1024),           -- 1024차원의 실수 벡터 데이터
-    created_at TIMESTAMP DEFAULT...   -- 적재 타임스탬프
+-- LangChain PGVector 자동 생성 테이블 구조
+CREATE TABLE langchain_pg_embedding (
+    id uuid PRIMARY KEY,
+    collection_id uuid REFERENCES langchain_pg_collection(uuid),
+    embedding vector(1024),
+    document text, -- 원본 청크 텍스트
+    metadata jsonb -- resume_id, category 등 포함
 );
 ```
 
@@ -152,9 +149,9 @@ CREATE TABLE IF NOT EXISTS resume_embeddings (
 #### **3) 분리 설계의 기대 효과**
 
 * **검색 노이즈 제거 (Precision Filtering)**:
-  - **전략**: 기술 면접 단계에서는 `project`, `skill` 카테고리만 검색 범위로 한정하고 `narrative`(자소서) 청크를 의도적으로 배제합니다.
-  - **이유**: 자기소개서의 추상적인 표현(예: "열정적인 개발자")이 기술적 성취를 묻는 쿼리에 간섭하여 질문의 날카로움을 무디게 만드는 것을 방지하기 위함입니다.
-  - **결과**: LLM이 구체적인 기술 스택과 수치화된 성과 데이터에만 집중하게 하여, 할루시네이션(환각)을 방지하고 고해상도의 개인화 질문을 생성합니다.
+  - **전략**: 면접 단계별 `Retriever` 생성 시 `filter` 파라미터를 동적으로 구성하여 필요한 카테고리만 검색 범위로 한정합니다.
+  - **이유**: 자기소개서 등의 추상적 표현이 기술적 성취 쿼리에 간섭하는 것을 방지하여 질문의 예리함을 유지합니다.
+  - **결과**: `LCEL` 체인 내에서 고순도 컨텍스트가 주입되어 할루시네이션 방지 및 초개인화 면접이 실현됩니다.
 * **멀티 테넌시 지원 (Multi-tenancy Isolation)**:
   - `resume_id` 기반의 물리/논리적 격리를 통해 수천 명의 지원자가 동시에 면접을 진행하더라도 데이터 유출이나 간섭 없이 독립적인 검색 컨텍스트를 보장합니다.
 
