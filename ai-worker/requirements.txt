@@ -9,6 +9,7 @@ redis>=5.0.3
 
 # Database
 sqlmodel>=0.0.16
+psycopg2-binary>=2.9.9
 psycopg[binary]>=3.2.0
 pgvector>=0.2.0
 
@@ -59,5 +60,3 @@ ipykernel>=6.29.0
 
 # STT Optimization
 faster-whisper>=1.0.3
-
-
