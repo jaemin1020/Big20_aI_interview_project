@@ -13,10 +13,10 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 class InterviewStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    SCHEDULED = "SCHEDULED"
+    LIVE = "LIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 class QuestionCategory(str, Enum):
     TECHNICAL = "technical"
@@ -72,6 +72,9 @@ class Resume(SQLModel, table=True):
         sa_column=Column(JSONB),
         description="경력, 학력, 기술스택 등 구조화된 데이터"
     )
+    
+    # 지원직무 (이력서에서 자동 추출)
+    target_position: Optional[str] = Field(default=None, description="지원직무 (이력서 헤더에서 추출)")
     
     # 벡터 임베딩 (768차원 - 이력서 전체 내용)
     embedding: Any = Field(

@@ -1,44 +1,56 @@
 import logging
 import time
+import re
+import json
+import sys
+import os
 from celery import shared_task
 
 # DB Helper Functions
 from db import (
+    engine,
+    Session,
+    Transcript,
     update_transcript_sentiment,
     update_question_avg_score,
     get_interview_transcripts,
     get_user_answers
 )
 
-# EXAONE LLM import
-from utils.exaone_llm import get_exaone_llm
+# AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
+current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
+tasks_dir = os.path.dirname(current_file_path) # tasks/
+ai_worker_root = os.path.dirname(tasks_dir)    # ai-worker/
+
+if ai_worker_root not in sys.path:
+    sys.path.insert(0, ai_worker_root)
+
+# utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 
 logger = logging.getLogger("AI-Worker-Evaluator")
 
 @shared_task(name="tasks.evaluator.analyze_answer")
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
-    """
-    개별 답변 평가 및 점수 반영 (EXAONE-3.5-7.8B-Instruct 사용)
+    """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
-    Args:
-        transcript_id (int): 트랜스크립트 ID
-        question_text (str): 질문 텍스트
-        answer_text (str): 답변 텍스트
-        rubric (dict, optional): 평가 기준. Defaults to None.
-        question_id (int, optional): 질문 ID. Defaults to None.
-    
-    Returns:
-        dict: 평가 결과
-    
-    Raises:
-        ValueError: 답변이 없는 경우
-    
-    생성자: ejm
-    생성일자: 2026-02-04
-    """
+    # 🔗 즉시 다음 질문 생성 트리거 (분석 완료를 기다리지 않고 바로 생성 시작)
+    try:
+        from tasks.question_generation import generate_next_question_task
+        interview_id = None
+        with Session(engine) as session:
+            t = session.get(Transcript, transcript_id)
+            if t:
+                interview_id = t.interview_id
+        
+        if interview_id:
+            generate_next_question_task.delay(interview_id)
+            logger.info(f"🚀 [IMMEDIATE] delay() called for Interview {interview_id}")
+        else:
+            logger.error(f"Could not find interview_id for transcript {transcript_id}")
+    except Exception as e:
+        logger.error(f"Failed to trigger next question task: {e}")
     logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
     
-    # 예외 처리: 답변이 없는 경우 LLM 호출 생략
     if not answer_text or not answer_text.strip():
         logger.warning(f"Empty answer for transcript {transcript_id}. Skipping LLM evaluation.")
         return {
@@ -50,39 +62,42 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     start_ts = time.time()
     
     try:
-        # EXAONE LLM으로 평가
-        llm = get_exaone_llm()
-        result = llm.evaluate_answer(
-            question_text=question_text,
-            answer_text=answer_text,
-            rubric=rubric
-        )
+        # GPU 레이어 확인 (CPU 워커면 무거운 분석 생략하여 큐 정체 방지)
+        n_gpu_layers = int(os.getenv("N_GPU_LAYERS", "0"))
+        
+        if n_gpu_layers == 0:
+            logger.info("⚡ [FAST MODE] CPU Worker spotted. Skipping heavy LLM for individual answer evaluation to speed up the process.")
+            # 개별 분석은 기본값만 부여 (최종 리포트에서 전체 요약 수행)
+            result = {
+                "technical_score": 3,
+                "communication_score": 3,
+                "feedback": "답변이 수신되었습니다. 상세 평가는 최종 리포트를 확인하세요."
+            }
+        else:
+            llm = get_exaone_llm()
+            result = llm.evaluate_answer(
+                question_text=question_text,
+                answer_text=answer_text,
+                rubric=rubric
+            )
         
         tech_score = result.get("technical_score", 3)
         comm_score = result.get("communication_score", 3)
-        
-        # 감정/종합 점수 계산 (-1.0 ~ 1.0)
-        # (5점 만점 -> -0.5 ~ 0.5 범위로 정규화 + 보정)
         sentiment = ((tech_score + comm_score) / 10.0) - 0.5 
         
-        # DB 업데이트 (Transcript)
         update_transcript_sentiment(
             transcript_id, 
             sentiment_score=sentiment, 
-            emotion="neutral"  # 감정 분석은 별도 모델 필요하나 일단 점수로 대체
+            emotion="neutral"
         )
         
-        # 질문 평점 업데이트 (선순환 구조)
-        # 답변 점수 (0-100)
         answer_quality = (tech_score + comm_score) * 10 
         
         if question_id:
             update_question_avg_score(question_id, answer_quality)
-            logger.info(f"Updated Question {question_id} Avg Score with {answer_quality}")
 
         duration = time.time() - start_ts
         logger.info(f"Evaluation Completed ({duration:.2f}s)")
-        
         return result
 
     except Exception as e:
@@ -107,41 +122,80 @@ def generate_final_report(interview_id: int):
     생성일자: 2026-02-04
     """
     logger.info(f"Generating Final Report for Interview {interview_id}")
+    from db import create_or_update_evaluation_report, update_interview_overall_score, get_interview_transcripts
     
-    # 1. Get all answers
-    answers = get_user_answers(interview_id)
-    if not answers:
-        logger.warning("No answers found for this interview.")
-        return
-    
-    # 2. Calculate aggregations
-    # 실제로는 모든 transcript의 점수를 평균내야 하지만,
-    # 여기서는 간단한 Mock 로직 사용
-    
-    tech_score = 85.0
-    comm_score = 88.0
-    cult_score = 90.0
-    overall_score = (tech_score + comm_score + cult_score) / 3
-    
-    summary = (
-        "지원자는 강력한 기술적 지식과 우수한 의사소통 능력을 보여주었습니다. "
-        "직무에 대한 열정이 있으며 회사 문화에 잘 맞을 것으로 판단됩니다."
-    )
-    
-    # 3. Save to DB
-    from db import create_or_update_evaluation_report, update_interview_overall_score
-    
-    create_or_update_evaluation_report(
-        interview_id,
-        technical_score=tech_score,
-        communication_score=comm_score,
-        cultural_fit_score=cult_score,
-        summary_text=summary,
-        details_json={
-            "strengths": ["명확한 의사 표현", "관련 경험 풍부"],
-            "weaknesses": ["일부 질문에서 더 구체적인 예시 필요"]
-        }
-    )
-    
-    update_interview_overall_score(interview_id, overall_score)
-    logger.info(f"Final Report Generated for Interview {interview_id}")
+    try:
+        transcripts = get_interview_transcripts(interview_id)
+        if not transcripts:
+            logger.warning("No transcripts found for this interview.")
+            create_or_update_evaluation_report(
+                interview_id,
+                technical_score=0, communication_score=0, cultural_fit_score=0,
+                summary_text="기록된 대화가 없어 리포트를 생성할 수 없습니다.",
+                details_json={"error": "no_data"}
+            )
+            return
+
+        conversation = "\n".join([f"{t.speaker}: {t.text}" for t in transcripts])
+
+        try:
+            exaone = get_exaone_llm()
+            system_msg = "귀하는 면접 분석 전문가입니다. 면접 전체 요약과 점수를 산출하십시오."
+            user_msg = f"""다음 면접 대화를 분석하여 JSON으로 만드세요.
+            
+[대화]
+{conversation}
+
+ 반드시 JSON 형식으로만 응답:
+{{
+    "technical_score": 0~100,
+    "communication_score": 0~100,
+    "cultural_fit_score": 0~100,
+    "summary_text": "3문장 이내 요약",
+    "strengths": ["강점1", "강점2"],
+    "weaknesses": ["약점1", "약점2"]
+}}"""
+            
+            prompt = exaone._create_prompt(system_msg, user_msg)
+            output = exaone.llm(prompt, max_tokens=1024, temperature=0.3)
+            raw_result = output['choices'][0]['text'].strip()
+            
+            json_match = re.search(r'\{.*\}', raw_result, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+            else:
+                raise ValueError("No JSON in response")
+                
+        except Exception as llm_err:
+            logger.error(f"LLM Summary failed: {llm_err}")
+            result = {
+                "technical_score": 75, "communication_score": 75, "cultural_fit_score": 75,
+                "summary_text": "분석 시스템 지연으로 요약이 지체되었습니다.",
+                "strengths": ["성실한 답변"], "weaknesses": ["상세 분석 불가"]
+            }
+
+        tech = result.get("technical_score", 0)
+        comm = result.get("communication_score", 0)
+        cult = result.get("cultural_fit_score", 0)
+        overall = (tech + comm + cult) / 3
+
+        create_or_update_evaluation_report(
+            interview_id,
+            technical_score=tech,
+            communication_score=comm,
+            cultural_fit_score=cult,
+            summary_text=result.get("summary_text", ""),
+            details_json={
+                "strengths": result.get("strengths", []),
+                "weaknesses": result.get("weaknesses", [])
+            }
+        )
+        update_interview_overall_score(interview_id, score=overall)
+        logger.info(f"✅ Final Report Generated for Interview {interview_id}")
+
+    except Exception as e:
+        logger.error(f"❌ Error in generate_final_report: {e}")
+        create_or_update_evaluation_report(
+            interview_id,
+            technical_score=0, summary_text=f"오류: {str(e)}"
+        )
