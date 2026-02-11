@@ -241,24 +241,23 @@ function App() {
   };
 
   const [isLoading, setIsLoading] = useState(false);
-
-  // ... (existing states)
+  const [subtitle, setSubtitle] = useState('');
 
   const initInterviewSession = async () => {
     setIsLoading(true);
     try {
       // 1. Create Interview with Parsed Position & Resume ID
-      let interviewPosition = parsedResumeData?.structured_data?.target_position;
+      const structuredBase = parsedResumeData?.structured_data;
+      const interviewPosition = position ||
+        structuredBase?.header?.target_role ||
+        structuredBase?.target_position ||
+        parsedResumeData?.position ||
+        "보안 엔지니어";
 
-      // 만약 target_position이 객체라면 내부 position 필드 추출
-      if (interviewPosition && typeof interviewPosition === 'object') {
-        interviewPosition = interviewPosition.position || interviewPosition.company || 'General';
-      }
+      console.log("🚀 [Session Init] Final Position:", interviewPosition);
+      console.log("🚀 [Session Init] Resume ID:", parsedResumeData?.id);
 
-      interviewPosition = interviewPosition || parsedResumeData?.position || position || 'General';
-      const resumeId = parsedResumeData?.id || null;
-
-      const newInterview = await createInterview(interviewPosition, null, null);
+      const newInterview = await createInterview(interviewPosition, null, parsedResumeData?.id, null);
       setInterview(newInterview);
 
       // 2. Get Questions
@@ -477,33 +476,48 @@ function App() {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
     }
-
-    const answerText = transcript.trim() || "답변 없음";
-
+    const answerText = transcript.trim() || "답변 내용 없음";
     try {
+      setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
       console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
-      // Transcript 저장 (사용자 답변)
-      await createTranscript(
-        interview.id,
-        'User',
-        answerText,
-        questions[currentIdx].id
-      );
-
+      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
       console.log('[nextQuestion] Transcript saved successfully');
 
+      // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
-        console.log('[nextQuestion] Moving to next question index:', currentIdx + 1);
         setCurrentIdx(prev => prev + 1);
         setTranscript('');
-        setIsRecording(false);
+        setIsLoading(false);
       } else {
-        console.log('[nextQuestion] Last question reached, finishing interview');
-        await finishInterview();
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
+        console.log('[nextQuestion] Polling for next AI-generated question...');
+        let foundNew = false;
+        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
+          await new Promise(r => setTimeout(r, 2000));
+          const updatedQs = await getInterviewQuestions(interview.id);
+
+          if (updatedQs.length > questions.length) {
+            setQuestions(updatedQs);
+            setCurrentIdx(prev => prev + 1);
+            setTranscript('');
+            foundNew = true;
+            break;
+          }
+        }
+
+        if (!foundNew) {
+          // 더 이상 질문이 없으면 면접 종료
+          console.log('[nextQuestion] No more questions found. Finishing interview.');
+          setStep('loading');
+          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+          await finishInterview();
+        }
+        setIsLoading(false);
       }
     } catch (err) {
-      console.error('[Submit Error]:', err);
-      alert(`답변 제출 실패: ${err.message || 'Unknown error'}`);
+      console.error('Answer submission error:', err);
+      alert('답변 제출에 실패했습니다.');
+      setIsLoading(false);
     }
   };
 
@@ -654,6 +668,7 @@ function App() {
             nextQuestion={nextQuestion}
             onFinish={finishInterview}
             videoRef={videoRef}
+            isLoading={isLoading}
           />
         )}
 
