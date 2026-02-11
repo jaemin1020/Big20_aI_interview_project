@@ -11,8 +11,6 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
-import numpy as np
-from faster_whisper import WhisperModel
 
 # 1. 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -75,7 +73,6 @@ class VideoAnalysisTrack(MediaStreamTrack):
         # Haar Cascade Load
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-
 
 
     async def process_eye_tracking(self, frame):
@@ -168,62 +165,58 @@ class VideoAnalysisTrack(MediaStreamTrack):
 
         return frame
 
-async def start_stt_with_local_whisper(track, session_id):
-    """Local Whisper를 이용한 실시간 STT 처리"""
-    logger.info(f"[{session_id}] 서버 사이드 실시간 STT 시작 (Local Whisper)")
+async def start_remote_stt(track, session_id):
+    """
+    AI-Worker에게 오디오 청크를 전송하여 STT 처리 (Remote STT)
+    """
+    logger.info(f"[{session_id}] Remote STT Task Loop Started")
     
-    if WHISPER_MODEL is None:
-        load_local_whisper()
-
     audio_buffer = []
-    # 약 1초 분량의 오디오를 모아서 처리 (16kHz 기준 16000 샘플)
-    BUFFER_THRESHOLD = 16000 
+    # 2초 분량 모아서 전송 (빈번한 Task 생성 방지)
+    # 16kHz, 16bit(2bytes), Mono -> 2초 = 16000 * 2 * 2 = 64000 bytes
+    BUFFER_SIZE = 64000 
     
     try:
         while True:
             frame = await track.recv()
             
-            # 오디오 데이터 추출 및 리샘플링 (av 사용)
-            # WebRTC는 대개 48kHz 사용하므로 16kHz로 변환 필요
-            # 여기서는 편의상 numpy로 변환 후 whisper가 지원하는 포맷으로 가정
+            # 1. 리샘플링 (WebRTC 48k -> Whisper 16k)
             resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
             resampled_frames = resampler.resample(frame)
             
             for f in resampled_frames:
-                data = f.to_ndarray()
-                # float32로 변환 (-1.0 ~ 1.0)
-                audio_buffer.append(data.astype(np.float32) / 32768.0)
+                # av.AudioFrame.to_ndarray() -> numpy array
+                # tobytes()로 raw bytes 추출
+                data = f.to_ndarray().tobytes()
+                audio_buffer.append(data)
                 
-            # 버퍼가 임계치를 넘으면 변환 실행
-            current_buffer_size = sum(len(b[0]) if b.ndim > 1 else len(b) for b in audio_buffer)
+            # 2. 버퍼 크기 확인
+            current_size = sum(len(b) for b in audio_buffer)
             
-            if current_buffer_size >= BUFFER_THRESHOLD:
-                # 버퍼 병합
-                full_audio = np.concatenate(audio_buffer)
-                audio_buffer = [] # 버퍼 초기화
+            if current_size >= BUFFER_SIZE:
+                # 청크 병합
+                full_audio = b"".join(audio_buffer)
+                audio_buffer = [] # 초기화
                 
-                # Whisper 추론 (비동기 틱에서 실행을 위해 루프 밖에서 처리하거나 thread 사용 고려)
-                # 여기서는 간단히 직접 호출 (모델이 무거우면 loop 지연 발생 가능)
-                segments, info = WHISPER_MODEL.transcribe(full_audio, language="ko", beam_size=5)
+                # Base64 인코딩
+                b64_audio = base64.b64encode(full_audio).decode('utf-8')
                 
-                text = ""
-                for segment in segments:
-                    text += segment.text
+                # 3. AI-Worker로 Task 전송
+                # Celery는 비동기이므로 여기서 결과를 기다리지 않고 Task만 큐에 넣음
+                # 필요 시 결과 처리를 위한 별도 메커니즘 필요 (예: Task가 결과 DB에 쓰고 Polling 등)
+                task = celery_app.send_task(
+                    "tasks.stt.recognize",
+                    args=[b64_audio]
+                )
+                logger.debug(f"[{session_id}] Sent STT chunk to AI-Worker. Task ID: {task.id}")
                 
-                if text.strip():
-                    logger.info(f"[{session_id}] STT Result: {text}")
-                    ws = active_websockets.get(session_id)
-                    if ws:
-                        await send_to_websocket(ws, {
-                            "type": "stt",
-                            "text": text,
-                            "final": False # 실시간 중간 결과 느낌
-                        })
-
+                # (Optional) 결과를 비동기로 기다리는 로직을 추가하려면 asyncio.to_thread 등 사용
+                # 하지만 실시간 스트리밍에서 Celery RTT는 지연이 발생할 수 있음.
+                
     except Exception as e:
-        logger.error(f"[{session_id}] STT error: {e}")
+        logger.error(f"[{session_id}] Remote STT Fail: {e}")
     finally:
-        logger.info(f"[{session_id}] STT 종료")
+        logger.info(f"[{session_id}] Remote STT Stopped")
 
 async def send_to_websocket(ws: WebSocket, data: dict):
     """WebSocket으로 데이터 전송"""
@@ -277,9 +270,9 @@ async def offer(request: Request):
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
         elif track.kind == "audio":
-            # [변경] Deepgram 대신 Local Whisper 사용
-            asyncio.ensure_future(start_stt_with_local_whisper(track, session_id))
-            logger.info(f"[{session_id}] Audio track processing started (Local Whisper enabled)")
+            # [변경] AI Worker로 위임 (Remote STT)
+            asyncio.ensure_future(start_remote_stt(track, session_id))
+            logger.info(f"[{session_id}] Audio track processing started (Remote STT)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
@@ -306,7 +299,7 @@ async def root():
     return {
         "service": "AI Interview Media Server",
         "status": "running",
-        "mode": "Video Analysis + Server-side Whisper STT"
+        "mode": "Video Analysis + Remote STT (via AI-Worker)"
     }
 
 if __name__ == "__main__":
