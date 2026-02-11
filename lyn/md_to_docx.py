@@ -104,6 +104,6 @@ def add_formatted_text(paragraph, text):
             paragraph.add_run(part)
 
 if __name__ == "__main__":
-    md_file = r"c:\big20\Big20_aI_interview_project\lyn\Final_Project_RAG_설계서.md"
-    docx_file = r"c:\big20\Big20_aI_interview_project\lyn\Final_Project_RAG_설계서.docx"
+    md_file = r"C:\big20\Big20_aI_interview_project\lyn\Final_Project_VectorDB_설계서.md"
+    docx_file = r"C:\big20\Big20_aI_interview_project\lyn\Final_Project_VectorDB_설계서.docx"
     convert_md_to_docx(md_file, docx_file)
