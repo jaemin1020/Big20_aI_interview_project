@@ -55,10 +55,7 @@ export const getCurrentUser = async () => {
     return response.data;
 };
 
-export const getDeepgramToken = async () => {
-    const response = await api.get('/auth/deepgram-token');
-    return response.data.temp_key;
-};
+
 
 // ==================== Interview ====================
 
