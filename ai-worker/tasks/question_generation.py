@@ -142,14 +142,14 @@ def generate_questions_task(interview_id, count=5, resume_id=None):
         # 2. 이력서 파싱 데이터(header -> target_role) 추출 (데이터의 유일한 원천)
         s_data = resume.structured_data or {}
         header = s_data.get("header", {})
-        real_role = header.get("target_role") or "일반"
+        target_role = header.get("target_role") or "일반"
         
         # 3. 이력서 전문(extracted_text) 가져오기
         resume_context = resume.extracted_text or ""
         
-        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Detected Role: {real_role}")
+        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Target Role: {target_role}")
         
-    return exaone.generate_questions(real_role, context=resume_context, count=count)
+    return exaone.generate_questions(target_role, context=resume_context, count=count)
 
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
