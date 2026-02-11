@@ -21,18 +21,12 @@ logger = logging.getLogger("AI-Worker-QuestionGen")
 # [1. 모델 및 경로 설정]
 # -----------------------------------------------------------
 local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-local_path_legacy = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 docker_path = "/app/ai_models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-legacy_docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 if os.path.exists(local_path):
     model_path = local_path
-elif os.path.exists(local_path_legacy):
-    model_path = local_path_legacy
-elif os.path.exists(docker_path):
-    model_path = docker_path
 else:
-    model_path = legacy_docker_path
+    model_path = docker_path
 
 # 🚨 DB 조회를 위해 추가
 try:

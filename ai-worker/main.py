@@ -59,6 +59,7 @@ app.conf.update(
         'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
+        'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
         
         # CPU 사용 태스크 (답변 분석, STT, 비전, 기타)
         'tasks.evaluator.*': {'queue': 'cpu_queue'},

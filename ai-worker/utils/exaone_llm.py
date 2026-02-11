@@ -38,25 +38,11 @@ class ExaoneLLM(LLM):
         logger.info(f"🚀 Loading EXAONE Engine from: {MODEL_PATH}")
         
         if not os.path.exists(MODEL_PATH):
-            # 1. 컨테이너 내부 헬퍼: /app/models 경로 확인 (폴더 이름 변경 도중 과도기적 조치)
-            fallback_docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-            if os.path.exists(fallback_docker_path):
-                target_path = fallback_docker_path
-                logger.info(f"💡 Found model at fallback path: {target_path}")
+            local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+            if os.path.exists(local_path):
+                target_path = local_path
             else:
-                # 2. 로컬 디버깅 헬퍼
-                local_path_ai = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-                local_path_legacy = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-                
-                if os.path.exists(local_path_ai):
-                    target_path = local_path_ai
-                elif os.path.exists(local_path_legacy):
-                    target_path = local_path_legacy
-                else:
-                    target_path = MODEL_PATH
-                
-                if not os.path.exists(target_path):
-                     raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {target_path} (Checked: {MODEL_PATH}, {fallback_docker_path})")
+                 raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {MODEL_PATH} (Local fallback also failed: {local_path})")
         else:
             target_path = MODEL_PATH
 

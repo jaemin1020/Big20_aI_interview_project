@@ -157,7 +157,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         logger.error(f"Evaluation Failed: {e}")
         return {"error": str(e)}
 
-@shared_task(name="tasks.evaluator.generate_final_report")
+@shared_task(name="tasks.evaluator.generate_final_report", queue='gpu_queue')
 def generate_final_report(interview_id: int):
     """
     최종 평가 보고서 생성
