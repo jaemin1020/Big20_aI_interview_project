@@ -43,9 +43,8 @@ def load_stt_pipeline():
         logger.error(f"Failed to load Transformers Pipeline: {e}")
         stt_pipeline = None
 
-# 초기 로드
-load_stt_pipeline()
-
+# 모듈 로드 시 전역 호출 제거 (실제 태스크 수행 시 로드하도록 수정)
+# load_stt_pipeline()
 
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):

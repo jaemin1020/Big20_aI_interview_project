@@ -82,12 +82,14 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             setStep('confirm');
             setIsUploading(false);
           } else if (result.processing_status === 'failed') {
-            throw new Error("분석에 실패했습니다.");
+             setIsUploading(false);
+             alert("이력서 분석에 실패했습니다.");
           } else if (pollCount < maxPolls) {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
-            throw new Error("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
+             setIsUploading(false);
+             alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
           }
         } catch (err) {
           console.error('Polling error:', err);
