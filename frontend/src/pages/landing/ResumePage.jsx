@@ -67,7 +67,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
       // 2. 폴링 (분석 완료 대기)
       let pollCount = 0;
-      const maxPolls = 90; // 최대 180초 (2초 * 90) - 첫 실행 시 모델 로딩으로 인해 오래 걸릴 수 있음
+      const maxPolls = 150; // 최대 300초 (2초 * 150) - 첫 실행 시 모델 로딩(KURE-v1) 시간이 꽤 걸릴 수 있음
 
       const poll = async () => {
         try {
@@ -134,10 +134,50 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
               <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
               <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {uploadResult?.position || '지원 직무를 파악하고 있습니다...'}
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    setUploadResult(prev => ({
+                      ...prev,
+                      position: newRole,
+                      structured_data: {
+                        ...prev.structured_data,
+                        header: {
+                          ...prev.structured_data.header,
+                          target_role: newRole
+                        }
+                      }
+                    }));
+                    // 부모 컴포넌트의 position 상태를 업데이트하여 면접 생성 시 사용되도록 함
+                    if (onParsedData) {
+                      onParsedData({
+                        ...uploadResult,
+                        position: newRole,
+                        structured_data: {
+                          ...uploadResult.structured_data,
+                          header: { ...uploadResult.structured_data.header, target_role: newRole }
+                        }
+                      });
+                    }
+                  }}
+                  placeholder="지원 직무를 직접 입력해주세요"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--primary)',
+                    color: 'var(--primary)',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    width: '100%',
+                    padding: '4px 0',
+                    outline: 'none'
+                  }}
+                />
               </dd>
 
-              {uploadResult?.skills && uploadResult.skills.length > 0 && (
+              {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
                 <>
                   <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
                   <dd>{uploadResult.skills.join(', ')}</dd>
@@ -168,122 +208,62 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         <h2 className="text-gradient" style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>이력서를 업로드 해주세요.</h2>
         <p style={{ marginBottom: '2rem', color: 'var(--text-muted)' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
-        {file ? (
-          <div style={{ display: 'flex', gap: '2rem', textAlign: 'left', animation: 'fadeIn 0.5s ease-out' }}>
-            {/* 왼쪽: 문서 미리보기 */}
-            <div style={{
-              flex: 1,
-              height: '520px',
-              background: 'rgba(255, 255, 255, 0.02)',
-              borderRadius: '16px',
-              overflow: 'hidden',
-              border: '1px solid var(--glass-border)',
-              position: 'relative',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-            }}>
-              <object
-                data={previewUrl}
-                type="application/pdf"
-                style={{ width: '100%', height: '100%' }}
-              >
-                <div style={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '2rem',
-                  textAlign: 'center'
-                }}>
-                  <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</span>
-                  <p>이 브라우저는 PDF 미리보기를 지원하지 않습니다.</p>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{file.name}</p>
-                </div>
-              </object>
+        <div
+          style={{
+            border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+            borderRadius: '20px',
+            padding: '4rem 2rem',
+            marginBottom: '2rem',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+            transform: isDragging ? 'scale(1.02)' : 'scale(1)'
+          }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+          onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+          onClick={() => document.getElementById('resume-input').click()}
+        >
+          {file ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📄</span>
+              <span style={{ fontWeight: '600', fontSize: '1.2rem' }}>{file.name}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
             </div>
-
-            {/* 오른쪽: 정보 및 작업 */}
-            <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{
-                padding: '1.2rem',
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderRadius: '16px',
-                border: '1px solid var(--glass-border)',
-              }}>
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>선택된 파일</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.2rem' }}>
-                  <div style={{ fontSize: '2rem' }}>📄</div>
-                  <div style={{ overflow: 'hidden' }}>
-                    <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</div>
-                  </div>
-                </div>
-                <PremiumButton
-                  variant="secondary"
-                  onClick={() => { setFile(null); setPreviewUrl(null); }}
-                  style={{ width: '100%', padding: '10px' }}
-                >
-                  다른 파일로 변경
-                </PremiumButton>
-              </div>
-
-              <div style={{ flex: 1 }}></div>
-
-              <PremiumButton
-                disabled={isUploading}
-                onClick={handleUpload}
-                style={{ width: '100%', padding: '16px' }}
-              >
-                {isUploading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
-                    <span>분석 중...</span>
-                  </div>
-                ) : '이력서 분석 시작'}
-              </PremiumButton>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div
-              style={{
-                border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
-                borderRadius: '20px',
-                padding: '4rem 2rem',
-                marginBottom: '2rem',
-                cursor: 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-                transform: isDragging ? 'scale(1.02)' : 'scale(1)'
-              }}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
-              onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
-              onClick={() => document.getElementById('resume-input').click()}
-            >
-              <div style={{ fontSize: '4rem', marginBottom: '1.5rem', transform: isDragging ? 'translateY(-10px)' : 'translateY(0)', transition: 'transform 0.3s' }}>📁</div>
+          ) : (
+            <>
+              <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📁</div>
               <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
               <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
-            </div>
+            </>
+          )}
+          <input
+            id="resume-input"
+            type="file"
+            accept=".pdf"
+            hidden
+            onChange={handleFileChange}
+          />
+        </div>
 
-            <PremiumButton
-              disabled={true}
-              style={{ width: '100%', padding: '16px', opacity: 0.5 }}
-            >
-              파일을 업로드 해주세요
-            </PremiumButton>
-          </>
-        )}
-        <input
-          id="resume-input"
-          type="file"
-          accept=".pdf"
-          hidden
-          onChange={handleFileChange}
-        />
+        <PremiumButton
+          disabled={!file || isUploading}
+          onClick={handleUpload}
+          style={{ width: '100%', padding: '16px' }}
+        >
+          {isUploading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
+              <span>분석 중...</span>
+            </div>
+          ) : (
+            "이력서 분석 시작"
+          )}
+        </PremiumButton>
       </GlassCard>
+
     </div>
   );
 };

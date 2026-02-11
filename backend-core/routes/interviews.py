@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 from celery import Celery
 from datetime import datetime
 from typing import List
@@ -44,31 +44,39 @@ async def create_interview(
     생성일자: 2026-02-06
     """
     
-    # 1. Interview 레코드 생성 (상태: SCHEDULED)
+    logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
+    
+    # 이력서에서 지원 직무(target_role) 가져오기
+    from models import Resume
+    resume = db.get(Resume, interview_data.resume_id)
+    target_role = "일반"
+    if resume and resume.structured_data:
+        target_role = resume.structured_data.get("header", {}).get("target_role") or "일반"
+
+    # 1. Interview 레코드 생성
     new_interview = Interview(
         candidate_id=current_user.id,
-        position=interview_data.position,
+        position=target_role, # 추출된 직무 사용
         company_id=interview_data.company_id,
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
         start_time=datetime.utcnow()
     )
-    # DB에 저장
     db.add(new_interview)
     db.commit()
     db.refresh(new_interview)
     
-    logger.info(f"Interview created: ID={new_interview.id}, Position={new_interview.position}")
+    interview_id = new_interview.id
     
-    # 2. AI 질문 생성
-    generated_questions = []
+    logger.info(f"Interview record created: ID={interview_id} (Target Role: {target_role})")
     
     try:
         logger.info("Requesting question generation from AI-Worker...")
         task = celery_app.send_task(
-            "tasks.question_generator.generate_questions",
-            args=[interview_data.position, new_interview.id, 5]
+            "tasks.question_generation.generate_questions",
+            args=[new_interview.id, 5],
+            queue="gpu_queue"
         )
         generated_data = task.get(timeout=180)
         logger.info(f"Received {len(generated_data)} questions from AI-Worker")
@@ -100,8 +108,9 @@ async def create_interview(
             # 3-1. 질문 은행에 저장
             question = Question(
                 content=q_text,
-                category=QuestionCategory.TECHNICAL if i < 3 else QuestionCategory.BEHAVIORAL,
-                difficulty=QuestionDifficulty.MEDIUM,
+                category=QuestionCategory.BEHAVIORAL,
+                difficulty=QuestionDifficulty.EASY,
+                question_type="intro" if i == 0 else "skill", # 'technical' 대신 시나리오 표준인 'skill' 사용
                 rubric_json={
                     "criteria": ["구체성", "직무 적합성", "논리력"], 
                     "weight": {"content": 0.5, "communication": 0.5},
@@ -113,15 +122,22 @@ async def create_interview(
             db.commit()
             db.refresh(question)
             
-            # 3-2. Transcript에 AI 발화로 기록
-            transcript = Transcript(
-                interview_id=new_interview.id,
-                speaker=Speaker.AI,
-                text=q_text,
-                question_id=question.id,
-                order=i
+            # Transcript 저장 (Raw SQL로 관계 꼬입 원칙적 차단)
+            db.execute(
+                text("""
+                    INSERT INTO transcripts (interview_id, speaker, text, timestamp, question_id, "order")
+                    VALUES (:i_id, :spk, :txt, :ts, :q_id, :ord)
+                """),
+                {
+                    "i_id": interview_id,
+                    "spk": Speaker.AI,
+                    "txt": q_text,
+                    "ts": datetime.utcnow(),
+                    "q_id": question.id,
+                    "ord": i
+                }
             )
-            db.add(transcript)
+            db.commit()
         
         # 면접 상태 업데이트: LIVE
         new_interview.status = InterviewStatus.LIVE
@@ -129,9 +145,20 @@ async def create_interview(
         db.commit()
         db.refresh(new_interview)
         
+        logger.info(f"✅ Realtime interview setup completed for ID={interview_id}")
+        
     except Exception as e:
-        logger.error(f"Failed to save questions: {e}")
-    
+        logger.error(f"❌ Critical Error in interview creation: {e}")
+        db.rollback()
+        # 실패한 면접은 삭제 시도 (에러 무시)
+        try:
+            db.execute(text("DELETE FROM interviews WHERE id = :i_id"), {"i_id": interview_id})
+            db.commit()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"면접 생성 실패: {str(e)}")
+
+    # 응답 보내기 전 마지막 상태 확인
     return InterviewResponse(
         id=new_interview.id,
         candidate_id=new_interview.candidate_id,
@@ -211,7 +238,7 @@ async def get_interview_questions(
     stmt = select(Transcript, Question).join(Question, Transcript.question_id == Question.id).where(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
-    ).order_by(Transcript.order)
+    ).order_by(Transcript.timestamp)
     
     results = db.exec(stmt).all()
     
@@ -333,3 +360,124 @@ async def get_evaluation_report(
     
     return report
 
+# --- Transcript Route (별도 파일로 할 수도 있지만 interview와 밀접하므로 여기에 포함) ---
+# 기존 main.py에서는 /transcripts 였지만 여기서는 /interviews 하위가 아님.
+# 따라서 별도 라우터(`transcripts_router`)로 분리하거나, prefix 없는 별도 라우터를 정의해야 함.
+# 편의상 여기서는 router 외에 별도 router를 정의하지 않고,
+# /transcripts 엔드포인트를 위해 APIRouter를 하나 더 만들지 않고, 
+# main.py에서 transcript 관련은 별도 라우터 파일(`routes/transcripts.py`)로 빼는 게 깔끔함.
+# 일단 여기서는 Interview 관련만 처리.
+
+
+# ============================================================================
+# 실시간 대화형 면접 API (신규)
+# ============================================================================
+
+@router.post("/realtime", response_model=InterviewResponse)
+async def create_realtime_interview(
+    interview_data: InterviewCreate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    실시간 대화형 면접 생성
+    - 템플릿 질문 2개(자기소개, 지원동기)만 즉시 생성하여 반환
+    - 대기 시간: 0초
+    """
+    
+    logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
+    
+    # 0. 지원자 정보 조회 (이력서 기반으로 직무/이름 가져오기)
+    from utils.interview_helpers import get_candidate_info
+    candidate_info = get_candidate_info(db, interview_data.resume_id)
+    target_role = candidate_info.get("target_role", "일반")
+    candidate_name = candidate_info.get("candidate_name", "지원자")
+
+    # 1. Interview 레코드 생성
+    new_interview = Interview(
+        candidate_id=current_user.id,
+        position=target_role, # 이력서 추출 값으로 고정
+        company_id=interview_data.company_id,
+        resume_id=interview_data.resume_id,
+        status=InterviewStatus.IN_PROGRESS,
+        scheduled_time=interview_data.scheduled_time,
+        start_time=datetime.utcnow()
+    )
+    db.add(new_interview)
+    db.commit()
+    db.refresh(new_interview)
+    
+    logger.info(f"Realtime Interview created: ID={new_interview.id}, Candidate={candidate_name}, Target Role={target_role}")
+    
+    # 2. 템플릿 질문 즉시 생성
+    try:
+        from utils.interview_helpers import generate_template_question
+        
+        # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
+        import sys
+        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "ai-worker", "config")
+        if config_path not in sys.path:
+            sys.path.append(config_path)
+        
+        from interview_scenario import get_initial_stages
+        from models import Question, QuestionCategory, QuestionDifficulty
+        
+        initial_stages = get_initial_stages()
+        
+        for stage_config in initial_stages:
+            # 템플릿에 변수 삽입 (이미 확보한 candidate_info 사용)
+            question_text = generate_template_question(
+                stage_config["template"],
+                candidate_info
+            )
+            
+            # Question 저장
+            question = Question(
+                content=question_text,
+                category=QuestionCategory.BEHAVIORAL,
+                difficulty=QuestionDifficulty.EASY,
+                question_type=stage_config["stage"], # 단계 매칭을 위해 추가
+                rubric_json={
+                    "criteria": ["명확성", "진정성", "직무 이해도"],
+                    "weight": {"content": 0.6, "communication": 0.4}
+                },
+                position=target_role # 추출된 직무 사용
+            )
+            db.add(question)
+            db.commit()  # 즉시 커밋
+            db.refresh(question)
+            
+            # Transcript에 AI 발화 기록 (별도 세션 사용)
+            from database import engine
+            from sqlmodel import Session as NewSession
+            with NewSession(engine) as transcript_session:
+                transcript = Transcript(
+                    interview_id=new_interview.id,
+                    speaker=Speaker.AI,
+                    text=question_text,
+                    question_id=question.id,
+                    order=stage_config["order"] - 1
+                )
+                transcript_session.add(transcript)
+                transcript_session.commit()
+        
+        logger.info(f"✅ Generated {len(initial_stages)} template questions immediately")
+        
+    except Exception as e:
+        logger.error(f"❌ Template question generation failed: {e}")
+        db.delete(new_interview)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"면접 질문 생성에 실패했습니다: {str(e)}"
+        )
+    
+    return InterviewResponse(
+        id=new_interview.id,
+        candidate_id=new_interview.candidate_id,
+        position=new_interview.position,
+        status=new_interview.status,
+        start_time=new_interview.start_time,
+        end_time=new_interview.end_time,
+        overall_score=new_interview.overall_score
+    )
