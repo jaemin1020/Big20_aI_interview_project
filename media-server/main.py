@@ -42,6 +42,24 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
 
+# 4. Local Whisper 설정
+WHISPER_MODEL = None
+LOCAL_MODEL_SIZE = "large-v3-turbo" # or small, medium, etc.
+
+def load_local_whisper():
+    global WHISPER_MODEL
+    try:
+        if WHISPER_MODEL is None:
+            logger.info(f"⏳ Loading Local Whisper Model ({LOCAL_MODEL_SIZE})...")
+            # GPU 사용 시 float16, CPU 사용 시 int8 권장
+            device = "cuda" if os.getenv("USE_GPU", "true").lower() == "true" else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+            
+            WHISPER_MODEL = WhisperModel(LOCAL_MODEL_SIZE, device=device, compute_type=compute_type)
+            logger.info(f"✅ Local Whisper Model Loaded on {device}")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Local Whisper: {e}")
+
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
     kind = "video"
@@ -55,7 +73,6 @@ class VideoAnalysisTrack(MediaStreamTrack):
         # Haar Cascade Load
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-
 
 
     async def process_eye_tracking(self, frame):
@@ -148,6 +165,59 @@ class VideoAnalysisTrack(MediaStreamTrack):
 
         return frame
 
+async def start_remote_stt(track, session_id):
+    """
+    AI-Worker에게 오디오 청크를 전송하여 STT 처리 (Remote STT)
+    """
+    logger.info(f"[{session_id}] Remote STT Task Loop Started")
+    
+    audio_buffer = []
+    # 2초 분량 모아서 전송 (빈번한 Task 생성 방지)
+    # 16kHz, 16bit(2bytes), Mono -> 2초 = 16000 * 2 * 2 = 64000 bytes
+    BUFFER_SIZE = 64000 
+    
+    try:
+        while True:
+            frame = await track.recv()
+            
+            # 1. 리샘플링 (WebRTC 48k -> Whisper 16k)
+            resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+            resampled_frames = resampler.resample(frame)
+            
+            for f in resampled_frames:
+                # av.AudioFrame.to_ndarray() -> numpy array
+                # tobytes()로 raw bytes 추출
+                data = f.to_ndarray().tobytes()
+                audio_buffer.append(data)
+                
+            # 2. 버퍼 크기 확인
+            current_size = sum(len(b) for b in audio_buffer)
+            
+            if current_size >= BUFFER_SIZE:
+                # 청크 병합
+                full_audio = b"".join(audio_buffer)
+                audio_buffer = [] # 초기화
+                
+                # Base64 인코딩
+                b64_audio = base64.b64encode(full_audio).decode('utf-8')
+                
+                # 3. AI-Worker로 Task 전송
+                # Celery는 비동기이므로 여기서 결과를 기다리지 않고 Task만 큐에 넣음
+                # 필요 시 결과 처리를 위한 별도 메커니즘 필요 (예: Task가 결과 DB에 쓰고 Polling 등)
+                task = celery_app.send_task(
+                    "tasks.stt.recognize",
+                    args=[b64_audio]
+                )
+                logger.debug(f"[{session_id}] Sent STT chunk to AI-Worker. Task ID: {task.id}")
+                
+                # (Optional) 결과를 비동기로 기다리는 로직을 추가하려면 asyncio.to_thread 등 사용
+                # 하지만 실시간 스트리밍에서 Celery RTT는 지연이 발생할 수 있음.
+                
+    except Exception as e:
+        logger.error(f"[{session_id}] Remote STT Fail: {e}")
+    finally:
+        logger.info(f"[{session_id}] Remote STT Stopped")
+
 async def send_to_websocket(ws: WebSocket, data: dict):
     """WebSocket으로 데이터 전송"""
     try:
@@ -200,14 +270,9 @@ async def offer(request: Request):
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
         elif track.kind == "audio":
-            # 오디오 트랙: 서버에서는 처리하지 않음 (STT는 프론트엔드에서 수행)
-            # 다만 WebRTC 연결 유지를 위해 트랙을 소비해주는 것이 좋음 (Blackhole)
-            @track.on("ended")
-            async def on_ended():
-                logger.info(f"[{session_id}] Audio track ended")
-            
-            asyncio.ensure_future(consume_audio(track))
-            logger.info(f"[{session_id}] Audio track ignored (Client-side STT used)")
+            # [변경] AI Worker로 위임 (Remote STT)
+            asyncio.ensure_future(start_remote_stt(track, session_id))
+            logger.info(f"[{session_id}] Audio track processing started (Remote STT)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
@@ -234,7 +299,7 @@ async def root():
     return {
         "service": "AI Interview Media Server",
         "status": "running",
-        "mode": "Video Analysis Only (STT migrated to frontend)"
+        "mode": "Video Analysis + Remote STT (via AI-Worker)"
     }
 
 if __name__ == "__main__":
