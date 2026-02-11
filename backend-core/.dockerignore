@@ -1,4 +1,3 @@
-models/
 __pycache__/
 *.pyc
 *.pyo
@@ -9,5 +8,5 @@ venv/
 .gitignore
 .dockerignore
 uploads/
-results/
-temp/
+data/
+.env

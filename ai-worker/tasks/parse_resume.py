@@ -1,21 +1,8 @@
-"""
-이력서 PDF 파싱 Celery Task
-"""
-from celery import shared_task
-from sqlmodel import Session
-from db import Resume, engine
-from datetime import datetime
-import logging
-import os
+import pdfplumber
 import re
 import json
-import pdfplumber
+import os
 
-logger = logging.getLogger("ResumeParserTask")
-
-# -------------------------------------------------------
-# Helper Functions from step2_parse_resume.py
-# -------------------------------------------------------
 def clean_text(text):
     if not text: return ""
     return re.sub(r'\s+', ' ', text).strip()
@@ -32,7 +19,7 @@ def parse_resume_final(input_source):
     input_source: PDF 파일 경로(str) 또는 이미 추출된 텍스트(str)
     """
     data = {
-        "header": { "name": "", "target_company": "Unknown", "target_role": "Unknown" },
+        "header": { "name": "", "target_company": "", "target_role": "" },
         "education": [],
         "activities": [],
         "awards": [],
@@ -44,14 +31,20 @@ def parse_resume_final(input_source):
     full_text_buffer = []
     tables = []
     
+    # -------------------------------------------------------
     # 1. 입력값이 파일 경로인지 텍스트인지 판별
+    # -------------------------------------------------------
     is_file_path = False
+    
+    # 입력값이 파일 경로처럼 생겼고(.pdf), 실제로 파일이 존재하면 -> 파일 모드
     if isinstance(input_source, str) and input_source.strip().lower().endswith('.pdf') and os.path.exists(input_source):
         is_file_path = True
-    elif len(input_source) < 300 and os.path.exists(input_source): 
+    elif len(input_source) < 300 and os.path.exists(input_source): # .pdf 확장자가 없어도 파일이 있으면 경로로 간주
          is_file_path = True
 
-    # 2. 데이터 추출
+    # -------------------------------------------------------
+    # 2. 데이터 추출 (PDF 파일 vs 텍스트)
+    # -------------------------------------------------------
     if is_file_path:
         try:
             with pdfplumber.open(input_source) as pdf:
@@ -61,24 +54,25 @@ def parse_resume_final(input_source):
                     if text: full_text_buffer.append(text)
                 # 표 추출
                 for page in pdf.pages:
-                    extracted = page.extract_tables()
-                    if extracted:
-                        tables.extend(extracted)
+                    tables.extend(page.extract_tables())
         except Exception as e:
-            logger.warning(f"⚠️ PDF 읽기 실패 (텍스트 모드로 전환 시도): {e}")
-            full_text_buffer.append(input_source)
+            print(f"⚠️ PDF 읽기 실패 (텍스트 모드로 전환 시도): {e}")
+            full_text_buffer.append(input_source) # 에러나면 내용을 그냥 텍스트로 취급
     else:
+        # 파일 경로가 아니라 텍스트 덩어리가 들어온 경우
+        # (주의: 이 경우 표(Table) 구조는 파싱 불가능. 텍스트 기반 자소서만 파싱됨)
         full_text_buffer.append(input_source)
 
-    # 3. 표 데이터 파싱
+    # -------------------------------------------------------
+    # 3. 표 데이터 파싱 (파일 모드일 때만 동작)
+    # -------------------------------------------------------
     if tables:
-        # --- Phase 1: 헤더 정보 우선 탐색 ---
+        # --- Phase 1: 헤더 정보 우선 탐색 (표 기반) ---
         for table in tables:
             for row in table:
                 safe_row = [clean_text(cell) if cell else "" for cell in row]
                 for i, text in enumerate(safe_row):
                     key = text.replace(" ", "")
-                    # 키-값 쌍 찾기
                     if i + 1 < len(safe_row):
                         val = safe_row[i+1] 
                         if not val and i + 2 < len(safe_row): val = safe_row[i+2]
@@ -87,6 +81,42 @@ def parse_resume_final(input_source):
                             if "이름" == key: data["header"]["name"] = val
                             elif "지원회사" in key or "지원기업" in key: data["header"]["target_company"] = val
                             elif "지원직무" in key or "지원분야" in key: data["header"]["target_role"] = val
+
+        # --- Phase 1.5: Regex 기반 폴백 (표에서 못 찾았을 때) ---
+        full_text = "\n".join(full_text_buffer)
+        
+        # 이름 찾기
+        if not data["header"]["name"]:
+            name_patterns = [
+                r"이\s*름\s*[:：\-\s]+([가-힣]{2,4})",
+                r"성\s*함\s*[:：\-\s]+([가-힣]{2,4})",
+                r"Name\s*[:：\-\s]+([a-zA-Z가-힣\s]+)"
+            ]
+            for p in name_patterns:
+                match = re.search(p, full_text, re.IGNORECASE)
+                if match:
+                    data["header"]["name"] = match.group(1).strip()
+                    break
+        
+        # 지원직무 찾기
+        if not data["header"]["target_role"]:
+            role_patterns = [
+                r"지원\s*직무\s*[:：\-\s]+([^\n]+)",
+                r"지원\s*분야\s*[:：\-\s]+([^\n]+)",
+                r"희망\s*직무\s*[:：\-\s]+([^\n]+)",
+                r"Position\s*[:：\-\s]+([^\n]+)",
+                r"Role\s*[:：\-\s]+([^\n]+)"
+            ]
+            for p in role_patterns:
+                match = re.search(p, full_text, re.IGNORECASE)
+                if match:
+                    role = re.sub(r'[\(\)\[\]]', '', match.group(1)).strip()
+                    data["header"]["target_role"] = role
+                    break
+
+        # 기본값 설정
+        if not data["header"]["target_role"]:
+            data["header"]["target_role"] = "일반"
 
         # --- Phase 2: 섹션별 데이터 파싱 ---
         current_section = None 
@@ -151,7 +181,9 @@ def parse_resume_final(input_source):
                     if title and not is_date(title):
                         data["certifications"].append({ "title": title, "date": date, "organization": "" })
 
+    # -------------------------------------------------------
     # 4. 자기소개서 처리 (텍스트/파일 공통)
+    # -------------------------------------------------------
     full_text = "\n".join(full_text_buffer)
     # 질문 패턴: [질문N] ... 주십시오/세요
     pattern = r'(\[질문\d+\].*?(?:주십시오|세요))'
@@ -165,113 +197,23 @@ def parse_resume_final(input_source):
         elif current_q:
             data["self_intro"].append({"question": clean_text(current_q), "answer": part})
             current_q = ""
-            
-    # 원본 텍스트도 반환
-    data["full_text"] = full_text
+
     return data
 
-@shared_task(bind=True, name="parse_resume_pdf")
-def parse_resume_pdf_task(self, resume_id: int, file_path: str):
-    """
-    이력서 PDF 파싱 및 구조화 Task (규칙 기반)
-    
-    Args:
-        resume_id: Resume ID
-        file_path: PDF 파일 경로
-    """
-    logger.info(f"[Task {self.request.id}] Resume {resume_id} 파싱 시작")
-    
-    try:
-        # 1. Resume 레코드 조회
-        with Session(engine) as session:
-            resume = session.get(Resume, resume_id)
-            if not resume:
-                logger.error(f"Resume {resume_id} not found")
-                return {"status": "error", "message": "Resume not found"}
-            
-            # 상태 업데이트: processing
-            resume.processing_status = "processing"
-            session.add(resume)
-            session.commit()
-        
-        # 2. 파싱 실행 (규칙 기반)
-        logger.info(f"[Resume {resume_id}] 규칙 기반 파싱 실행 중...")
-        parsed_data = parse_resume_final(file_path)
-        
-        # 3. 데이터 매핑 및 저장
-        # structured_data에 파싱 결과 저장
-        # resume_embedding.py 호환성을 위해 키 매핑
-        
-        structured_data = {
-            "target_company": parsed_data["header"].get("target_company", "Unknown"),
-            "target_position": parsed_data["header"].get("target_role", "Unknown"),
-            "education": parsed_data["education"],
-            "experience": parsed_data["activities"], # 활동을 경력으로 매핑 (임시)
-            "projects": parsed_data["projects"],
-            "certifications": parsed_data["certifications"],
-            "awards": parsed_data["awards"],
-            "self_introduction": parsed_data["self_intro"], # 자소서
-            "cover_letter": parsed_data["self_intro"], # embedding.py 호환용
-            "skills": {}, # 파서에서 별도 추출 안함
-            "languages": [],
-            "raw_text_length": len(parsed_data.get("full_text", ""))
-        }
-        
-        with Session(engine) as session:
-            resume = session.get(Resume, resume_id)
-            if resume:
-                resume.extracted_text = parsed_data.get("full_text", "")
-                resume.structured_data = structured_data
-                resume.processing_status = "completed"
-                resume.processed_at = datetime.utcnow()
-                session.add(resume)
-                session.commit()
-                logger.info(f"[Resume {resume_id}] 파싱 완료 및 DB 저장")
-
-        # 4. 임베딩 생성 태스크 트리거
-        logger.info(f"[Resume {resume_id}] 섹션 임베딩 생성 태스크 시작...")
-        from celery import current_app
-        current_app.send_task(
-            "generate_resume_embeddings",
-            args=[resume_id]
-        )
-        
-        return {
-            "status": "success",
-            "resume_id": resume_id,
-            "parsed_sections": list(structured_data.keys())
-        }
-        
-    except Exception as e:
-        logger.error(f"[Resume {resume_id}] 파싱 실패: {e}", exc_info=True)
-        # 상태 업데이트: failed
-        try:
-            with Session(engine) as session:
-                resume = session.get(Resume, resume_id)
-                if resume:
-                    resume.processing_status = "failed"
-                    session.add(resume)
-                    session.commit()
-        except Exception as db_error:
-            logger.error(f"Failed to update resume status: {db_error}")
-
-        return {"status": "error", "message": str(e)}
-
-@shared_task(name="reprocess_resume")
-def reprocess_resume_task(resume_id: int):
-    logger.info(f"Resume {resume_id} 재처리 시작")
-    with Session(engine) as session:
-        resume = session.get(Resume, resume_id)
-        if not resume:
-            return {"status": "error", "message": "Resume not found"}
-        file_path = resume.file_path
-        if not os.path.exists(file_path):
-            return {"status": "error", "message": "File not found"}
-    return parse_resume_pdf_task(resume_id, file_path)
-
-
-# 사용 예시
+# 테스트 실행 코드
 if __name__ == "__main__":
-    # 테스트
-    result = parse_resume_pdf_task(1, "path/to/resume.pdf")
-    print(result)
+    pdf_filename = "resume.pdf"
+    if os.path.exists(pdf_filename):
+        try:
+            print(f"🚀 '{pdf_filename}' 파싱 시작...")
+            result = parse_resume_final(pdf_filename)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            with open("parsed_result.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            print("✅ 완료!")
+        except Exception as e:
+            print(f"💥 에러: {e}")
+    else:
+        print("❌ 파일 없음")
+
+
