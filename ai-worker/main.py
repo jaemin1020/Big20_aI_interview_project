@@ -77,7 +77,7 @@ if __name__ == "__main__":
     
     # 모델 Preload (첫 요청 지연 방지)
     try:
-        from tasks.stt import load_models as load_stt
+        from tasks.stt import load_stt_pipeline as load_stt
         from tasks.resume_embedding import load_embedding_model
         
         logger.info("Preloading models...")
