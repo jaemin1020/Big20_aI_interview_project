@@ -16,34 +16,6 @@ def load_stt_model():
     """
     Faster-Whisper 모델 로드
     """
-<<<<<<< HEAD
-    global stt_model
-    try:
-        use_gpu = os.getenv("USE_GPU", "false").lower() == "true"
-        device = "cuda" if use_gpu else "cpu"
-        compute_type = "float16" if device == "cuda" else "int8"
-
-        logger.info(f"Attempting to load Faster-Whisper ({MODEL_SIZE}) on {device}...")
-        
-        try:
-             stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
-             logger.info(f"✅ Faster-Whisper loaded on {device}")
-        except Exception as e:
-             if device == "cuda":
-                 logger.warning(f"Failed to load on CUDA: {e}. Falling back to CPU.")
-                 device = "cpu"
-                 compute_type = "int8"
-                 stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
-                 logger.info(f"✅ Faster-Whisper loaded on CPU (Fallback)")
-             else:
-                 raise e
-    except Exception as e:
-        logger.error(f"Failed to load Faster-Whisper Model: {e}")
-        stt_model = None
-
-# 모듈 로드 시 시도
-load_stt_model()
-=======
     global stt_pipeline
     
     # [최적화] GPU 워커(질문 생성 전용)는 STT 모델을 로드할 필요가 없음
@@ -73,7 +45,6 @@ load_stt_model()
 
 # 모듈 로드 시 전역 호출 제거 (실제 태스크 수행 시 로드하도록 수정)
 # load_stt_pipeline()
->>>>>>> Phase_3
 
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
