@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
-import { createClient } from "@deepgram/sdk";
+// import { createClient } from "@deepgram/sdk";
 
 const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const step = envTestStep;
@@ -21,91 +21,60 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
     let audioContext;
     let analyser;
     let microphone;
-    let javascriptNode;
+    let animationFrameId; // [NEW] animation frame ID
     let stream;
 
     const startAudioAnalysis = async () => {
       if (step !== 'audio') return;
 
       try {
+        console.log("🎤 Requesting Microphone Access...");
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Microphone Access Granted");
 
-        // 1. Audio Level Visualization
+        // 1. Audio Level Visualization (Modern Approach)
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // 브라우저 정책으로 Suspended 상태일 경우 Resume
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
         analyser.smoothingTimeConstant = 0.8;
         analyser.fftSize = 1024;
 
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
+        microphone.connect(analyser); // Source -> Analyser
 
-        javascriptNode.onaudioprocess = () => {
-          const array = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(array);
-          let values = 0;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-          const length = array.length;
-          for (let i = 0; i < length; i++) {
-            values += array[i];
+        const updateLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
           }
 
-          const average = values / length;
-          const level = Math.min(100, Math.max(0, average * 2));
+          const average = sum / dataArray.length;
+          // 시각화 감도 조절 (x2.5)
+          const level = Math.min(100, Math.max(0, average * 2.5));
+
           setAudioLevel(level);
+          animationFrameId = requestAnimationFrame(updateLevel);
         };
 
-        // 2. Deepgram STT Setup
-        const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-        if (apiKey) {
-          const deepgram = createClient(apiKey);
-          const connection = deepgram.listen.live({
-            model: "nova-2",
-            language: "ko",
-            smart_format: true,
-            encoding: "linear16",
-            sample_rate: 16000,
-            interim_results: true,
-          });
+        // 애니메이션 시작
+        updateLevel();
 
-          connection.on("Open", () => {
-            console.log("Deepgram Connected for Test");
-
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            mediaRecorder.addEventListener('dataavailable', (event) => {
-              if (event.data.size > 0 && connection.getReadyState() === 1) {
-                connection.send(event.data);
-              }
-            });
-            mediaRecorder.start(250);
-            mediaRecorderRef.current = mediaRecorder;
-          });
-
-          connection.on("Results", (result) => {
-            const channel = result.channel;
-            if (channel && channel.alternatives && channel.alternatives[0]) {
-              const text = channel.alternatives[0].transcript;
-              if (text && text.trim().length > 0) {
-                setTranscript(prev => {
-                  // 간단한 이어붙이기 (실제로는 interim 처리 등 더 복잡할 수 있음)
-                  if (result.is_final) return prev + ' ' + text;
-                  return prev;
-                });
-                // 텍스트가 조금이라도 인식되면 성공으로 간주
-                if (result.is_final) setIsRecognitionOk(true);
-              }
-            }
-          });
-
-          deepgramConnectionRef.current = connection;
-        }
+        // 2. Deepgram STT Setup (Removed for Local AI Project)
+        setIsRecognitionOk(true);
 
       } catch (err) {
-        console.error("Microphone access failed:", err);
-        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
+        console.error("❌ Microphone access failed:", err);
+        alert("마이크 접근이 차단되었거나 찾을 수 없습니다. 설정에서 권한을 확인해주세요.");
       }
     };
 
@@ -114,15 +83,14 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
     }
 
     return () => {
-      // Clean up Audio Context
-      if (javascriptNode) javascriptNode.disconnect();
+      // Clean up
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (microphone) microphone.disconnect();
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
 
-      // Clean up Deepgram & MediaRecorder
+      // Clean up Deepgram & MediaRecorder (Removed)
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
 
       // Stop Tracks
       if (stream) stream.getTracks().forEach(track => track.stop());

@@ -300,8 +300,22 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-
           setTranscript(prev => prev + ' ' + data.text);
+
+        } else if (data.type === 'vision_analysis') {
+          // [NEW] MediaPipe 통합 데이터 수신
+          // data.data { emotion, gaze, head, scores: {smile, anxiety...} }
+          const result = data.data;
+
+          // 1. 디버깅용 로그 (나중에 UI 연결 시 제거 가능)
+          // console.log(`[Vision] Emo:${result.emotion} Gaze:${result.gaze} Head:${result.head}`);
+
+          // 2. 점수/상태 업데이트 (필요 시 State에 저장)
+          // 예: setVisionState(result);
+
+          if (result.emotion === 'anxious') {
+            console.log("😟 긴장 감지! Smile Score:", result.scores.smile);
+          }
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -313,56 +327,9 @@ function App() {
   };
 
   const setupDeepgram = (stream) => {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.warn("Deepgram API Key not found");
-      return;
-    }
-
-    const deepgram = createClient(apiKey);
-    const connection = deepgram.listen.live({
-      model: "nova-2",
-      language: "ko",
-      smart_format: true,
-      encoding: "linear16",
-      sample_rate: 16000,
-    });
-
-    connection.on("Open", () => {
-      console.log("Deepgram WebSocket Connected");
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0 && connection.getReadyState() === 1) {
-          connection.send(event.data);
-        }
-      });
-      mediaRecorder.start(250);
-      mediaRecorderRef.current = mediaRecorder;
-    });
-
-    connection.on("Results", (result) => {
-      const channel = result.channel;
-      if (channel && channel.alternatives && channel.alternatives[0]) {
-        const transcriptText = channel.alternatives[0].transcript;
-        const isFinal = result.is_final;
-
-        if (transcriptText) {
-          if (isFinal) {
-            setTranscript(prev => prev + ' ' + transcriptText);
-            setSubtitle('');
-          } else {
-            setSubtitle(transcriptText);
-          }
-        }
-      }
-    });
-
-    connection.on("Error", (err) => {
-      console.error("Deepgram Error:", err);
-    });
-
-    deepgramConnectionRef.current = connection;
+    // Deepgram Logic Removed for Local AI Project
+    // We will use backend STT later.
+    console.log("Deepgram integration disabled.");
   };
 
   const setupWebRTC = async (interviewId) => {

@@ -11,6 +11,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
+from vision_analyzer import VisionAnalyzer  # [NEW] MediaPipe Vision Analyzer
+import io  # [NEW] 오디오 버퍼링용
 
 # 1. 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -70,98 +72,73 @@ class VideoAnalysisTrack(MediaStreamTrack):
         self.session_id = session_id
         self.last_frame_time = 0
 
-        # Haar Cascade Load
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+        self.last_frame_time = 0
+
+        # [변경 내역: 2026-02-11]
+        # 이전 코드 (Legacy):
+        # self.face_cascade = cv2.CascadeClassifier(...) -> OpenCV Haar Cascade 사용 (구형, CPU 부하 높음)
+        # self.eye_cascade = cv2.CascadeClassifier(...)
+        #
+        # 변경 코드 (New):
+        # self.analyzer = VisionAnalyzer() -> MediaPipe 기반 최신 분석기 사용
+        #
+        # 변경 이유:
+        # 1. 3D Face Landmark (478개 점) 추적으로 정밀도 향상
+        # 2. 감정(Blendshapes), 시선, 자세 분석을 한 번의 추론으로 통합 (효율성)
+        # 3. GPU/CPU 최적화된 MediaPipe 사용으로 실시간성 확보
+        self.analyzer = VisionAnalyzer()
+        logger.info(f"[{session_id}] VideoAnalysisTrack initialized with MediaPipe")
 
 
-    async def process_eye_tracking(self, frame):
-        """WebRTC 프레임에서 눈/얼굴 추적 후 WebSocket 전송"""
+    async def process_vision(self, frame, timestamp_ms):
+        """WebRTC 프레임 -> MediaPipe 분석 -> WebSocket 전송"""
+        # [변경 내역: 2026-02-11]
+        # 이전 함수명: process_eye_tracking
+        # 이전 로직: OpenCV로 얼굴/눈 사각형만 찾아서 좌표 보냄. 감정 분석은 별도로 Celery 태스크로 보냄.
+        #
+        # 변경 로직:
+        # 1. process_vision으로 통합.
+        # 2. MediaPipe가 얼굴+눈+감정+자세를 한 번에 분석.
+        # 3. WebSocket으로 'vision_analysis'라는 통합된 데이터 전송.
         try:
-            # OpenCV 형식으로 변환
+            # OpenCV 포맷 변환
             img = frame.to_ndarray(format="bgr24")
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # [NEW] MediaPipe 분석 실행
+            result = self.analyzer.process_frame(img, timestamp_ms)
+            
+            if result:
+                # 1. 터미널 로그 (디버깅용, 2초마다)
+                current_time = time.time()
+                if current_time - getattr(self, 'last_log_time', 0) > 2.0:
+                    self.last_log_time = current_time
+                    logger.info(f"[{self.session_id}] Vision: {result['emotion']} / {result['gaze']} (Smile: {result['scores']['smile']})")
 
-            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
-            
-            tracking_data = []
-            
-            for (x, y, w, h) in faces:
-                roi_gray = gray[y:y+h, x:x+w]
-                eyes = self.eye_cascade.detectMultiScale(roi_gray)
-                
-                eyes_coords = []
-                for (ex, ey, ew, eh) in eyes:
-                    eyes_coords.append({
-                        "x": int(x + ex),
-                        "y": int(y + ey),
-                        "w": int(ew),
-                        "h": int(eh)
+                # 2. WebSocket 전송 (프론트엔드 시각화용)
+                ws = active_websockets.get(self.session_id)
+                if ws:
+                    await send_to_websocket(ws, {
+                        "type": "vision_analysis", # 통합된 비전 데이터 타입
+                        "data": result,
+                        "timestamp": current_time
                     })
-                
-                tracking_data.append({
-                    "face": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)},
-                    "eyes": eyes_coords
-                })
-
-            # Status determination
-            status = "not_detected"
-            if len(tracking_data) > 0:
-                face = tracking_data[0] # Assuming first face
-                num_eyes = len(face["eyes"])
-                
-                if num_eyes >= 2:
-                    status = "focused"
-                elif num_eyes == 1:
-                    status = "partially_detected"
-                else:
-                    status = "eyes_not_visible"
-            
-            # Log status (throttled)
-            current_time = time.time()
-            if current_time - getattr(self, 'last_log_time', 0) > 2.0: # Log every 2 seconds
-                self.last_log_time = current_time
-                logger.info(f"[{self.session_id}] Eye Tracking Status: {status} (Faces: {len(faces)})")
-
-            # WebSocket으로 전송
-            ws = active_websockets.get(self.session_id)
-            if ws:
-                await send_to_websocket(ws, {
-                    "type": "eye_tracking",
-                    "data": tracking_data,
-                    "status": status  # Send status to frontend as well
-                })
-
         except Exception as e:
-            logger.error(f"Eye tracking frame failed: {e}")
+            logger.error(f"Vision analysis failed: {e}")
 
     async def recv(self):
         frame = await self.track.recv()
         current_time = time.time()
 
-        # 1. 눈 추적 (실시간성 중요 - 0.1초마다 수행)
-        # 모든 프레임을 하면 부하가 클 수 있으므로 간격 조절
+        # 1. 비전 분석 (실시간성 중요 - 0.1초마다 수행)
         if current_time - getattr(self, 'last_tracking_time', 0) > 0.1:
             self.last_tracking_time = current_time
             # 비동기로 실행하여 메인 스트림 지연 방지
-            asyncio.create_task(self.process_eye_tracking(frame))
+            # timestamp용으로 time.time() * 1000 사용
+            asyncio.create_task(self.process_vision(frame, int(current_time * 1000)))
 
-        # 2. 감정 분석 (무거운 작업 - 2초마다 수행)
-        if current_time - self.last_frame_time > 2.0:
-            self.last_frame_time = current_time
-            
-            # 프레임을 이미지로 변환
-            img = frame.to_ndarray(format="bgr24")
-            _, buffer = cv2.imencode('.jpg', img)
-            base64_img = base64.b64encode(buffer).decode('utf-8')
-
-            # ai-worker에 비동기 감정 분석 태스크 전달
-            celery_app.send_task(
-                "tasks.vision.analyze_emotion",
-                args=[self.session_id, base64_img]
-            )
-            # 눈 추적 Task도 호출하여 데이터 저장 (선택적)
-            # celery_app.send_task("tasks.vision.track_eyes", args=[self.session_id, base64_img])
+        # 2. (구버전) 감정 분석 태스크 호출 제거
+        # MediaPipe가 감정까지 다 하므로 더 이상 필요 없음.
+        # if current_time - self.last_frame_time > 2.0: ...
 
         return frame
 
@@ -226,6 +203,68 @@ async def send_to_websocket(ws: WebSocket, data: dict):
         logger.error(f"WebSocket 전송 실패: {e}")
 
 # ============== WebSocket 엔드포인트 ==============
+# [추가 내역: 2026-02-11]
+# STT 중계 함수 (Remote STT)
+# WebRTC 오디오 스트림 -> WAV 파일 변환 -> AI Worker로 전송
+async def start_remote_stt(track, session_id):
+    logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
+    
+    # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
+    CHUNK_DURATION_MS = 3000 
+    accumulated_frames = []
+    accumulated_time = 0
+    
+    try:
+        while True:
+            # 1. 오디오 프레임 수신
+            frame = await track.recv()
+            accumulated_frames.append(frame)
+            
+            # 프레임 시간 누적 (packet.duration 사용하거나 개수로 추정)
+            # 보통 Opus 프레임은 20ms or 60ms
+            # 여기서는 프레임 개수로 대략적인 시간 계산 (50개 = 약 1초 가정)
+            # 정확성을 위해 av.AudioFrame.time 사용 가능하지만 단순화
+            if len(accumulated_frames) >= 150: # 약 3초 (20ms * 150 = 3000ms)
+                
+                # 2. WAV 변환 (In-Memory)
+                # av 라이브러리의 Output Container 사용
+                output_buffer = io.BytesIO()
+                output_container = av.open(output_buffer, mode='w', format='wav')
+                output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+                
+                for f in accumulated_frames:
+                    # 리샘플링 및 패킷 작성
+                    for packet in output_stream.encode(f):
+                        output_container.mux(packet)
+                        
+                # 3. 마무리 (Flush)
+                for packet in output_stream.encode(None):
+                    output_container.mux(packet)
+                output_container.close()
+                
+                # 4. Base64 인코딩
+                wav_bytes = output_buffer.getvalue()
+                audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+                
+                # 5. Celery Task 배달 (AI Worker에게)
+                # 결과값은 비동기로 처리되므로, 여기서는 '보냈다'는 사실만 중요
+                celery_app.send_task(
+                    "tasks.stt.recognize",
+                    args=[audio_b64],
+                    queue="gpu_queue" # GPU 워커 전용 큐 사용
+                )
+                
+                logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
+                
+                # 버퍼 초기화
+                accumulated_frames = []
+
+    except Exception as e:
+        logger.info(f"[{session_id}] STT 스트림 종료: {e}")
+    finally:
+        logger.info(f"[{session_id}] STT 리소스 정리")
+
+
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
@@ -265,19 +304,17 @@ async def offer(request: Request):
         logger.info(f"[{session_id}] Received track: {track.kind}")
 
         if track.kind == "audio":
-            # [변경] Deepgram 대신 Local Whisper 사용
-            asyncio.ensure_future(start_stt_with_local_whisper(track, session_id))
-            logger.info(f"[{session_id}] Audio track processing started (Local Whisper enabled)")
+            # [변경 내역: 2026-02-11]
+            # 1. 이전 코드의 `start_stt_with_local_whisper` 함수는 정의되지 않아 서버 크래시를 유발했습니다.
+            # 2. 미디어 서버에서 모델을 직접 돌리면 비디오 중계가 렉걸릴 수 있으므로,
+            #    무거운 STT 작업은 전용 GPU 워커(AI-Worker)에게 위임(Delegate)합니다.
+            asyncio.ensure_future(start_remote_stt(track, session_id))
+            logger.info(f"[{session_id}] Audio track processing started (Remote STT via AI-Worker)")
+            
         elif track.kind == "video":
             # 비디오 트랙: 감정 분석 처리
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
-        elif track.kind == "audio":
-            # [변경] AI Worker로 위임 (Remote STT)
-            asyncio.ensure_future(start_remote_stt(track, session_id))
-            logger.info(f"[{session_id}] Audio track processing started (Remote STT)")
-        else:
-            logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
