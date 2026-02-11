@@ -16,138 +16,23 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:154
 
 engine = create_engine(DATABASE_URL)
 
-# Enums (Matching Backend)
-class UserRole(str, Enum):
-    CANDIDATE = "candidate"
-    RECRUITER = "recruiter"
-    ADMIN = "admin"
+# Enums & Models (Imported from Backend Core)
+import sys
+import os
 
-class InterviewStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+# ai-worker 폴더 내의 models 디렉토리와의 충돌을 피하기 위해 경로 우선순위 조정
+backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
+if backend_path not in sys.path:
+    sys.path.append(backend_path) # insert(0) 대신 append() 사용 하여 ai-worker 우선순위 보호
 
-class QuestionCategory(str, Enum):
-    TECHNICAL = "technical"
-    BEHAVIORAL = "behavioral"
-    SITUATIONAL = "situational"
-    CULTURAL_FIT = "cultural_fit"
-
-class QuestionDifficulty(str, Enum):
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
-
-class Speaker(str, Enum):
-    AI = "AI"
-    USER = "User"
-
-# Models (Matching Backend)
-class Company(SQLModel, table=True):
-    """회사 정보 테이블 (벡터 검색 지원)"""
-    __tablename__ = "companies"
-    
-    id: str = Field(primary_key=True, max_length=50)
-    company_name: str
-    ideal: Optional[str] = None
-    description: Optional[str] = None
-    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-class Resume(SQLModel, table=True):
-    """이력서 테이블"""
-    __tablename__ = "resumes"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    candidate_id: int
-    file_name: str
-    file_path: str
-    file_size: int
-    extracted_text: Optional[str] = None
-    structured_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
-    processed_at: Optional[datetime] = None
-    is_active: bool = Field(default=True)
-    processing_status: str = Field(default="pending")
-
-class Interview(SQLModel, table=True):
-    __tablename__ = "interviews"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    candidate_id: int
-    company_id: Optional[str] = None
-    resume_id: Optional[int] = None
-    position: str
-    status: InterviewStatus = Field(default=InterviewStatus.SCHEDULED)
-    scheduled_time: Optional[datetime] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    overall_score: Optional[float] = None
-    emotion_summary: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-
-class Question(SQLModel, table=True):
-    __tablename__ = "questions"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    content: str
-    category: QuestionCategory
-    difficulty: QuestionDifficulty
-    question_type: Optional[str] = None
-    is_follow_up: bool = Field(default=False)
-    parent_question_id: Optional[int] = None
-    rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
-    # Using Any for embedding to bypass SQLModel type inference bug with List[float]
-    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
-    company: Optional[str] = None
-    industry: Optional[str] = None
-    position: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = Field(default=True)
-    usage_count: int = Field(default=0)
-    avg_score: Optional[float] = None
-
-
-class Transcript(SQLModel, table=True):
-    __tablename__ = "transcripts"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    speaker: Speaker
-    text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    sentiment_score: Optional[float] = None
-    emotion: Optional[str] = None
-    question_id: Optional[int] = None
-    order: Optional[int] = None
-
-class EvaluationReport(SQLModel, table=True):
-    __tablename__ = "evaluation_reports"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interview_id: int
-    technical_score: Optional[float] = None
-    communication_score: Optional[float] = None
-    cultural_fit_score: Optional[float] = None
-    summary_text: Optional[str] = None
-    details_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    evaluator_model: Optional[str] = None
-
-class AnswerBank(SQLModel, table=True):
-    __tablename__ = "answer_bank"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    question_id: int
-    answer_text: str
-    embedding: Any = Field(default=None, sa_column=Column(Vector(1024)))
-    score: float
-    evaluator_feedback: Optional[str] = None
-    company: Optional[str] = None
-    industry: Optional[str] = None
-    position: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = Field(default=True)
-    reference_count: int = Field(default=0)
+try:
+    from models import (
+        User, UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
+        Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
+    )
+except ImportError as e:
+    logger.error(f"❌ Failed to import models from {backend_path}: {e}")
+    raise
 
 # Helper Functions
 def get_best_questions_by_position(position: str, limit: int = 10):
@@ -458,3 +343,39 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             
             session.add(interview)
             session.commit()
+
+def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
+    """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
+    from models import QuestionDifficulty, Transcript, Speaker
+    with Session(engine) as session:
+        # 1. Question 테이블 저장
+        question = Question(
+            content=content,
+            category=category,
+            difficulty=QuestionDifficulty.MEDIUM,
+            question_type=stage,
+            rubric_json={"guide": guide},
+            is_active=True
+        )
+        session.add(question)
+        session.commit()
+        session.refresh(question)
+        
+        # 2. Transcript 테이블에 AI 질문으로 저장 (이게 되어야 프론트에서 보임)
+        # 현재 면접의 마지막 순서를 파악
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+        last_transcript = session.exec(stmt).first()
+        next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
+
+        new_transcript = Transcript(
+            interview_id=interview_id,
+            speaker=Speaker.AI,
+            text=content,
+            question_id=question.id,
+            order=next_order,
+            timestamp=datetime.utcnow()
+        )
+        session.add(new_transcript)
+        session.commit()
+        
+        return question.id

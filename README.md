@@ -27,6 +27,7 @@
 Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스템**입니다.
 
 ### 핵심 가치
+
 - ✅ **맞춤형 질문 생성**: 이력서와 직무 분석을 통한 개인화된 면접 질문
 - ✅ **실시간 평가**: AI 기반 답변 평가 및 즉각적인 피드백
 - ✅ **감정 분석**: 표정 및 음성 분석을 통한 종합적 평가
@@ -37,21 +38,25 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 ## 🚀 주요 기능
 
 ### 1. **이력서 기반 질문 생성**
+
 - PDF/DOCX 이력서 자동 파싱
 - 섹션별 임베딩 (경력, 프로젝트, 기술 스택 등)
 - RAG 기반 맞춤형 질문 생성
 
 ### 2. **실시간 면접 진행**
+
 - WebRTC 기반 영상/음성 스트리밍
 - Deepgram STT (클라이언트 사이드)
 - 실시간 감정 분석 (DeepFace)
 
 ### 3. **AI 평가 시스템**
+
 - Solar-10.7B 기반 답변 평가
 - 기술적/행동적 역량 분석
 - 종합 피드백 리포트 생성
 
 ### 4. **관리자 대시보드**
+
 - 면접 진행 상황 모니터링
 - 지원자 이력서 검색
 - 평가 결과 분석
@@ -81,14 +86,14 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 ### 마이크로서비스 구성
 
-| 서비스 | 역할 | 기술 스택 |
-|--------|------|-----------|
-| **Frontend** | 사용자 인터페이스 | React, Vite, WebRTC |
-| **Backend-Core** | API 서버, 인증, 라우팅 | FastAPI, SQLModel, JWT |
-| **AI-Worker** | 질문 생성, 평가, 이력서 파싱 | Celery, LangChain, Llama-3.1 |
-| **Media-Server** | 실시간 스트리밍, 감정 분석 | aiortc, DeepFace |
-| **PostgreSQL** | 데이터베이스 + 벡터 검색 | PostgreSQL 16 + pgvector |
-| **Redis** | 메시지 브로커, 캐싱 | Redis 7 |
+| 서비스                 | 역할                         | 기술 스택                    |
+| ---------------------- | ---------------------------- | ---------------------------- |
+| **Frontend**     | 사용자 인터페이스            | React, Vite, WebRTC          |
+| **Backend-Core** | API 서버, 인증, 라우팅       | FastAPI, SQLModel, JWT       |
+| **AI-Worker**    | 질문 생성, 평가, 이력서 파싱 | Celery, LangChain, Llama-3.1 |
+| **Media-Server** | 실시간 스트리밍, 감정 분석   | aiortc, DeepFace             |
+| **PostgreSQL**   | 데이터베이스 + 벡터 검색     | PostgreSQL 16 + pgvector     |
+| **Redis**        | 메시지 브로커, 캐싱          | Redis 7                      |
 
 ---
 
@@ -207,12 +212,12 @@ docker-compose logs -f backend-core
 
 ### 4️⃣ 서비스 접속
 
-| 서비스 | URL | 설명 |
-|--------|-----|------|
-| **Frontend** | http://localhost:3000 | 웹 인터페이스 |
-| **Backend API** | http://localhost:8000 | REST API |
-| **API Docs** | http://localhost:8000/docs | Swagger UI |
-| **Media Server** | http://localhost:8080 | WebRTC 서버 |
+| 서비스                 | URL                        | 설명          |
+| ---------------------- | -------------------------- | ------------- |
+| **Frontend**     | http://localhost:3000      | 웹 인터페이스 |
+| **Backend API**  | http://localhost:8000      | REST API      |
+| **API Docs**     | http://localhost:8000/docs | Swagger UI    |
+| **Media Server** | http://localhost:8080      | WebRTC 서버   |
 
 ### 5️⃣ 초기 데이터 설정
 
@@ -230,6 +235,7 @@ docker-compose exec backend-core python populate_industry_position.py
 ## 🛠️ 기술 스택
 
 ### Backend
+
 - **Framework**: FastAPI 0.109+
 - **ORM**: SQLModel 0.0.14+
 - **Database**: PostgreSQL 16 + pgvector
@@ -238,6 +244,7 @@ docker-compose exec backend-core python populate_industry_position.py
 - **Password Hashing**: bcrypt
 
 ### AI/ML
+
 - **LLM**: Llama-3.1-8B (질문 생성), Solar-10.7B (평가)
 - **Embedding**: KURE-v1 (한국어 특화, 1024차원)
 - **Vision**: DeepFace (감정 분석)
@@ -245,6 +252,7 @@ docker-compose exec backend-core python populate_industry_position.py
 - **Framework**: LangChain, Transformers, PyTorch
 
 ### Frontend
+
 - **Framework**: React 18.2
 - **Build Tool**: Vite 5.0
 - **Styling**: Vanilla CSS (Glassmorphism)
@@ -252,6 +260,7 @@ docker-compose exec backend-core python populate_industry_position.py
 - **Real-time**: WebRTC, WebSocket
 
 ### Infrastructure
+
 - **Containerization**: Docker, Docker Compose
 - **Message Broker**: Redis 7
 - **Vector Database**: pgvector (PostgreSQL extension)
@@ -263,6 +272,7 @@ docker-compose exec backend-core python populate_industry_position.py
 ### 주요 엔드포인트
 
 #### 인증 (Authentication)
+
 ```http
 POST /auth/register          # 회원가입
 POST /auth/token            # 로그인 (JWT 발급)
@@ -270,6 +280,7 @@ GET  /users/me              # 현재 사용자 정보
 ```
 
 #### 이력서 (Resumes)
+
 ```http
 POST /resumes/upload        # 이력서 업로드
 GET  /resumes/{id}          # 이력서 상태 조회
@@ -278,6 +289,7 @@ POST /resumes/search        # 이력서 검색 (벡터 유사도)
 ```
 
 #### 면접 (Interviews)
+
 ```http
 POST /interviews            # 면접 생성
 GET  /interviews/{id}       # 면접 정보 조회
@@ -287,6 +299,7 @@ GET  /interviews/{id}/report    # 평가 리포트
 ```
 
 #### 질문 (Questions)
+
 ```http
 GET  /interviews/{id}/questions     # 면접 질문 목록
 POST /interviews/{id}/next-question # 다음 질문 생성
@@ -301,6 +314,7 @@ POST /interviews/{id}/next-question # 다음 질문 생성
 ### 로컬 개발 환경 설정
 
 #### Backend 개발
+
 ```bash
 cd backend-core
 
@@ -316,6 +330,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 #### Frontend 개발
+
 ```bash
 cd frontend
 
@@ -354,34 +369,42 @@ find . -name "*.py" -exec python -m py_compile {} \;
 ### 주요 테이블
 
 #### Users (사용자)
+
 - 지원자, 채용담당자, 관리자 정보
 - JWT 인증 기반
 
 #### Resumes (이력서)
+
 - 파일 정보, 파싱 상태
 - structured_data (JSONB): 파싱된 정보
 
 #### ResumeSectionEmbedding (섹션별 임베딩)
+
 - 경력, 프로젝트, 자기소개 등 섹션별 벡터
 - pgvector 기반 유사도 검색
 
 #### ResumeChunk (청크 임베딩)
+
 - 500자 단위 텍스트 청크
 - 일반 RAG 검색용
 
 #### Interviews (면접)
+
 - 면접 세션 정보
 - 상태 관리 (scheduled, live, completed)
 
 #### Questions (질문)
+
 - AI 생성 질문
 - 재사용 통계 (usage_count, avg_score)
 
 #### Transcripts (대화 기록)
+
 - 실시간 대화 내용
 - 감정 분석 결과
 
 #### EvaluationReport (평가 리포트)
+
 - 종합 평가 결과
 - 기술적/행동적 점수
 
@@ -392,6 +415,7 @@ find . -name "*.py" -exec python -m py_compile {} \;
 자세한 보안 가이드는 [`docs/SECURITY_GUIDE.md`](docs/SECURITY_GUIDE.md) 참조
 
 ### 핵심 보안 사항
+
 - ✅ `.env` 파일은 Git에 커밋하지 않기
 - ✅ API 키를 코드에 하드코딩하지 않기
 - ✅ JWT Secret Key는 강력한 랜덤 문자열 사용
