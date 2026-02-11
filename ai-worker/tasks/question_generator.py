@@ -40,7 +40,7 @@ class QuestionGenerator:
         self.llm = get_exaone_llm()
         self._initialized = True
 
-    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5) -> List[str]:
+    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 1) -> List[str]:
         """
         면접 단계별 RAG 기반 질문 생성
 
