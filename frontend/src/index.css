@@ -22,6 +22,9 @@
 
   --bg-darker: #e2e8f0;
   --header-height: 72px;
+
+  /* Gradient Text - Light Mode */
+  --text-gradient-bg: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
 }
 
 body.dark-theme {
@@ -35,6 +38,9 @@ body.dark-theme {
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
 
   --bg-darker: #020617;
+
+  /* Gradient Text - Dark Mode */
+  --text-gradient-bg: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
 }
 
 body {
@@ -99,7 +105,7 @@ body {
 
 /* Typography & Colors */
 .text-gradient {
-  background: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
+  background: var(--text-gradient-bg);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
