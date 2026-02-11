@@ -79,6 +79,7 @@ services:
       - N_GPU_LAYERS=-1 # GPU 가속 활성화 (모든 레이어 오프로드)
       - USE_GPU=true
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
+
     depends_on:
       - redis
       - db
