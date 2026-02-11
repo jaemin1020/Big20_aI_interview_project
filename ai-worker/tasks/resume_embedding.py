@@ -12,7 +12,7 @@ from .pgvector_store import store_embeddings
 
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True, name="generate_resume_embeddings", queue='gpu_queue')
+@shared_task(bind=True, name="tasks.resume_embedding.generate_resume_embeddings", queue='gpu_queue')
 def generate_resume_embeddings(self, resume_id: int):
     """
     구조화된 이력서 데이터를 기반으로 청킹 및 임베딩을 생성하여 DB에 저장합니다.

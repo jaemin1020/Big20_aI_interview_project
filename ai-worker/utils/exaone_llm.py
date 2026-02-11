@@ -4,26 +4,26 @@ EXAONE-3.5-7.8B-Instruct 순수 LLM 엔진 모듈 (GGUF 버전)
 """
 import os
 import logging
-from llama_cpp import Llama
+# from llama_cpp import Llama (Moved inside ExaoneLLM.__init__)
 
 logger = logging.getLogger("EXAONE-ENGINE")
 
 # 모델 경로 (컨테이너 내부 경로)
-MODEL_PATH = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+MODEL_PATH = "/app/ai_models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, ClassVar
 from langchain_core.language_models.llms import LLM
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from llama_cpp import Llama
+# from llama_cpp import Llama (Moved inside ExaoneLLM.__init__)
 
 class ExaoneLLM(LLM):
     """
     EXAONE-3.5-7.8B-Instruct (GGUF) 싱글톤 LLM 엔진
     LangChain LLM 인터페이스를 상속받아 LCEL 호환성을 제공합니다.
     """
-    _instance = None
-    llm: Any = None
-    _initialized: bool = False
+    _instance: ClassVar[Optional["ExaoneLLM"]] = None
+    llm: ClassVar[Any] = None
+    _initialized: ClassVar[bool] = False
     
     def __new__(cls, **kwargs):
         if cls._instance is None:
@@ -38,7 +38,7 @@ class ExaoneLLM(LLM):
         logger.info(f"🚀 Loading EXAONE Engine from: {MODEL_PATH}")
         
         if not os.path.exists(MODEL_PATH):
-            local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+            local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
             target_path = local_path if os.path.exists(local_path) else MODEL_PATH
             if not os.path.exists(target_path):
                  raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {target_path}")
@@ -47,6 +47,9 @@ class ExaoneLLM(LLM):
 
         try:
             gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
+            # 🚨 CPU 환경에서 CUDA 빌드된 llama-cpp 로딩 시 발생하는 크래시 방지를 위해 지연 임포트
+            from llama_cpp import Llama
+            
             # 클래스 변수로 llm 객체 관리 (싱글톤)
             ExaoneLLM.llm = Llama(
                 model_path=target_path,

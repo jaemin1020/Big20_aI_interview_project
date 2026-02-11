@@ -77,12 +77,7 @@ async def create_interview(
         candidate_info = get_candidate_info(db, interview_data.resume_id)
         
         # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 등)
-        import sys
-        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "ai-worker", "config")
-        if config_path not in sys.path:
-            sys.path.append(config_path)
-        
-        from interview_scenario import get_initial_stages
+        from config.interview_scenario import get_initial_stages
         initial_stages = get_initial_stages()
         
         for stage_config in initial_stages:
@@ -386,12 +381,7 @@ async def create_realtime_interview(
         from utils.interview_helpers import generate_template_question
         
         # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
-        import sys
-        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "ai-worker", "config")
-        if config_path not in sys.path:
-            sys.path.append(config_path)
-        
-        from interview_scenario import get_initial_stages
+        from config.interview_scenario import get_initial_stages
         from models import Question, QuestionCategory, QuestionDifficulty
         
         initial_stages = get_initial_stages()
