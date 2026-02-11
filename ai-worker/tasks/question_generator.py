@@ -285,6 +285,7 @@ def generate_next_question_task(interview_id: int):
             # AI 질문 생성 실행
             content = exaone.generate_human_like_question(
                 name=candidate_name,
+                position=target_role,
                 stage=stage_name,
                 guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
                 context_list=contexts
