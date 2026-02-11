@@ -144,14 +144,19 @@ def generate_report():
     print("="*50 + "\n")
     
     # 3-5. JSON 파일 저장
-    report_json = {
-        "score": round(overall_score, 1),
-        "metrics": {"confidence": round(avg_smile, 1), "focus": round(gaze_ratio, 1), "posture": round(posture_ratio, 1), "anxiety": round(avg_anxiety, 1)},
-        "tension_events": session_data['tension_events']
-    }
-    with open("ai-worker/cv_poc/interview_result.json", "w", encoding="utf-8") as f:
+    # 경로 수정: ai-worker/cv_poc -> ai-worker/poc/cv_poc
+    output_dir = "ai-worker/poc/cv_poc"
+    if not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except:
+            output_dir = "." # 실패 시 현재 경로
+
+    output_path = os.path.join(output_dir, "interview_result.json")
+
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_json, f, ensure_ascii=False, indent=4)
-    print("💾 결과 파일이 'ai-worker/cv_poc/interview_result.json'에 저장되었습니다.\n")
+    print(f"💾 결과 파일이 '{output_path}'에 저장되었습니다.\n")
 
 # ==========================================
 # [Step 4] 메인 실행 함수 (Main Loop)
