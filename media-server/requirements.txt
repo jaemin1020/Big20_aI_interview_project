@@ -1,6 +1,6 @@
 # ==========================================
 # Media-Server Requirements
-# Purpose: WebRTC + STT (Deepgram v5.x) + WebSocket
+# Purpose: WebRTC + WebSocket (No Local STT)
 # ==========================================
 
 # Web Framework
@@ -25,11 +25,5 @@ websockets==14.1
 celery[redis]==5.4.0
 redis==5.2.1
 
-# STT Service (Latest v5+)
-deepgram-sdk>=5.0.0
-
 # Data Processing
 numpy>=1.23.0,<2.0.0
-
-# Local STT
-faster-whisper
