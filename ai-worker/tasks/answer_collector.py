@@ -6,7 +6,7 @@ import logging
 from celery import shared_task
 from sqlmodel import Session
 from db import engine
-from db import engine, AnswerBank, Transcript, Question
+from db import AnswerBank, Transcript, Question
 
 # 벡터 생성 유틸
 import sys
