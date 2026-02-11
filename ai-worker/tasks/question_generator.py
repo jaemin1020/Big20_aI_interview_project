@@ -1,267 +1,309 @@
+import sys
 import os
+import time
+import gc 
 import logging
+import torch
 from celery import shared_task
-from typing import Optional, List, Dict
-import re
+from langchain_community.llms import LlamaCpp
+from langchain_core.callbacks import CallbackManager
+from langchain_core.prompts import PromptTemplate
 
-# DB 헬퍼 함수 import
-from db import engine
-from sqlmodel import Session, select
-
-# EXAONE LLM import
-from utils.exaone_llm import get_exaone_llm
+# AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-class QuestionGenerator:
-    """
-    RAG 기반 심층 면접 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
-    면접 단계별 시나리오(Plan)에 따라 이력서 내용을 참조하여 질문 생성
-    
-    Attributes:
-        _instance (QuestionGenerator): 싱글톤 인스턴스
-        _initialized (bool): 초기화 여부
-        llm (ExaoneLLM): EXAONE LLM 인스턴스
-    """
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        logger.info("Initializing RAG Question Generator")
-        self.llm = get_exaone_llm()
-        self._initialized = True
-        logger.info("✅ Question Generator Initialized")
+# -----------------------------------------------------------
+# [1. 모델 및 경로 설정]
+# -----------------------------------------------------------
+local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
-    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 1) -> List[str]:
-        """
-        면접 단계별 RAG 기반 질문 생성
-        
-        Args:
-            position: 지원 직무
-            interview_id: 면접 ID
-            count: 생성할 총 질문 수
-        """
-        questions = []
-        
-        # 1. 이력서 ID 및 지원자 정보 조회
-        resume_id = None
-        candidate_name = "지원자"
-        
-        if interview_id:
-            try:
-                with Session(engine) as session:
-                    # Circular import 방지를 위해 함수 내부 import
-                    from db import Interview, Resume
-                    interview = session.get(Interview, interview_id)
-                    if interview and interview.resume_id:
-                        resume_id = interview.resume_id
-                        resume = session.get(Resume, resume_id)
-                        # 이력서에서 지원자 이름 추출 시도 (헤더 정보 등)
-                        if resume and resume.structured_data:
-                            candidate_name = resume.structured_data.get("target_company", {}).get("name", "지원자")
-                            # structured_data 구조에 따라 다를 수 있음. 안전하게 처리
-                            if isinstance(resume.structured_data.get("header"), dict):
-                                candidate_name = resume.structured_data["header"].get("name", "지원자")
-            except Exception as e:
-                logger.warning(f"이력서 정보 조회 실패: {e}")
-        
-        # 2. RAG 불가능 시 기본 생성 로직으로 Fallback
+model_path = local_path if os.path.exists(local_path) else docker_path
+
+# 🚨 DB 조회를 위해 추가
+try:
+    from db import engine
+    from sqlalchemy import text as sql_text
+except ImportError:
+    engine = None
+
+
+# 🚨 ExaoneLLM은 함수 내부에서 import (Celery 로딩 시점 문제 회피)
+
+# -----------------------------------------------------------
+# [2. 프롬프트 템플릿]
+# -----------------------------------------------------------
+PROMPT_TEMPLATE = """[|system|]
+너는 15년 차 베테랑 {position} 전문 면접관이다. 
+지금은 **면접이 한창 진행 중인 상황**이다. (자기소개는 이미 끝났다.)
+제공된 [지원자 이력서 근거] 데이터를 바탕으로, 해당 단계({stage})에 맞는 **핵심적인 질문 1개**만 던져라.
+
+[작성 절대 금지 사항] 
+1. **"자기소개 부탁드립니다" 절대 금지.**
+2. **"(잠시 침묵)", "답변 감사합니다"** 같은 대본용 지문을 쓰지 마라.
+3. **[프로젝트], [회사 명]** 같은 자리표시자(Placeholder)를 그대로 노출하지 말고, 근거 데이터에 있는 실제 명칭을 써라.
+4. 질문 앞뒤에 사족을 붙이지 말고 **질문만 딱 한 문장(최대 두 문장)**으로 출력하라.
+
+[질문 스타일 가이드]
+1. 시작은 반드시 **"{name}님,"** 으로 부르며 시작할 것.
+2. 질문이 너무 길어지지 않게 핵심만 명확히 물어볼 것. 꼬아내지 말고 정공법으로 물어볼 것.
+3. 말투는 정중하게(..하셨나요?, ..부탁드립니다.) 유지할 것.
+[|endofturn|]
+[|user|]
+# 평가 단계: {stage}
+# 평가 의도: {guide}
+# 지원자 이력서 근거 (RAG):
+{context}
+
+# 요청:
+위의 근거 데이터를 기반으로 {name} 지원자에게 **구체적이고 단도직입적인** 질문을 던져줘.
+[|endofturn|]
+[|assistant|]
+"""
+
+# -----------------------------------------------------------
+# [3. 질문 생성 핵심 함수]
+# -----------------------------------------------------------
+# -----------------------------------------------------------
+# [3. 질문 생성 핵심 함수]
+# -----------------------------------------------------------
+def generate_human_like_question(exaone, name, position, stage, guide, context_list):
+    """
+    ExaoneLLM 인스턴스를 사용하여 질문 생성
+    """
+    if not context_list:
+        return f"❌ (관련 내용을 찾지 못해 질문을 생성할 수 없습니다)"
+
+    texts = [item['text'] for item in context_list] if isinstance(context_list[0], dict) else context_list
+    context_text = "\n".join([f"- {txt}" for txt in texts])
+    
+    try:
+        # ExaoneLLM의 generate_questions 메서드 활용 (단일 질문 생성을 위해 count=1)
+        # 보다 정교한 프롬프트를 위해 직접 generate 호출 가능하나, 여기서는 일관성을 위해 랩핑
+        system_msg = f"당신은 15년 차 베테랑 {position} 전문 면접관이다. 지금은 면접이 한창 진행 중인 상황이다."
+        user_msg = f"""지원자 {name}님에게 {stage} 단계의 면접 질문을 던지세요.
+
+[평가 의도 - 반드시 이 관점으로 질문할 것]
+{guide}
+
+[지원자 이력서 근거]
+{context_text}
+
+[요구사항]
+1. 시작은 반드시 "{name}님," 으로 부를 것.
+2. **이력서에 나온 구체적인 프로젝트명/회사명/기술명을 반드시 언급**할 것.
+   예: "{name}님, 이력서를 보니 오픈소스 기반 침입 탐지 프로젝트를 하셨네요~"
+3. **평가 의도(guide)에 맞는 질문**을 할 것.
+   - 예: guide가 "구체적인 역할과 기여도"라면 → "이 프로젝트에서 달성한 구체적인 역할과 기여도가 어떻게 되나요?"
+4. 반드시 **150자 이내(두 문장 이내)**로 짧고 명확하게 물어볼 것.
+5. [프로젝트], [회사명] 같은 자리표시자를 절대 사용하지 말 것.
+"""
+
+        prompt = exaone._create_prompt(system_msg, user_msg)
+        output = exaone.llm(
+            prompt,
+            max_tokens=512,
+            stop=["[|endofturn|]", "[|user|]"],
+            temperature=0.4,
+            echo=False
+        )
+        return output['choices'][0]['text'].strip()
+    except Exception as e:
+        logger.error(f"질문 생성 실패: {e}")
+        return f"면접을 이어가겠습니다. {name}님, 다음 질문입니다."
+
+# -----------------------------------------------------------
+# [4. Celery Task] - 기존 일괄 생성 태스크 (필요 시 유지)
+# -----------------------------------------------------------
+@shared_task(name="tasks.question_generation.generate_questions")
+def generate_questions_task(interview_id, count=5, resume_id=None):
+    from db import engine, Session, Resume, Interview
+    from utils.exaone_llm import get_exaone_llm
+    
+    exaone = get_exaone_llm()
+    
+    with Session(engine) as session:
+        # 1. 인터뷰 정보 로드 (명시적인 resume_id가 없으면 인터뷰 레코드에서 가져옴)
         if not resume_id:
-            logger.info("Resume ID not found. Using generic generation.")
-            return self.llm.generate_questions(position=position, count=count)
-        
-        # 3. 면접 시나리오 정의 (Step 8 기반)
-        interview_plan = [
-            {
-                "stage": "1. 직무 지식 평가",
-                "search_query": f"{position} 핵심 기술 스킬 도구 원리",
-                "filter_category": "metric", # 자격증/스킬
-                "guide": "지원자가 사용한 기술(Tool, Language)의 구체적인 설정법이나, 기술적 원리(Deep Dive)를 물어볼 것."
-            },
-            {
-                "stage": "2. 직무 경험 평가",
-                "search_query": "프로젝트 성과 달성 문제해결",
-                "filter_category": "project",
-                "guide": "프로젝트에서 달성한 수치적 성과(%)의 결정적 요인이 무엇인지, 구체적으로 어떤 데이터를 다뤘는지 물어볼 것."
-            },
-            {
-                "stage": "3. 문제 해결 능력 평가",
-                "search_query": "기술적 난관 극복 트러블슈팅",
-                "filter_category": "project",
-                "guide": "직면한 한계점이나 문제 상황을 어떻게 정의했고, 어떤 논리적 사고 과정을 통해 해결책을 도출했는지 물어볼 것."
-            },
-            {
-                "stage": "4. 의사소통 및 협업 평가",
-                "search_query": "협업 갈등 해결 커뮤니케이션",
-                "filter_category": "narrative",
-                "guide": "팀원과의 의견 대립 상황에서 본인의 주장을 관철시키기 위해 어떤 객관적 근거를 사용했는지 대화 과정을 물어볼 것."
-            },
-            {
-                "stage": "5. 직무 적합성 및 성장 가능성",
-                "search_query": f"{position} 트렌드 성장 계획",
-                "filter_category": "narrative",
-                "guide": "직무와 관련된 최신 트렌드를 어떻게 학습하고 있으며, 이를 실무에 어떻게 적용할 것인지 물어볼 것."
-            }
-        ]
-        
-        # 4. 시나리오 반복하며 질문 생성
-        # count가 plan보다 크면 plan을 반복, 작으면 앞에서부터 자름
-        generated_count = 0
-        plan_idx = 0
-        
-        while generated_count < count:
-            step = interview_plan[plan_idx % len(interview_plan)]
-            plan_idx += 1
+            interview = session.get(Interview, interview_id)
+            if interview: resume_id = interview.resume_id
             
-            # RAG 검색
-            contexts = self._retrieve_context(
-                resume_id=resume_id,
-                query=step['search_query'],
-                filter_category=step['filter_category'],
-                top_k=2
+        if not resume_id:
+            logger.error(f"Resume ID not found for interview {interview_id}")
+            return exaone.generate_questions("일반", count=count)
+
+        resume = session.get(Resume, resume_id)
+        if not resume:
+            return exaone.generate_questions("일반", count=count)
+
+        # 2. 이력서 파싱 데이터(header -> target_role) 추출 (데이터의 유일한 원천)
+        s_data = resume.structured_data or {}
+        header = s_data.get("header", {})
+        target_role = header.get("target_role") or "일반"
+        
+        # 3. 이력서 전문(extracted_text) 가져오기
+        resume_context = resume.extracted_text or ""
+        
+        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Target Role: {target_role}")
+        
+    return exaone.generate_questions(target_role, context=resume_context, count=count)
+
+# -----------------------------------------------------------
+# [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
+# -----------------------------------------------------------
+@shared_task(name="tasks.question_generation.generate_next_question")
+def generate_next_question_task(interview_id: int):
+    logger.info(f"🔥 [START] generate_next_question_task for Interview {interview_id}")
+    
+    from db import (
+        engine, Session, select, save_generated_question,
+        Interview, Transcript, Speaker, Question, Resume
+
+    )
+    from config.interview_scenario import get_stage_by_name, get_next_stage
+    from utils.exaone_llm import get_exaone_llm
+    
+    with Session(engine) as session:
+        interview = session.get(Interview, interview_id)
+        if not interview: 
+            logger.error(f"Interview {interview_id} not found.")
+            return {"status": "error", "message": "Interview not found"}
+            
+        # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
+        stmt = select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.speaker == Speaker.AI
+        ).order_by(Transcript.id.desc()) # ID가 가장 큰 것이 절대적으로 최신
+        last_ai_transcript = session.exec(stmt).first()
+        
+        last_stage_name = None
+        if last_ai_transcript:
+            if last_ai_transcript.question_id:
+                last_q = session.get(Question, last_ai_transcript.question_id)
+                if last_q:
+                    # 1순위: DB에 저장된 타입 정보 사용
+                    last_stage_name = last_q.question_type
+                    
+                    # 2순위 (Fallback): 저장된 타입이 없으면 텍스트 내용으로 유추
+                    if not last_stage_name:
+                        content = last_q.content
+                        if "자기소개" in content: last_stage_name = "intro"
+                        elif "지원 동기" in content or "지원하게 된" in content: last_stage_name = "motivation"
+                        elif "기술" in content or "스킬" in content or "도구" in content: last_stage_name = "skill"
+                        elif "프로젝트" in content or "경험" in content: last_stage_name = "experience"
+                        elif "어려움" in content or "해결" in content: last_stage_name = "problem_solving"
+            
+            # 3순위: transcript의 order를 기반으로 역추적 (scenario의 order와 매칭)
+            if not last_stage_name and last_ai_transcript.order is not None:
+                from config.interview_scenario import INTERVIEW_STAGES
+                # transcript.order는 0부터 시작, scenario order는 1부터 시작할 수 있으므로 보정 필요
+                # 여기서는 scenario의 order 필드를 검색
+                for s in INTERVIEW_STAGES:
+                    if s["order"] == last_ai_transcript.order + 1:
+                        last_stage_name = s["stage"]
+                        break
+
+        # 4순위: 매핑 보정 (Legacy 데이터 등)
+        if last_stage_name == "technical": last_stage_name = "skill"
+        
+        if not last_stage_name:
+            last_stage_name = "intro"
+
+        logger.info(f"Detected Last Stage: {last_stage_name}")
+        
+        next_stage_data = get_next_stage(last_stage_name)
+        if not next_stage_data:
+            logger.info("Scenario Completed.")
+            return {"status": "completed"}
+            
+        stage_name = next_stage_data["stage"]
+        stage_type = next_stage_data.get("type", "ai")
+        
+        if stage_type == "template" or stage_type == "final":
+            from utils.interview_helpers import get_candidate_info
+            from db import Resume
+            resume = session.get(Resume, interview.resume_id)
+            c_info = get_candidate_info(resume.structured_data if resume else {})
+            tmpl = next_stage_data.get("template", "{candidate_name}님, 다음 질문입니다.")
+            content = tmpl.format(candidate_name=c_info.get("candidate_name", "지원자"), target_role=interview.position)
+            
+            # QuestionCategory Enum에 'general'이 없으므로 'behavioral' 사용
+            save_generated_question(interview_id, content, "behavioral", stage_name, "")
+            return {"status": "success", "stage": stage_name}
+
+        # AI 생성 루틴
+        try:
+            exaone = get_exaone_llm()
+            
+            # 컨텍스트 준비: 꼬리질문 vs 일반 AI 질문 명확히 분리
+            contexts = []
+            if stage_type == "followup":
+                # 꼬리질문: 오직 이전 답변만 사용 (RAG 검색 안 함)
+                user_stmt = select(Transcript).where(
+                    Transcript.interview_id == interview_id,
+                    Transcript.speaker == Speaker.USER # Enum 값이 "User"이므로 일치함
+                ).order_by(Transcript.id.desc())
+                last_user_ans = session.exec(user_stmt).first()
+                if last_user_ans:
+                    contexts = [{"text": f"이전 답변: {last_user_ans.text}", "meta": {"category": "followup"}}]
+                    logger.info(f"📌 Follow-up context prepared from last answer.")
+                else:
+                    logger.warning("⚠️ No previous answer found for followup question!")
+                    contexts = [{"text": "이전 답변을 찾을 수 없습니다.", "meta": {}}]
+            else:
+                # 일반 AI 질문: 이력서 RAG 검색
+                from .rag_retrieval import retrieve_context
+                query_tmpl = next_stage_data.get("query_template", "{target_role}")
+                query = query_tmpl.format(target_role=interview.position)
+                contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+
+            
+            # 지원자 정보 및 직무 정보 가져오기 보강 (JSON header/metadata 우선)
+            resume = session.get(Resume, interview.resume_id)
+            candidate_name = "지원자"
+            target_role = interview.position # 기본값 (인터뷰 세션 설정값)
+            
+            if resume and resume.structured_data:
+                s_data = resume.structured_data
+                header_data = s_data.get("header", {})
+                
+                # 1. 이름 추출 (header -> User 테이블 순)
+                candidate_name = header_data.get("name") or header_data.get("candidate_name")
+                if not candidate_name and resume.candidate_id:
+                    from db import User
+                    user = session.get(User, resume.candidate_id)
+                    if user: candidate_name = user.full_name or user.username
+                
+                # 2. 직무 추출 (header에 있으면 최우선)
+                target_role = header_data.get("target_role") or target_role
+
+            logger.info(f"Target Candidate Name: {candidate_name}, Role: {target_role}")
+            
+            # AI 질문 생성 실행
+            content = exaone.generate_human_like_question(
+                name=candidate_name,
+                stage=stage_name,
+                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
+                context_list=contexts
             )
             
-            # 질문 생성
-            if contexts:
-                q = self.llm.generate_human_like_question(
-                    name=candidate_name,
-                    stage=step['stage'],
-                    guide=step['guide'] + f" (지원 직무: {position})",
-                    context_list=contexts
-                )
-                if q not in questions: # 중복 방지
-                    questions.append(q)
-                    generated_count += 1
-            else:
-                # 컨텍스트 없으면 Fallback 질문 하나 추가
-                logger.info(f"컨텍스트 없음: {step['stage']}")
-                # 그냥 다음 단계로 넘어가거나 기본 질문 추가
-                # 여기서는 스킵하고 계속 진행 (while loop)
-                # 무한 루프 방지: 시도를 너무 많이 하면 중단
-                if plan_idx > count * 3:
-                     break
-
-        # 부족분 채우기
-        if len(questions) < count:
-            logger.warning(f"생성된 질문 수 부족 ({len(questions)}/{count}). Fallback으로 보충합니다.")
-            fallback_candidates = self.llm._get_fallback_questions(position, count + 5) # 충분히 가져오기
-            
-            for fq in fallback_candidates:
-                if len(questions) >= count:
-                    break
-                if fq not in questions:
-                    questions.append(fq)
-             
-        return questions[:count]
-
-    def _retrieve_context(self, resume_id: int, query: str, filter_category: str, top_k: int = 2) -> List[Dict]:
-        """내부 RAG 검색 로직"""
-        try:
-            from db import ResumeSectionEmbedding, ResumeSectionType
-            from utils.vector_utils import get_embedding_generator
-            
-            # 카테고리 매핑
+            # 시나리오의 카테고리를 DB Enum에 맞게 매핑
+            category_raw = next_stage_data.get("category", "technical")
             category_map = {
-                "metric": [ResumeSectionType.CERTIFICATION, ResumeSectionType.SKILL, ResumeSectionType.LANGUAGE, ResumeSectionType.EDUCATION],
-                "project": [ResumeSectionType.PROJECT, ResumeSectionType.EXPERIENCE],
-                "narrative": [ResumeSectionType.SELF_INTRODUCTION]
+                "certification": "technical",
+                "project": "technical",
+                "narrative": "behavioral",
+                "problem_solving": "situational"
             }
-            target_types = category_map.get(filter_category)
-
-            # 임베딩
-            generator = get_embedding_generator()
-            query_vector = generator.encode_query(query)
-
-            # 검색
-            with Session(engine) as session:
-                dist_expr = ResumeSectionEmbedding.embedding.cosine_distance(query_vector)
-                stmt = select(ResumeSectionEmbedding, dist_expr.label("distance")).where(
-                    ResumeSectionEmbedding.resume_id == resume_id,
-                    ResumeSectionEmbedding.embedding.isnot(None)
-                )
-                if target_types:
-                    stmt = stmt.where(ResumeSectionEmbedding.section_type.in_(target_types))
-                
-                stmt = stmt.order_by(dist_expr).limit(top_k)
-                rows = session.exec(stmt).all()
-                
-                return [{"text": row[0].content, "similarity": 1 - (row[1]/2)} for row in rows]
-                
+            db_category = category_map.get(category_raw, "technical")
+            
+            save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
+            return {"status": "success", "stage": stage_name, "question": content}
         except Exception as e:
-            logger.error(f"RAG 검색 실패: {e}")
-            return []
-
-@shared_task(name="tasks.question_generator.generate_questions")
-def generate_questions_task(position: str, interview_id: int = None, count: int = 1):
-    """
-    질문 생성 Task (TTS 포함)
-    
-    Args:
-        position (str): 지원 직무
-        interview_id (int, optional): 면접 ID. Defaults to None.
-        count (int, optional): 생성할 질문 수. Defaults to 5.
-    
-    Returns:
-        List[Dict[str, str]]: 생성된 질문 및 오디오 URL 리스트 
-        Example: [{"text": "질문내용", "audio_url": "/static/audio/..."}]
-    
-    Raises:
-        Exception: 질문 생성 실패
-    
-    생성자: ejm
-    생성일자: 2026-02-04
-    """
-    import uuid
-    from .tts import tts_engine, load_tts_engine
-
-    try:
-        generator = QuestionGenerator()
-        questions = generator.generate_questions(position, interview_id, count)
-        
-        # TTS Integration
-        results = []
-        
-        # Ensure TTS engine is ready
-        if tts_engine is None or tts_engine.tts is None:
-            load_tts_engine()
-
-        # Save directory inside container
-        save_dir = "/app/uploads/audio"
-        os.makedirs(save_dir, exist_ok=True)
-            
-        for q in questions:
-            audio_url = None
-            if tts_engine and tts_engine.tts:
-                try:
-                    filename = f"q_{uuid.uuid4().hex}.wav"
-                    filepath = os.path.join(save_dir, filename)
-                    
-                    if tts_engine.synthesize(q, filepath):
-                        # URL path for backend (mounted as /static)
-                        audio_url = f"/static/audio/{filename}"
-                except Exception as ex:
-                    logger.error(f"TTS failing for question '{q[:20]}...': {ex}")
-            
-            results.append({"text": q, "audio_url": audio_url})
-            
-        return results
-
-    except Exception as e:
-        logger.error(f"Task Error: {e}")
-        return []
-
-# Eager Initialization: Worker 시작 시 모델 미리 로드
-try:
-    logger.info("🔥 Pre-loading Question Generator with EXAONE...")
-    _warmup_generator = QuestionGenerator()
-    logger.info("✅ Question Generator ready for requests")
-except Exception as e:
-    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
+            logger.error(f"실시간 질문 생성 실패: {e}")
+            return {"status": "error", "error": str(e)}
+        finally:
+            gc.collect()

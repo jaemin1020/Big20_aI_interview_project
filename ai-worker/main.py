@@ -35,15 +35,11 @@ app = Celery(
     include=[
         'tasks.evaluator', 
         'tasks.vision', 
-        'tasks.question_generation', 
-        'tasks.parse_resume', 
-        'tasks.save_structured',
-        'tasks.chunking',
-        'tasks.embedding',
-        'tasks.pgvector_store',
-        'tasks.rag_retrieval',
-        'tasks.resume_pipeline',
-        'tasks.stt'
+        'tasks.question_generator', 
+        'tasks.resume_parser', 
+        'tasks.resume_embedding',
+        'tasks.stt',
+        'tasks.tts'
     ]
 )
 
@@ -64,17 +60,15 @@ app.conf.update(
     task_default_queue='cpu_queue',
     task_routes={
         # GPU 사용 태스크 (질문 생성, 임베딩)
-        'tasks.question_generation.*': {'queue': 'gpu_queue'},
-        'tasks.embedding.*': {'queue': 'gpu_queue'},
-        'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
+        'tasks.question_generator.*': {'queue': 'gpu_queue'},
+        'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         
         # CPU 사용 태스크 (답변 분석, STT, 비전, 기타)
         'tasks.evaluator.*': {'queue': 'cpu_queue'},
-        'tasks.stt.*': {'queue': 'cpu_queue'},
+        'tasks.stt.*': {'queue': 'cpu_queue'}, # Whisper Heavy Model이면 GPU 권장
         'tasks.vision.*': {'queue': 'cpu_queue'},
-        'tasks.parse_resume.*': {'queue': 'cpu_queue'},
-        'tasks.save_structured.*': {'queue': 'cpu_queue'},
-        'tasks.chunking.*': {'queue': 'cpu_queue'},
+        'tasks.resume_parser.*': {'queue': 'cpu_queue'},
+        'tasks.tts.*': {'queue': 'cpu_queue'},
     }
 )
 
@@ -83,7 +77,7 @@ if __name__ == "__main__":
     
     # 모델 Preload (첫 요청 지연 방지)
     try:
-        from tasks.stt import load_models as load_stt
+        from tasks.stt import load_stt_pipeline as load_stt
         from tasks.resume_embedding import load_embedding_model
         
         logger.info("Preloading models...")

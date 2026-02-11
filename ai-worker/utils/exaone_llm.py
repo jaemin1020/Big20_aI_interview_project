@@ -51,15 +51,9 @@ class ExaoneLLM:
 
             self.llm = Llama(
                 model_path=MODEL_PATH,
-<<<<<<< HEAD
-                n_gpu_layers=-1,      # 가능한 모든 레이어를 GPU로 오프로드
-                n_ctx=2048,           # 컨텍스트 윈도우 크기 (메모리 절약)
-                n_batch=128,          # 배치 크기 (CPU 반응성 향상)
-=======
                 n_gpu_layers=gpu_layers,
                 n_ctx=4096,           # 컨텍스트 윈도우 크기
                 n_batch=512,          # 배치 크기
->>>>>>> Phase_3
                 verbose=False          # 로딩 로그 출력
             )
             logger.info(f"✅ EXAONE GGUF Model Initialized (GPU Layers: {gpu_layers})")
@@ -123,13 +117,8 @@ class ExaoneLLM:
         try:
             output = self.llm(
                 prompt,
-<<<<<<< HEAD
-                max_tokens=300,
-                stop=["[|endofturn|]", "[|user|]", "생성된 질문:"],
-=======
                 max_tokens=1024,
                 stop=["[|endofturn|]", "[|user|]"],
->>>>>>> Phase_3
                 temperature=0.7,
                 top_p=0.9,
                 echo=False
