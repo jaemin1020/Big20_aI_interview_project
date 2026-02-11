@@ -24,9 +24,18 @@ class EmbeddingGenerator:
     
     def __init__(self):
         if self._model is None:
+            cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
+            os.makedirs(cache_dir, exist_ok=True)
+            
             logger.info(f"Loading embedding model: {MODEL_NAME}")
+            logger.info(f"📂 Cache path: {cache_dir}")
+            
             # trust_remote_code=True 권장 (KURE 모델)
-            self._model = SentenceTransformer(MODEL_NAME, trust_remote_code=True)
+            self._model = SentenceTransformer(
+                MODEL_NAME, 
+                trust_remote_code=True,
+                cache_folder=cache_dir
+            )
             logger.info("✅ Embedding model loaded")
     
     def encode(self, text: str, is_query: bool = True) -> List[float]:
@@ -42,7 +51,7 @@ class EmbeddingGenerator:
         """
         if not text or len(text.strip()) == 0:
             logger.warning("Empty text provided for encoding")
-            # KURE-v1 output dimension is 1024 (based on BAAI/bge-m3)
+            # KURE-v1 output dimension typically 1024.
             return [0.0] * 1024
         
         prefix = "query: " if is_query else "passage: "

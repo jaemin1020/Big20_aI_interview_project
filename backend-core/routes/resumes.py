@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/resumes", tags=["Resumes"])
 
 # Celery 앱 (환경변수에서 설정)
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-celery_app = Celery("tasks", broker=CELERY_BROKER_URL)
+celery_app = Celery("ai_worker", broker=CELERY_BROKER_URL)
 
 # 업로드 디렉토리
 UPLOAD_DIR = os.getenv("RESUME_UPLOAD_DIR", "./uploads/resumes")
@@ -88,13 +88,14 @@ async def upload_resume(
     
     logger.info(f"Resume {resume.id} 생성 완료")
     
-    # 비동기 파싱 작업 전송 (Celery)
+    # 비동기 파싱 및 처리 파이프라인 전송 (Celery)
     try:
         celery_app.send_task(
-            "parse_resume_pdf",
-            args=[resume.id, file_path]
+            "tasks.resume_pipeline.process_resume_pipeline",
+            args=[resume.id, file_path],
+            queue='gpu_queue'
         )
-        logger.info(f"Resume {resume.id} 파싱 작업 전송 완료")
+        logger.info(f"Resume {resume.id} 처리 파이프라인 전송 완료")
     except Exception as e:
         logger.error(f"Celery 작업 전송 실패: {e}")
         # 실패해도 레코드는 생성됨 (나중에 재처리 가능)
@@ -203,8 +204,9 @@ async def reprocess_resume(
     # 재처리 작업 전송
     try:
         celery_app.send_task(
-            "reprocess_resume",
-            args=[resume_id]
+            "tasks.resume_pipeline.process_resume_pipeline",
+            args=[resume_id, resume.file_path],
+            queue='gpu_queue'
         )
         
         # 상태 업데이트

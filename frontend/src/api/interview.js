@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -11,39 +11,9 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('[API] Request to:', config.url, '| Token present: true');
-    } else {
-        // Skip warning for auth endpoints as they don't need a token
-        if (!['/auth/token', '/auth/register'].includes(config.url)) {
-            console.warn('[API] Request to:', config.url, '| No token found');
-        }
     }
     return config;
-}, (error) => {
-    return Promise.reject(error);
 });
-
-// Response interceptor to handle 401 errors
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response?.status === 401) {
-            // Distinguish between login failure and token expiration
-            if (error.config.url === '/auth/token') {
-                console.error('[API] 401 Unauthorized - 로그인 정보가 올바르지 않습니다.');
-            } else {
-                console.error('[API] 401 Unauthorized - 세션이 만료되었거나 토큰이 유효하지 않습니다.');
-                // Clear invalid token
-                localStorage.removeItem('token');
-                // Redirect to login if not already on auth page
-                if (window.location.pathname !== '/') {
-                    window.location.href = '/';
-                }
-            }
-        }
-        return Promise.reject(error);
-    }
-);
 
 // ==================== Auth ====================
 
@@ -81,39 +51,26 @@ export const logout = () => {
 };
 
 export const getCurrentUser = async () => {
-    const response = await api.get('/users/me'); // users 라우터는 별도 분리 예정 또는 main에 유지
+    const response = await api.get('/users/me');
     return response.data;
 };
 
-// export const getDeepgramToken = async () => {
-//     const response = await api.get('/auth/deepgram-token');
-//     return response.data.temp_key;
-// };
-// -> Removed Deepgram Token API
-
-export const recognizeAudio = async (audioBlob) => {
-    const formData = new FormData();
-    // 파일명은 timestamp 등으로 유니크하게 지정 (백엔드 처리용)
-    formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
-    
-    // Hugging Face Whisper API 엔드포인트 호출
-    const response = await api.post('/stt/recognize', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
-    return response.data; // { text: "..." }
+export const getDeepgramToken = async () => {
+    const response = await api.get('/auth/deepgram-token');
+    return response.data.temp_key;
 };
 
 // ==================== Interview ====================
 
-export const createInterview = async (position, companyId = null, resumeId = null, scheduledTime = null) => {
-    const response = await api.post('/interviews', {
+export const createInterview = async (position, jobPostingId = null, resumeId = null, scheduledTime = null) => {
+    const payload = {
         position,
-        company_id: companyId,
+        company_id: jobPostingId,
         resume_id: resumeId,
         scheduled_time: scheduledTime
-    });
+    };
+    console.log('[InterviewAPI] createInterview Payload:', payload);
+    const response = await api.post('/interviews', payload);
     return response.data;
 };
 
@@ -128,6 +85,19 @@ export const completeInterview = async (interviewId) => {
 };
 
 // ==================== Transcript ====================
+
+export const recognizeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('file', audioBlob);
+
+    // 타임아웃 5분 (모델 로딩 대비)
+    const response = await api.post('/stt/recognize', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000
+    });
+    return response.data;
+};
+
 
 export const createTranscript = async (interviewId, speaker, text, questionId = null) => {
     const response = await api.post('/transcripts', {
@@ -157,7 +127,7 @@ export const uploadResume = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await api.post('/api/resumes/upload', formData, {
+    const response = await api.post('/resumes/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data'
         }
@@ -166,7 +136,7 @@ export const uploadResume = async (file) => {
 };
 
 export const getResume = async (resumeId) => {
-    const response = await api.get(`/api/resumes/${resumeId}`);
+    const response = await api.get(`/resumes/${resumeId}`);
     return response.data;
 };
 

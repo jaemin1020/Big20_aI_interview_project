@@ -12,7 +12,18 @@ DATABASE_URL = "postgresql://interview_user:interview_password@interview_postgre
 engine = create_engine(DATABASE_URL)
 
 def reprocess_existing_chunks():
-    """기존 청크들에 section_type을 부여함"""
+    """
+    기존 청크들에 section_type을 부여함
+    
+    Args:
+        None
+        
+    Returns:
+        None
+    
+    생성자: lyn
+    생성일자: 2026-02-07
+    """
     with Session(engine) as session:
         statement = select(ResumeChunk)
         chunks = session.exec(statement).all()

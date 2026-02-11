@@ -7,14 +7,8 @@ const MainPage = ({
   onLogin,
   onRegister,
   user,
-  onLogout,
-  onHistory,
-  onAccountSettings,
-  onProfileManagement
+  onLogout
 }) => {
-  const [isManageOpen, setIsManageOpen] = React.useState(false);
-  const [isMyInfoOpen, setIsMyInfoOpen] = React.useState(false);
-
   return (
     <div className="main-container animate-fade-in" style={{
       flex: 1,
@@ -26,144 +20,7 @@ const MainPage = ({
       position: 'relative',
       padding: '2rem 0'
     }}>
-      {/* Auth Buttons - Absolute Position Top Right */}
-      <div style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: '1rem', alignItems: 'center', zIndex: 100 }}>
-        {user ? (
-          <>
-            {/* 면접 관리 드롭다운 */}
-            <div
-              className="dropdown-container"
-              style={{ position: 'relative' }}
-              onMouseEnter={() => setIsManageOpen(true)}
-              onMouseLeave={() => setIsManageOpen(false)}
-            >
-              <PremiumButton
-                variant="secondary"
-                style={{
-                  padding: '8px 20px',
-                  fontSize: '0.9rem',
-                  background: isManageOpen ? 'rgba(255,255,255,0.1)' : 'var(--glass-bg)',
-                  outline: 'none'
-                }}
-              >
-                면접 관리
-              </PremiumButton>
-              {isManageOpen && (
-                <div className="dropdown-menu" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  width: '160px',
-                  marginTop: '4px',
-                  background: 'var(--glass-bg)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid var(--glass-border)',
-                  borderRadius: '12px',
-                  padding: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-                  animation: 'fadeIn 0.2s ease'
-                }}>
-                  <button className="dropdown-item" onClick={onHistory}>면접 이력</button>
-                </div>
-              )}
-            </div>
-
-            {/* 내 정보 드롭다운 */}
-            <div
-              className="dropdown-container"
-              style={{ position: 'relative' }}
-              onMouseEnter={() => setIsMyInfoOpen(true)}
-              onMouseLeave={() => setIsMyInfoOpen(false)}
-            >
-              <PremiumButton
-                variant="secondary"
-                style={{
-                  padding: '8px 20px',
-                  fontSize: '0.9rem',
-                  background: isMyInfoOpen ? 'rgba(255,255,255,0.1)' : 'var(--glass-bg)',
-                  outline: 'none'
-                }}
-              >
-                내 정보
-              </PremiumButton>
-              {isMyInfoOpen && (
-                <div className="dropdown-menu" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  width: '160px',
-                  marginTop: '4px',
-                  background: 'var(--glass-bg)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid var(--glass-border)',
-                  borderRadius: '12px',
-                  padding: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-                  animation: 'fadeIn 0.2s ease'
-                }}>
-                  <button className="dropdown-item" onClick={onProfileManagement}>프로필 관리</button>
-                  <button className="dropdown-item" onClick={onAccountSettings}>계정 관리</button>
-                </div>
-              )}
-            </div>
-
-            <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)' }}></div>
-
-            <PremiumButton
-              variant="secondary"
-              onClick={onLogout}
-              style={{
-                padding: '8px 20px',
-                fontSize: '0.9rem',
-                color: '#ef4444',
-                borderColor: '#ef4444',
-                background: 'rgba(239, 68, 68, 0.05)'
-              }}
-            >
-              로그아웃
-            </PremiumButton>
-
-            {/* 스타일 정의 */}
-            <style>{`
-              @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(-10px); }
-                to { opacity: 1; transform: translateY(0); }
-              }
-              .dropdown-item {
-                padding: 10px 12px;
-                border-radius: 8px;
-                background: transparent;
-                border: none;
-                color: var(--text-main);
-                text-align: left;
-                cursor: pointer;
-                transition: all 0.2s;
-                font-size: 0.9rem;
-                white-space: nowrap;
-                outline: none;
-              }
-              .dropdown-item:hover {
-                background: rgba(255, 255, 255, 0.1);
-              }
-            `}</style>
-          </>
-        ) : (
-          <>
-            <PremiumButton variant="secondary" onClick={onLogin} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
-              로그인
-            </PremiumButton>
-            <PremiumButton onClick={onRegister} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
-              회원가입
-            </PremiumButton>
-          </>
-        )}
-      </div>
+      {/* Auth Buttons removed - handled by Header */}
 
       <div style={{ textAlign: 'center', padding: '4rem 3rem', maxWidth: '800px' }}>
         {/* Step 1: Branding */}
