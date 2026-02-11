@@ -46,17 +46,17 @@ async def create_interview(
     
     logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
     
-    # 0. 이력서에서 직무 정보 가져오기 (프론트엔드 입력 대신 이력서 기반)
+    # 이력서에서 지원 직무(target_role) 가져오기
     from models import Resume
     resume = db.get(Resume, interview_data.resume_id)
-    auto_position = "일반"
+    target_role = "일반"
     if resume and resume.structured_data:
-        auto_position = resume.structured_data.get("header", {}).get("target_role") or "일반"
+        target_role = resume.structured_data.get("header", {}).get("target_role") or "일반"
 
     # 1. Interview 레코드 생성
     new_interview = Interview(
         candidate_id=current_user.id,
-        position=auto_position, # 자동으로 찾아낸 직무 저장
+        position=target_role, # 추출된 직무 사용
         company_id=interview_data.company_id,
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
@@ -69,13 +69,13 @@ async def create_interview(
     
     interview_id = new_interview.id
     
-    logger.info(f"Interview record created: ID={interview_id} (Detected Position: {auto_position})")
+    logger.info(f"Interview record created: ID={interview_id} (Target Role: {target_role})")
     
     try:
         logger.info("Requesting question generation from AI-Worker...")
         task = celery_app.send_task(
             "tasks.question_generation.generate_questions",
-            args=[new_interview.id, 5], # position 인자 제거
+            args=[new_interview.id, 5],
             queue="gpu_queue"
         )
         generated_data = task.get(timeout=180)
@@ -385,12 +385,18 @@ async def create_realtime_interview(
     - 대기 시간: 0초
     """
     
-    logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id}. Requested Position: {interview_data.position}")
+    logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
     
+    # 0. 지원자 정보 조회 (이력서 기반으로 직무/이름 가져오기)
+    from utils.interview_helpers import get_candidate_info
+    candidate_info = get_candidate_info(db, interview_data.resume_id)
+    target_role = candidate_info.get("target_role", "일반")
+    candidate_name = candidate_info.get("candidate_name", "지원자")
+
     # 1. Interview 레코드 생성
     new_interview = Interview(
         candidate_id=current_user.id,
-        position=interview_data.position,
+        position=target_role, # 이력서 추출 값으로 고정
         company_id=interview_data.company_id,
         resume_id=interview_data.resume_id,
         status=InterviewStatus.IN_PROGRESS,
@@ -401,28 +407,25 @@ async def create_realtime_interview(
     db.commit()
     db.refresh(new_interview)
     
-    logger.info(f"Realtime Interview created: ID={new_interview.id}, Position={new_interview.position}")
+    logger.info(f"Realtime Interview created: ID={new_interview.id}, Candidate={candidate_name}, Target Role={target_role}")
     
     # 2. 템플릿 질문 즉시 생성
     try:
-        from utils.interview_helpers import get_candidate_info, generate_template_question
+        from utils.interview_helpers import generate_template_question
         
-        # 지원자 정보 조회
-        candidate_info = get_candidate_info(db, interview_data.resume_id)
-        logger.info(f"Candidate: {candidate_info['candidate_name']}, Role: {candidate_info['target_role']}")
-        
-        # 시나리오에서 초기 템플릿 가져오기
+        # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
         import sys
         config_path = os.path.join(os.path.dirname(__file__), "..", "..", "ai-worker", "config")
         if config_path not in sys.path:
             sys.path.append(config_path)
         
         from interview_scenario import get_initial_stages
+        from models import Question, QuestionCategory, QuestionDifficulty
         
         initial_stages = get_initial_stages()
         
         for stage_config in initial_stages:
-            # 템플릿에 변수 삽입
+            # 템플릿에 변수 삽입 (이미 확보한 candidate_info 사용)
             question_text = generate_template_question(
                 stage_config["template"],
                 candidate_info
@@ -438,7 +441,7 @@ async def create_realtime_interview(
                     "criteria": ["명확성", "진정성", "직무 이해도"],
                     "weight": {"content": 0.6, "communication": 0.4}
                 },
-                position=interview_data.position
+                position=target_role # 추출된 직무 사용
             )
             db.add(question)
             db.commit()  # 즉시 커밋
