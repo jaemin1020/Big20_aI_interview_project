@@ -80,6 +80,7 @@ from routes.stt import router as stt_router
 from utils.auth_utils import get_current_user
 
 # Router Registration
+# Router Registration
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(interviews_router)
@@ -93,7 +94,7 @@ app.include_router(stt_router)
 UPLOAD_DIR = Path("./uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-@app.post("/resumes/upload")
+@app.post("/resumes/upload", tags=["resumes"])
 async def upload_resume(
     file: UploadFile = File(...),
     db: Session = Depends(get_session),
@@ -107,15 +108,15 @@ async def upload_resume(
     if file_ext not in allowed_extensions:
         raise HTTPException(
             status_code=400, 
-            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+            detail="지원하지 않는 파일 형식입니다. PDF, DOC, DOCX 파일만 업로드 가능합니다."
         )
-    
-    # 파일 저장 경로 생성 (candidate_id_timestamp_filename)
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_filename = f"{current_user.id}_{timestamp}_{file.filename}"
-    file_path = UPLOAD_DIR / safe_filename
-    
+
     try:
+        # 파일 저장 경로 생성 (날짜 + 사용자ID + 파일명)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_filename = f"{current_user.id}_{timestamp}_{file.filename}"
+        file_path = UPLOAD_DIR / safe_filename
+        
         # 파일 저장
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -135,9 +136,11 @@ async def upload_resume(
         logger.info(f"Resume uploaded: ID={new_resume.id}, User={current_user.username}, File={file.filename}")
         
         # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
+        # tasks.resume_pipeline 대신 parse_resume_pdf 호출
         celery_app.send_task(
-            "parse_resume_pdf",
-            args=[new_resume.id, str(file_path)]
+            "parse_resume_pdf", 
+            args=[new_resume.id, str(file_path)],
+            queue='cpu_queue' 
         )
         logger.info(f"Resume parsing task sent for ID={new_resume.id}")
         
@@ -157,7 +160,7 @@ async def upload_resume(
         raise HTTPException(status_code=500, detail="File upload failed")
 
 # 이력서 조회 (상태 및 분석 결과)
-@app.get("/resumes/{resume_id}")
+@app.get("/resumes/{resume_id}", tags=["resumes"])
 async def get_resume(
     resume_id: int,
     db: Session = Depends(get_session),

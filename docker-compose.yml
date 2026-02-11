@@ -54,31 +54,33 @@ services:
     networks:
       - interview_network
 
-  # 4. AI Worker: Celery (Question Generation + Emotion/Audio Analysis)
-  ai-worker:
+  # 4-1. AI Worker GPU: 질문 생성 전용 (EXAONE GPU 로드)
+  ai-worker-gpu:
     build:
       context: ./ai-worker
       dockerfile: Dockerfile
     working_dir: /app
-    container_name: interview_worker
+    container_name: interview_worker_gpu
+    # gpu_queue 전용 (배달 사고 방지를 위해 기본 celery 큐는 CPU 워커가 전담)
+    command: celery -A main.app worker --loglevel=info -Q gpu_queue --pool=solo
     deploy:
       resources:
         limits:
-          cpus: '8.0' # CPU 코어 제한
-          memory: 32G # 대용량 RAM
+          cpus: '4.0'
+          memory: 16G
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ] # GPU 접근 (질문 생성용)
+              capabilities: [ gpu ]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - MODEL_PATH=/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf
-      - N_GPU_LAYERS=-1 # GPU 가속 활성화 (모든 레이어 오프로드)
-      - USE_GPU=true
+      - N_GPU_LAYERS=-1
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
     depends_on:
       - redis
       - db
@@ -86,7 +88,40 @@ services:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
-      - ./backend-core:/backend-core # Shared Code Access
+      - ./backend-core:/backend-core
+    networks:
+      - interview_network
+
+  # 4-2. AI Worker CPU: 답변 분석 및 기타 전처리 (EXAONE CPU 로드)
+  ai-worker-cpu:
+    build:
+      context: ./ai-worker
+      dockerfile: Dockerfile
+    working_dir: /app
+    container_name: interview_worker_cpu
+    # cpu_queue와 기본 celery 큐를 함께 처리
+    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=solo
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 16G
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - N_GPU_LAYERS=0
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./ai-worker:/app
+      - ./ai-worker/models:/app/models
+      - ./backend-core/uploads:/app/uploads
+      - ./backend-core:/backend-core
     networks:
       - interview_network
 
