@@ -208,28 +208,33 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
         <div
           style={{
-            border: '2px dashed var(--glass-border)',
+            border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
             borderRadius: '20px',
-            padding: '3rem 2rem',
+            padding: '4rem 2rem',
             marginBottom: '2rem',
             cursor: 'pointer',
-            transition: 'border-color 0.3s'
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+            transform: isDragging ? 'scale(1.02)' : 'scale(1)'
           }}
-          onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
-          onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--glass-border)'}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+          onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
           onClick={() => document.getElementById('resume-input').click()}
         >
           {file ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '3rem' }}>📄</span>
-              <span style={{ fontWeight: '600' }}>{file.name}</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+              <span style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📄</span>
+              <span style={{ fontWeight: '600', fontSize: '1.2rem' }}>{file.name}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
             </div>
           ) : (
             <>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📁</div>
-              <p style={{ margin: 0, fontWeight: '500' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
-              <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
+              <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📁</div>
+              <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
+              <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
             </>
           )}
           <input
@@ -251,48 +256,12 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
               <span>분석 중...</span>
             </div>
-          </div>
-        ) : (
-        <>
-          <div
-            style={{
-              border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
-              borderRadius: '20px',
-              padding: '4rem 2rem',
-              marginBottom: '2rem',
-              cursor: 'pointer',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-              transform: isDragging ? 'scale(1.02)' : 'scale(1)'
-            }}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
-            onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
-            onClick={() => document.getElementById('resume-input').click()}
-          >
-            <div style={{ fontSize: '4rem', marginBottom: '1.5rem', transform: isDragging ? 'translateY(-10px)' : 'translateY(0)', transition: 'transform 0.3s' }}>📁</div>
-            <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
-          </div>
-
-          <PremiumButton
-            disabled={true}
-            style={{ width: '100%', padding: '16px', opacity: 0.5 }}
-          >
-            파일을 업로드 해주세요
-          </PremiumButton>
-        </>
-        )}
-        <input
-          id="resume-input"
-          type="file"
-          accept=".pdf"
-          hidden
-          onChange={handleFileChange}
-        />
+          ) : (
+            "이력서 분석 시작"
+          )}
+        </PremiumButton>
       </GlassCard>
+
     </div>
   );
 };

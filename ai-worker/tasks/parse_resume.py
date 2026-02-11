@@ -67,7 +67,7 @@ def parse_resume_final(input_source):
     # 3. 표 데이터 파싱 (파일 모드일 때만 동작)
     # -------------------------------------------------------
     if tables:
-        # --- Phase 1: 헤더 정보 우선 탐색 ---
+        # --- Phase 1: 헤더 정보 우선 탐색 (표 기반) ---
         for table in tables:
             for row in table:
                 safe_row = [clean_text(cell) if cell else "" for cell in row]
@@ -81,6 +81,42 @@ def parse_resume_final(input_source):
                             if "이름" == key: data["header"]["name"] = val
                             elif "지원회사" in key or "지원기업" in key: data["header"]["target_company"] = val
                             elif "지원직무" in key or "지원분야" in key: data["header"]["target_role"] = val
+
+        # --- Phase 1.5: Regex 기반 폴백 (표에서 못 찾았을 때) ---
+        full_text = "\n".join(full_text_buffer)
+        
+        # 이름 찾기
+        if not data["header"]["name"]:
+            name_patterns = [
+                r"이\s*름\s*[:：\-\s]+([가-힣]{2,4})",
+                r"성\s*함\s*[:：\-\s]+([가-힣]{2,4})",
+                r"Name\s*[:：\-\s]+([a-zA-Z가-힣\s]+)"
+            ]
+            for p in name_patterns:
+                match = re.search(p, full_text, re.IGNORECASE)
+                if match:
+                    data["header"]["name"] = match.group(1).strip()
+                    break
+        
+        # 지원직무 찾기
+        if not data["header"]["target_role"]:
+            role_patterns = [
+                r"지원\s*직무\s*[:：\-\s]+([^\n]+)",
+                r"지원\s*분야\s*[:：\-\s]+([^\n]+)",
+                r"희망\s*직무\s*[:：\-\s]+([^\n]+)",
+                r"Position\s*[:：\-\s]+([^\n]+)",
+                r"Role\s*[:：\-\s]+([^\n]+)"
+            ]
+            for p in role_patterns:
+                match = re.search(p, full_text, re.IGNORECASE)
+                if match:
+                    role = re.sub(r'[\(\)\[\]]', '', match.group(1)).strip()
+                    data["header"]["target_role"] = role
+                    break
+
+        # 기본값 설정
+        if not data["header"]["target_role"]:
+            data["header"]["target_role"] = "일반"
 
         # --- Phase 2: 섹션별 데이터 파싱 ---
         current_section = None 
@@ -179,3 +215,5 @@ if __name__ == "__main__":
             print(f"💥 에러: {e}")
     else:
         print("❌ 파일 없음")
+
+

@@ -96,21 +96,21 @@ class ExaoneLLM:
         
         context_str = f"\n\n추가 컨텍스트:\n{context}" if context else ""
         
-        system_msg = "당신은 한국 기업의 면접관이자 채용 전문가입니다. 주어진 정보를 바탕으로 정중하고 핵심적인 면접 질문을 생성하세요."
-        user_msg = f"""다음 정보를 바탕으로 {position} 직무 면접 질문 {count}개를 생성하세요.
-
+        system_msg = "당신은 지원자의 이력서를 꼼꼼히 읽고 날카로운 질문을 던지는 면접관입니다. 일반적인 질문은 배제하고, 반드시 이력서에 기재된 구체적인 사실(프로젝트, 경력, 학력 등)을 근거로 질문하세요."
+        user_msg = f"""[지원 직무]: {position}
+[지원자 이력서 내용]: 
 {context_str}
 
-기존 질문 예시:
-{few_shot}
+위 지원자의 이력서 내용을 바탕으로 맞춤형 면접 질문 {count}개를 생성하세요.
 
-[요구사항]
-1. 반드시 한국어로 작성하세요.
-2. 번호나 불필요한 기호 없이 질문 내용만 한 줄씩 작성하세요.
-3. 기술적인 깊이가 있는 질문을 포함하세요.
-4. 총 {count}개의 질문을 생성하세요.
+[필수 요구사항]
+1. **이력서에 없는 내용은 묻지 마세요.** (예: 하지도 않은 클라우드 경험을 묻는 등)
+2. 반드시 **"이력서에 ~라고 기재하셨는데", "~ 프로젝트에서 ~를 하셨다고 했는데"**와 같이 이력서 내용을 직접 언급하며 질문을 시작하세요.
+3. 지원자의 **실제 기술 스택과 활동**에 집중해서 질문하세요.
+4. 질문은 한 줄에 하나씩, 총 {count}개를 작성하세요.
+5. 질문 이외의 사족은 생략하세요.
 
-생성된 질문:"""
+질문 리스트:"""
 
         prompt = self._create_prompt(system_msg, user_msg)
         
@@ -118,26 +118,29 @@ class ExaoneLLM:
             output = self.llm(
                 prompt,
                 max_tokens=1024,
-                stop=["[|endofturn|]", "[|user|]", "생성된 질문:"],
+                stop=["[|endofturn|]", "[|user|]"],
                 temperature=0.7,
                 top_p=0.9,
                 echo=False
             )
             
-            response_text = output['choices'][0]['text']
+            response_text = output['choices'][0]['text'].strip()
             
-            # 후처리: 줄별 분리 및 정제
+            # 후처리 개선
             questions = []
             for line in response_text.split('\n'):
                 line = line.strip()
-                if not line: continue
+                if not line or len(line) < 5: continue
                 
-                # 번호 제거 (1. 질문 -> 질문)
+                # 불필요한 서두 제거
                 line = re.sub(r'^\d+[\.\)]\s*', '', line)
-                line = line.strip('"\'')
+                line = re.sub(r'^[-\*\+]\s*', '', line) 
+                line = line.strip('"\' ')
                 
-                if len(line) > 10 and '?' in line: # 최소 길이 및 질문 형태 확인
+                if '?' in line:
                     questions.append(line)
+            
+            logger.info(f"✅ AI 맞춤형 질문 생성 성공: {len(questions)}개")
             
             # 부족하면 fallback
             if len(questions) < count:

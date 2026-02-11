@@ -8,6 +8,7 @@ from .tts import synthesize_task
 
 __all__ = [
     'analyze_answer', 
+    'init_worker',
     'analyze_emotion', 
     'generate_questions_task',
     'generate_next_question_task',

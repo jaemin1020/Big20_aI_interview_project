@@ -17,12 +17,15 @@ from db import (
     get_user_answers
 )
 
-# 상위 디렉토리(ai-worker)를 경로에 추가
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+# AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
+current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
+tasks_dir = os.path.dirname(current_file_path) # tasks/
+ai_worker_root = os.path.dirname(tasks_dir)    # ai-worker/
 
-from utils.exaone_llm import get_exaone_llm
+if ai_worker_root not in sys.path:
+    sys.path.insert(0, ai_worker_root)
+
+# utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 
 logger = logging.getLogger("AI-Worker-Evaluator")
 
