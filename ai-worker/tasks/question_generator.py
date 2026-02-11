@@ -69,46 +69,7 @@ PROMPT_TEMPLATE = """[|system|]
 # -----------------------------------------------------------
 # -----------------------------------------------------------
 # [3. 질문 생성 핵심 함수]
-# -----------------------------------------------------------
-# generate_human_like_question 함수는 더 이상 사용되지 않으므로 제거합니다.
-# 대신 ExaoneLLM 클래스에 invoke 메서드를 추가하고,
-# generate_next_question_task에서 PROMPT_TEMPLATE과 invoke 메서드를 사용합니다.
-
-# -----------------------------------------------------------
-# [4. Celery Task] - 기존 일괄 생성 태스크 (필요 시 유지)
-# -----------------------------------------------------------
-@shared_task(name="tasks.question_generation.generate_questions")
-def generate_questions_task(interview_id, count=5, resume_id=None):
-    from db import engine, Session, Resume, Interview
-    from utils.exaone_llm import get_exaone_llm
-    
-    exaone = get_exaone_llm()
-    
-    with Session(engine) as session:
-        # 1. 인터뷰 정보 로드 (명시적인 resume_id가 없으면 인터뷰 레코드에서 가져옴)
-        if not resume_id:
-            interview = session.get(Interview, interview_id)
-            if interview: resume_id = interview.resume_id
-            
-        if not resume_id:
-            logger.error(f"Resume ID not found for interview {interview_id}")
-            return exaone.generate_questions("일반", count=count)
-
-        resume = session.get(Resume, resume_id)
-        if not resume:
-            return exaone.generate_questions("일반", count=count)
-
-        # 2. 이력서 파싱 데이터(header -> target_role) 추출 (데이터의 유일한 원천)
-        s_data = resume.structured_data or {}
-        header = s_data.get("header", {})
-        target_role = header.get("target_role") or "일반"
-        
-        # 3. 이력서 전문(extracted_text) 가져오기
-        resume_context = resume.extracted_text or ""
-        
-        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Target Role: {target_role}")
-        
-    return exaone.generate_questions(target_role, context=resume_context, count=count)
+# [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
 
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
