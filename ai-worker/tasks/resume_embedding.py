@@ -8,6 +8,7 @@ from db import engine
 from models import Resume
 from .embedding import embed_chunks
 from .chunking import chunk_resume
+from .pgvector_store import store_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,15 @@ def generate_resume_embeddings(self, resume_id: int):
             # pgvector 컬럼(Vector(1024))에 맞게 저장
             if embedded_data and 'vector' in embedded_data[0]:
                  resume.embedding = embedded_data[0]['vector']
-                 logger.info(f"Saved embedding vector (dim: {len(resume.embedding)})")
+                 logger.info(f"Saved representative embedding vector (dim: {len(resume.embedding)})")
+            
+            # 3. 벡터 DB(resume_embeddings 테이블)에 전체 청크 저장
+            try:
+                store_embeddings(resume_id, embedded_data)
+                logger.info(f"Successfully stored {len(embedded_data)} chunks to vector DB")
+            except Exception as e:
+                logger.error(f"Failed to store chunks to vector DB: {e}")
+                # 전체 저장은 실패해도 개별 상태는 completed로 감 (최소한 요약 벡터는 저장됨)
             
             # 완료 처리
             resume.processing_status = "completed"
