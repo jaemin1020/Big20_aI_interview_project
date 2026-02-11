@@ -9,9 +9,9 @@
 ### 1.2 적용 범위
 
 * **데이터 전처리**: PDF 이력서 파싱 및 의미 단위 청킹 (`tasks/parse_resume.py`, `tasks/chunking.py`)
-* **지식 저장소**: 벡터 임베딩 생성 및 PostgreSQL pgvector 저장 (`tasks/embedding.py`, `tasks/pgvector_store.py`)
-* **지식 검색 & 생성**: 상황별 컨텍스트 추출 및 프롬프트 주입 (`tasks/rag_retrieval.py`, `tasks/question_generator.py`)
-* **정성 평가**: 답변 품질 분석 및 루브릭 기반 채점 (`tasks/evaluator.py`)
+* **지식 저장소**: LangChain `PGVector`를 활용한 벡터 임베딩 및 PostgreSQL 저장 (`tasks/embedding.py`, `tasks/pgvector_store.py`)
+* **지식 검색 & 생성**: LCEL(LangChain Expression Language) 기반의 동적 컨텍스트 주입 체인 구축 (`tasks/rag_retrieval.py`, `tasks/question_generator.py`)
+* **정성 평가**: Pydantic 모델과 `JsonOutputParser`를 활용한 실시간 답변 분석 (`tasks/evaluator.py`)
 
 ---
 
@@ -109,13 +109,12 @@
 
 ### 5.2 Vector DB 설계 (PostgreSQL + pgvector)
 
-* **테이블명**: `resume_embeddings`
+* **테이블명**: `langchain_pg_embedding` (LangChain 표준 규격)
 * **컬럼 구성**:
-  * `resume_id`: 지원자 식별자 (Index)
-  * `chunk_type`: 섹션 구분
-  * `chunk_text`: 실제 데이터 텍스트
-  * `metadata`: JSONB 형식의 상세 속성
-  * `embedding`: `Vector(1024)` (768~1024차원 고정)
+  - `collection_id`: 논리적 데이터 그룹 식별자
+  - `embedding`: `Vector(1024)` (고차원 벡터 데이터)
+  - `document`: 원본 청크 텍스트 (Page Content)
+  - `metadata`: `resume_id`, `category` 등을 포함한 상세 속성 (JSONB)
 
 ---
 
@@ -125,9 +124,9 @@
 
 ### 6.1 검색 메커니즘
 
-1. **Semantic Search**: 입력받은 쿼리를 벡터로 변환하여 유클리드 거리가 아닌 **'코사인 유사도'**(`<=>` 연산자) 기반의 검색을 수행합니다.
-2. **Category Filtering**: `metadata->>'category' = 'project'`와 같이 현재 질문 단계에 맞는 데이터만 필터링하여 노이즈를 제거합니다.
-3. **Result Aggregation**: 상위 **3개(Top-K=3)**의 청크를 결합하여 LLM용 컨텍스트를 생성합니다.
+1. **Semantic Search**: 입력받은 쿼리를 벡터로 변환하여 LangChain의 `similarity_search_with_score` 인터페이스를 통한 코사인 유사도 검색을 수행합니다.
+2. **Standard Filtering**: `filter={"resume_id": rid, "category": cat}`와 같은 LangChain 표준 딕셔너리 필터를 사용하여 검색 정확도를 높입니다.
+3. **Result Aggregation**: 상위 **3개(Top-K=3)**의 `Document` 객체를 결합하여 LLM 체인에 컨텍스트로 주입합니다.
 
 ### 6.2 검색 쿼리 예시
 
@@ -146,18 +145,19 @@
 
 #### **2) 동적 SQL 기반의 하이브리드 필터링**
 
-단순 벡터 검색의 한계를 극복하기 위해 **메타데이터 기반의 하이브리드 쿼리**를 생성합니다.
+LangChain의 추상화된 인터페이스를 호출하여 **메타데이터 기반의 하이브리드 검색**을 수행합니다.
 
-```sql
-SELECT chunk_text, metadata, (embedding <=> :qv) as distance
-FROM resume_embeddings
-WHERE resume_id = :rid
-AND metadata->>'category' = :filter_category -- 특정 섹션(프로젝트 등)만 콕 집어 검색
-ORDER BY distance ASC LIMIT :k
+```python
+# LangChain PGVector 인터페이스 예시
+docs_with_scores = vector_store.similarity_search_with_score(
+    query, 
+    k=3,
+    filter={"resume_id": resume_id, "category": filter_category}
+)
 ```
 
-* **범위 제한**: `resume_id`를 통해 다른 지원자의 데이터가 섞이는 것을 원천 차단합니다.
-* **의미적 집중**: `metadata->>'category'` 필터를 사용하여, 기술 면접 시에는 '프로젝트' 섹션만 검색하고 인성 면접 시에는 '자기소개' 섹션만 검색하여 검색의 순도(Purity)를 높입니다.
+* **범위 제한**: `resume_id` 필터를 통해 다른 지원자의 데이터 간섭을 차단합니다.
+* **의미적 집중**: 카테고리 필터를 사용하여 기술 면접 시에는 '프로젝트'만, 인성 면접 시에는 '자기소개'만 검색하는 고순도 검색을 유지합니다.
 
 #### **3) 벡터 거리 연산 (`<=>` Operator)**
 
@@ -182,9 +182,9 @@ ORDER BY distance ASC LIMIT :k
 
 `question_generator.py`는 시나리오의 `type`에 따라 세 가지 생성 모드를 지원합니다.
 
-1. **Template 모드**: '자기소개'와 같은 공통 질문은 사전에 정의된 문형에 이름과 직무만 치환하여 즉시 반환합니다. (백엔드 초기 기동 시 사용)
-2. **AI 모드 (RAG 기반)**: 이력서에서 가장 연관성 높은 3개 청크를 추출하여, 이를 근거로 새로운 질문을 창조합니다.
-3. **Follow-up 모드 (꼬리질문)**: RAG 검색 대신 **지원자의 직전 답변**을 컨텍스트로 활용합니다. 이전 답변의 모순점이나 추가 설명이 필요한 부분을 파고들어 깊이 있는 검증을 수행합니다.
+1. **Template 모드**: 고정 질문은 사전에 정의된 문형에 변수만 치환하여 즉시 반환합니다.
+2. **AI 모드 (LCEL Chain)**: `Prompt | LLM | StrOutputParser` 체인을 통해 검색된 문맥을 질문으로 승화시킵니다.
+3. **Follow-up 모드 (꼬리질문)**: RAG 검색기 대신 **지원자의 직전 답변**을 컨텍스트로 체인에 공급하여 심층 검증을 수행합니다.
 
 ### 7.3 [상세 분석] 백엔드 및 DB 실시간 연동 아키텍처
 
@@ -203,9 +203,9 @@ ORDER BY distance ASC LIMIT :k
 
 #### **3) 프롬프트 인스트럭션 구조 (Instruction Hierarchy)**
 
-1. **Persona (페르소나)**: "당신은 15년 차 베테랑 보안 면접관입니다."
-2. **Context (문맥 주입)**: RAG 검색 결과 또는 직전 답변을 `{context}` 자리에 주입합니다.
-3. **Instruction (제약 조건)**: "한 문장으로 딱딱하게 물어보십시오", "사족을 붙이지 마십시오" 등의 명령을 통해 출력 품질을 강제합니다.
+1. **Persona**: 면접관의 전문 영역과 성향을 정의합니다.
+2. **Context (LCEL Pass-through)**: RAG 검색 결과가 체인을 통해 동적으로 `{context}` 자리에 자동 주입됩니다.
+3. **Instruction & Parser**: `StrOutputParser`를 통해 사족 없는 깔끔한 면접관의 질문 문장만 정제하여 추출합니다.
 
 ---
 
@@ -217,9 +217,9 @@ ORDER BY distance ASC LIMIT :k
 
 지원자의 답변이 수신되면 백엔드는 분석 태스크를 실행하며, 이는 다음과 같은 세부 과정을 거칩니다.
 
-* **즉시 응답성 확보 (Async Trigger)**: 답변 분석 완료를 기다리지 않고, 태스크 시작과 동시에 차순위 질문 생성을 위한 `generate_next_question_task`를 비동기 호출합니다. 이를 통해 지원자는 AI의 평가 시간 동안 대기할 필요 없이 다음 질문을 즉시 받게 됩니다.
-* **컴퓨팅 자원 최적화**: 실행 환경의 GPU 활용 가능 여부(`N_GPU_LAYERS`)를 감지합니다. 분석 전담 GPU가 없는 CPU 워커 환경일 경우, 무거운 LLM 연산을 생략하고 기본 점수를 부여하여 처리 속도를 극대화하고 큐(Queue) 정체를 방지합니다. 정밀 평가는 GPU 워커에서 집중적으로 수행됩니다.
-* **다차원 평가 루브릭**: 질문과 답변을 대조하여 **기술적 정확도(Technical Score)**와 **의사소통 능력(Communication Score)**을 산출합니다.
+* **즉시 응답성 확보 (Async Trigger)**: 답변 분석 완료 전, 차순위 질문 생성을 위한 워커를 비동기 호출하여 대기 시간을 최소화합니다.
+* **Pydantic 기반 구조화 추출**: `BaseModel`로 정의된 스키마와 `JsonOutputParser`를 사용하여, LLM의 응답에서 점수와 피드백을 실시간으로 정확하게 파이프라인에 공급합니다. (정규표현식 의존성 제거)
+* **다차원 평가 루브릭**: 질문, 답변, 루브릭을 동시에 체인에 공급하여 **기술적 정확도**와 **의사소통 능력**을 정밀하게 산출합니다.
 * **감정 분석 연동**: 산출된 점수를 기반으로 감정 점수(Sentiment Score)를 도출하여 `Transcript` 테이블에 실시간으로 반영합니다. 이는 면접관 리포트에서 답변의 자신감이나 톤을 시각화하는 지표로 활용됩니다.
 
 ### 8.2 최종 평가 리포트 생성 프로세스 (`generate_final_report`)

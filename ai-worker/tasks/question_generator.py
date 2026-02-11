@@ -8,6 +8,8 @@ from celery import shared_task
 from langchain_community.llms import LlamaCpp
 from langchain_core.callbacks import CallbackManager
 from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 # AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
 if "/app" not in sys.path:
@@ -154,82 +156,61 @@ def generate_next_question_task(interview_id: int):
             save_generated_question(interview_id, content, "behavioral", stage_name, "")
             return {"status": "success", "stage": stage_name}
 
-        # AI 생성 루틴
+        # [LangChain LCEL] AI 생성 파이프라인
         try:
-            exaone = get_exaone_llm()
+            # 1. 모델 및 파서 준비
+            llm = get_exaone_llm()
+            output_parser = StrOutputParser()
             
-            # 컨텍스트 준비: 꼬리질문 vs 일반 AI 질문 명확히 분리
-            contexts = []
+            # 2. 컨텍스트 및 프롬프트 구성
             if stage_type == "followup":
-                # 꼬리질문: 오직 이전 답변만 사용 (RAG 검색 안 함)
+                # 꼬리질문: 이전 답변 컨텍스트 추출
                 user_stmt = select(Transcript).where(
                     Transcript.interview_id == interview_id,
-                    Transcript.speaker == Speaker.USER # Enum 값이 "User"이므로 일치함
+                    Transcript.speaker == Speaker.USER
                 ).order_by(Transcript.id.desc())
                 last_user_ans = session.exec(user_stmt).first()
-                if last_user_ans:
-                    contexts = [{"text": f"이전 답변: {last_user_ans.text}", "meta": {"category": "followup"}}]
-                    logger.info(f"📌 Follow-up context prepared from last answer.")
-                else:
-                    logger.warning("⚠️ No previous answer found for followup question!")
-                    contexts = [{"text": "이전 답변을 찾을 수 없습니다.", "meta": {}}]
+                context_text = f"이전 답변: {last_user_ans.text}" if last_user_ans else "이전 답변 없음"
             else:
-                # 일반 AI 질문: 이력서 RAG 검색
-                from .rag_retrieval import retrieve_context
+                # 일반 AI 질문: RAG Retriever 활용
+                from .rag_retrieval import get_retriever
                 query_tmpl = next_stage_data.get("query_template", "{target_role}")
                 query = query_tmpl.format(target_role=interview.position)
-                contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                
+                # Retriever 기반 컨텍스트 검색
+                retriever = get_retriever(resume_id=interview.resume_id, top_k=2)
+                retrieved_docs = retriever.invoke(query)
+                context_text = "\n".join([f"- {doc.page_content}" for doc in retrieved_docs]) if retrieved_docs else "이력서 근거 부족"
 
-            
-            # 지원자 정보 및 직무 정보 가져오기 보강 (JSON header/metadata 우선)
+            # 3. 지원자 정보 정제
             resume = session.get(Resume, interview.resume_id)
             candidate_name = "지원자"
-            target_role = interview.position # 기본값 (인터뷰 세션 설정값)
-            
+            target_role = interview.position
             if resume and resume.structured_data:
-                s_data = resume.structured_data
-                header_data = s_data.get("header", {})
-                
-                # 1. 이름 추출 (header -> User 테이블 순)
-                candidate_name = header_data.get("name") or header_data.get("candidate_name")
-                if not candidate_name and resume.candidate_id:
-                    from db import User
-                    user = session.get(User, resume.candidate_id)
-                    if user: candidate_name = user.full_name or user.username
-                
-                # 2. 직무 추출 (header에 있으면 최우선)
-                target_role = header_data.get("target_role") or target_role
+                header = resume.structured_data.get("header", {})
+                candidate_name = header.get("name") or header.get("candidate_name") or candidate_name
+                target_role = header.get("target_role") or target_role
 
-            logger.info(f"Target Candidate Name: {candidate_name}, Role: {target_role}")
+            # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
+            prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
             
-            # 1. 컨텍스트 텍스트 조립
-            context_text = "\n".join([f"- {c['text']}" for c in contexts]) if contexts else "이력서 근거 부족"
+            chain = prompt | llm | output_parser
             
-            # 2. PROMPT_TEMPLATE을 사용하여 최종 프롬프트 생성 (사용자 요청 반영)
-            full_prompt = PROMPT_TEMPLATE.format(
-                position=target_role,
-                name=candidate_name,
-                stage=stage_name,
-                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                context=context_text
-            )
-            
-            logger.info(f"Generated Full Prompt length: {len(full_prompt)}")
-            
-            # 3. AI 질문 생성 실행 (엔진에게는 생성만 위임)
-            content = exaone.invoke(full_prompt, max_tokens=256, temperature=0.6)
+            logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
+            content = chain.invoke({
+                "position": target_role,
+                "name": candidate_name,
+                "stage": stage_name,
+                "guide": next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
+                "context": context_text
+            })
             
             if not content:
                 content = f"{candidate_name}님, 준비하신 내용을 토대로 해당 역량에 대해 더 말씀해주실 수 있나요?"
             
-            # 시나리오의 카테고리를 DB Enum에 맞게 매핑
+            # 5. 결과 저장
             category_raw = next_stage_data.get("category", "technical")
-            category_map = {
-                "certification": "technical",
-                "project": "technical",
-                "narrative": "behavioral",
-                "problem_solving": "situational"
-            }
+            category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
             save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
