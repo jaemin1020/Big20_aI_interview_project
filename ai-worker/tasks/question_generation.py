@@ -9,6 +9,10 @@ from langchain_community.llms import LlamaCpp
 from langchain_core.callbacks import CallbackManager
 from langchain_core.prompts import PromptTemplate
 
+# AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
+
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
 # -----------------------------------------------------------
@@ -25,6 +29,9 @@ try:
     from sqlalchemy import text as sql_text
 except ImportError:
     engine = None
+
+
+# 🚨 ExaoneLLM은 함수 내부에서 import (Celery 로딩 시점 문제 회피)
 
 # -----------------------------------------------------------
 # [2. 프롬프트 템플릿]
@@ -112,12 +119,37 @@ def generate_human_like_question(exaone, name, position, stage, guide, context_l
 # [4. Celery Task] - 기존 일괄 생성 태스크 (필요 시 유지)
 # -----------------------------------------------------------
 @shared_task(name="tasks.question_generation.generate_questions")
-def generate_questions_task(position, interview_id, count=5, resume_id=1):
+def generate_questions_task(interview_id, count=5, resume_id=None):
+    from db import engine, Session, Resume, Interview
     from utils.exaone_llm import get_exaone_llm
+    
     exaone = get_exaone_llm()
     
-    # ... (생략 가능하나 호환성을 위해 유지 시에는 exaone.generate_questions 사용 권장)
-    return exaone.generate_questions(position, count=count)
+    with Session(engine) as session:
+        # 1. 인터뷰 정보 로드 (명시적인 resume_id가 없으면 인터뷰 레코드에서 가져옴)
+        if not resume_id:
+            interview = session.get(Interview, interview_id)
+            if interview: resume_id = interview.resume_id
+            
+        if not resume_id:
+            logger.error(f"Resume ID not found for interview {interview_id}")
+            return exaone.generate_questions("일반", count=count)
+
+        resume = session.get(Resume, resume_id)
+        if not resume:
+            return exaone.generate_questions("일반", count=count)
+
+        # 2. 이력서 파싱 데이터(header -> target_role) 추출 (데이터의 유일한 원천)
+        s_data = resume.structured_data or {}
+        header = s_data.get("header", {})
+        real_role = header.get("target_role") or "일반"
+        
+        # 3. 이력서 전문(extracted_text) 가져오기
+        resume_context = resume.extracted_text or ""
+        
+        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Detected Role: {real_role}")
+        
+    return exaone.generate_questions(real_role, context=resume_context, count=count)
 
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
@@ -125,14 +157,20 @@ def generate_questions_task(position, interview_id, count=5, resume_id=1):
 @shared_task(name="tasks.question_generation.generate_next_question")
 def generate_next_question_task(interview_id: int):
     logger.info(f"🔥 [START] generate_next_question_task for Interview {interview_id}")
-    from db import engine, Session, select, save_generated_question
-    from models import Interview, Transcript, Speaker, Question
+    
+    from db import (
+        engine, Session, select, save_generated_question,
+        Interview, Transcript, Speaker, Question, Resume
+
+    )
     from config.interview_scenario import get_stage_by_name, get_next_stage
     from utils.exaone_llm import get_exaone_llm
     
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
-        if not interview: return
+        if not interview: 
+            logger.error(f"Interview {interview_id} not found.")
+            return {"status": "error", "message": "Interview not found"}
             
         # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
         stmt = select(Transcript).where(
@@ -142,20 +180,34 @@ def generate_next_question_task(interview_id: int):
         last_ai_transcript = session.exec(stmt).first()
         
         last_stage_name = None
-        if last_ai_transcript and last_ai_transcript.question_id:
-            last_q = session.get(Question, last_ai_transcript.question_id)
-            if last_q:
-                # 1순위: DB에 저장된 타입 정보 사용
-                last_stage_name = last_q.question_type
-                
-                # 2순위 (Fallback): 저장된 타입이 없으면 텍스트 내용으로 유추 (더 많은 키워드 추가)
-                if not last_stage_name:
-                    content = last_q.content
-                    if "자기소개" in content: last_stage_name = "intro"
-                    elif "지원 동기" in content or "지원하게 된" in content: last_stage_name = "motivation"
-                    elif "기술" in content or "스킬" in content or "도구" in content: last_stage_name = "skill"
-                    elif "프로젝트" in content or "경험" in content: last_stage_name = "experience"
-                    elif "어려움" in content or "해결" in content: last_stage_name = "problem_solving"
+        if last_ai_transcript:
+            if last_ai_transcript.question_id:
+                last_q = session.get(Question, last_ai_transcript.question_id)
+                if last_q:
+                    # 1순위: DB에 저장된 타입 정보 사용
+                    last_stage_name = last_q.question_type
+                    
+                    # 2순위 (Fallback): 저장된 타입이 없으면 텍스트 내용으로 유추
+                    if not last_stage_name:
+                        content = last_q.content
+                        if "자기소개" in content: last_stage_name = "intro"
+                        elif "지원 동기" in content or "지원하게 된" in content: last_stage_name = "motivation"
+                        elif "기술" in content or "스킬" in content or "도구" in content: last_stage_name = "skill"
+                        elif "프로젝트" in content or "경험" in content: last_stage_name = "experience"
+                        elif "어려움" in content or "해결" in content: last_stage_name = "problem_solving"
+            
+            # 3순위: transcript의 order를 기반으로 역추적 (scenario의 order와 매칭)
+            if not last_stage_name and last_ai_transcript.order is not None:
+                from config.interview_scenario import INTERVIEW_STAGES
+                # transcript.order는 0부터 시작, scenario order는 1부터 시작할 수 있으므로 보정 필요
+                # 여기서는 scenario의 order 필드를 검색
+                for s in INTERVIEW_STAGES:
+                    if s["order"] == last_ai_transcript.order + 1:
+                        last_stage_name = s["stage"]
+                        break
+
+        # 4순위: 매핑 보정 (Legacy 데이터 등)
+        if last_stage_name == "technical": last_stage_name = "skill"
         
         if not last_stage_name:
             last_stage_name = "intro"
@@ -192,7 +244,7 @@ def generate_next_question_task(interview_id: int):
                 # 꼬리질문: 오직 이전 답변만 사용 (RAG 검색 안 함)
                 user_stmt = select(Transcript).where(
                     Transcript.interview_id == interview_id,
-                    Transcript.speaker == Speaker.USER
+                    Transcript.speaker == Speaker.USER # Enum 값이 "User"이므로 일치함
                 ).order_by(Transcript.id.desc())
                 last_user_ans = session.exec(user_stmt).first()
                 if last_user_ans:
@@ -209,14 +261,33 @@ def generate_next_question_task(interview_id: int):
                 contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
 
             
-            from utils.interview_helpers import get_candidate_info
-            from db import Resume
+            # 지원자 정보 및 직무 정보 가져오기 보강 (JSON header/metadata 우선)
             resume = session.get(Resume, interview.resume_id)
-            c_info = get_candidate_info(resume.structured_data if resume else {})
+            candidate_name = "지원자"
+            target_role = interview.position # 기본값 (인터뷰 세션 설정값)
             
-            content = generate_human_like_question(
-                exaone, c_info.get("candidate_name", "지원자"), interview.position, 
-                stage_name, next_stage_data.get("guide", ""), contexts
+            if resume and resume.structured_data:
+                s_data = resume.structured_data
+                header_data = s_data.get("header", {})
+                
+                # 1. 이름 추출 (header -> User 테이블 순)
+                candidate_name = header_data.get("name") or header_data.get("candidate_name")
+                if not candidate_name and resume.candidate_id:
+                    from db import User
+                    user = session.get(User, resume.candidate_id)
+                    if user: candidate_name = user.full_name or user.username
+                
+                # 2. 직무 추출 (header에 있으면 최우선)
+                target_role = header_data.get("target_role") or target_role
+
+            logger.info(f"Target Candidate Name: {candidate_name}, Role: {target_role}")
+            
+            # AI 질문 생성 실행
+            content = exaone.generate_human_like_question(
+                name=candidate_name,
+                stage=stage_name,
+                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
+                context_list=contexts
             )
             
             # 시나리오의 카테고리를 DB Enum에 맞게 매핑

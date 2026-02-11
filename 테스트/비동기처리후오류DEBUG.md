@@ -1,448 +1,256 @@
-# 🔍 비동기 처리 적용 후 오류 및 디버깅 리포트
+# 비동기 처리 후 오류 분석 보고서 (DEBUG)
 
-비동기 병렬 처리 아키텍처 적용 후 발생한 **"분석 시간 초과"** 현상에 대한 원인 분석 및 해결 내역입니다.
+## 1. 발생 오류 개요
 
----
+- **Worker 측**: `KeyError: 'tasks.question_generator.generate_questions'`
+  - Celery 워커에 등록되지 않은 태스크 이름을 호출함.
+- **Backend 측**: `NameError: name 'question_text' is not defined`
+  - 변수명이 잘못 정의되었거나 정의되지 않은 변수를 참조함.
 
-## 1. 발생 현상
+## 2. 상세 원인 분석
 
-- **오류 메시지**: "분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)"
-- **상황**: 답변 제출 후 다음 질문으로 넘어가지 못하고 프론트엔드 타임아웃 발생.
+### A. Celery 태스크 명칭 불일치
 
----
+- **원인**: 백엔드에서는 `tasks.question_generator` (er)로 요청을 보내고 있으나, 워커에는 `tasks.question_generation` (ion)으로 등록되어 있음.
+- **대상 파일**: `backend-core/routes/interviews.py` (Line 71)
 
-## 2. 원인 분석 (Root Cause)
+### B. 백엔드 코드 내 변수 참조 오류 (`NameError`)
 
-### 2-1. 하드웨어적 병목 (CPU 연산의 한계)
+- **원인**: `create_interview` 함수 내에서 반복문 수행 시 질문 텍스트를 `q_text`로 받았으나, 저장 시에는 `question_text`라는 존재하지 않는 변수를 참조함.
+- **대상 파일**: `backend-core/routes/interviews.py` (Line 103, 127)
 
-- **현상**: `interview_worker_cpu`가 답변 분석(`analyze_answer`) 태스크를 수신했으나, 처리가 비정상적으로 느림.
-- **원인**: 7.8B 규모의 EXAONE 모델을 GPU 가속 없이 **순수 CPU**로 구동할 경우, 단일 평가 세션에 수 분 이상의 시간이 소요됨.
-- **결과**: 프론트엔드의 대기 시간(120초)을 훨씬 초과하여 타임아웃 발생.
+### C. 정의되지 않은 객체 참조 및 임포트 누락
 
-### 2-2. 워커 부팅 및 모델 로딩 지연 (Cold Start)
-
-- **현상**: 워커가 'Ready' 상태가 되기까지 약 5분 소요.
-- **원인**: 모든 워커가 부팅 시 `EXAONE`, `KURE-v1(Embedding)`, `Whisper(STT)` 등 모든 모델을 중복 로드함.
-- **결과**: 시스템 재시작 직후 면접 시도 시 워커가 아직 모델 로딩 중이라 요청을 처리하지 못함.
-
----
-
-## 3. 해결 조치 (Action Taken)
-
-### ✅ 조치 1: 답변 분석 로직 경량화 (Lightweight Evaluation)
-
-- **대상**: `ai-worker/tasks/evaluator.py`
-- **내용**: `N_GPU_LAYERS=0`(CPU 워커) 환경일 경우, 무거운 LLM 호출을 생략하고 즉시 응답을 반환하는 **경량 모드** 도입.
-- **효과**: 분석 시간을 **0.1초 내외**로 단축하여 GPU 워커의 질문 생성 태스크가 즉시 실행되도록 통로를 확보함.
-
-### ✅ 조치 2: 모델 로드 제어 및 싱글톤 통합
-
-- **대상**: `ai-worker/utils/exaone_llm.py`, `ai-worker/tasks/question_generation.py`
-- **내용**:
-  - 환경 변수 기반 GPU 레이어 수(0 또는 -1) 동적 제어 기능 구현.
-  - 태스크별 중복 모델 생성을 방지하고 공유 인스턴스를 사용하도록 리팩토링.
-- **효과**: VRAM 점유 최적화 및 안정성 향상.
-
-### ✅ 조치 3: 모델 로딩 최적화 및 지연 로딩 (Lazy Loading)
-
-- **대상**: `ai-worker/tasks/stt.py`, `ai-worker/utils/exaone_llm.py`
-- **내용**:
-  - **불필요한 로딩 차단**: GPU 워커에서 수행하지 않는 STT(Whisper) 모델 로딩을 원천 차단.
-  - **지연 로딩(Lazy Load)**: 모듈 임포트 시 즉시 모델을 로드하던 전역 호출(Warmup)을 제거하고, 실제 태스크 수행 시점에만 로드하도록 수정.
-- **효과**: 워커 부팅 속도 혁신 (5분 -> **즉시 가동**) 및 시스템 자원 낭비 최소화.
-
----
-
-## 5. 최종 해결 전략: 백그라운드 정밀 분석 (Background Real Analysis)
-
-단순히 속도를 위해 '가짜 점수'를 내뱉는 임시 조치를 넘어, 시스템의 품질과 UX를 모두 잡기 위한 최종 아키텍처입니다.
-
-### 5-1. 핵심 작동 메커니즘
-
-1. **즉각적인 병렬 트리거**: `analyze_answer`(CPU 워커)는 시작 직후 0.1초 내에 `generate_next_question`(GPU 워커)을 비동기로 호출합니다.
-2. **질문 생성 우선권**: GPU 워커는 즉시 질문을 생성하여 DB에 반영, 사용자는 **30초 내에 다음 질문**을 받습니다.
-3. **심층 분석 백그라운드 수행**: 그동안 CPU 워커는 EXAONE 모델을 사용하여 **2~3분간 정밀 분석**을 수행합니다. 사용자가 다음 질문에 대답하는 동안 분석이 완료되어 DB에 업데이트됩니다.
-
-### 5-2. 기대 효과
-
-- **데이터 무결성**: 최종 리포트 생성 시 '가짜 데이터'가 아닌 **LLM이 직접 분석한 정밀 피드백**이 포함됩니다.
-- **병목 없는 UX**: 분석 속도와 관계없이 면접 흐름은 GPU 워커의 처리 속도에만 의존하므로 막힘이 없습니다.
-- **자원 최적화**: GPU는 '생성'에, CPU는 '분석'에 집중하여 가용 자원을 100% 활용합니다.
-
----
-
-## 6. 추가 오류 분석: 태스크 배달 사고 (Routing Mismatch)
-
-### 6-1. 발생 현상
-
-- **현상**: 이력서 업로드 후 `Resume 96` 처리 상태가 무한 폴링(Polling)되며 면접 시작 단계로 넘어가지 못함.
-- **워커 상태**: `interview_worker_gpu`는 정상 부팅되었으나, 이력서 처리 태스크를 전혀 수신하지 못함 (`received` 로그 없음).
-
-### 6-2. 원인 분석
-
-- **원인**: 백엔드와 워커 간의 **기본 큐(Default Queue) 불일치**.
-  - **백엔드**: 이력서 분석 태스크를 별도 라우팅 없이 기본 큐(`celery`)로 전송.
-  - **워커**: `docker-compose.yml` 설정에 의해 전용 큐(`gpu_queue`, `cpu_queue`)만 감시하고 있었음.
-- **결과**: 백엔드가 보낸 작업이 가운데 낀 `celery` 큐에만 쌓이고, 워커들이 이를 보지 못해 작업이 방치됨.
-
-### 6-3. 해결 조치
-
-- **대상**: `docker-compose.yml`
-- **내용**: 각 워커의 실행 명령어(`command`)에 기본 큐인 `celery`를 추가하여 전용 큐와 기본 큐를 모두 감시하도록 수정.
-  - `gpu_queue` -> `gpu_queue,celery`
-  - `cpu_queue` -> `cpu_queue,celery`
-- **효과**: 라우팅 설정이 누락된 기반 태스크(이력서 분석 등)도 누락 없이 정상적으로 처리됨.
-
----
-
-## 7. 추가 오류 분석: Enum 데이터 불일치 및 스테이지 매칭 오류
-
-### 7-1. 발생 현상
-
-- **현상**: 면접 2단계(지원동기) 이후 3단계(직무지식)로 넘어가는 과정에서 시스템 크래시 발생.
-- **오류 메시지**: `DataError: invalid input value for enum questioncategory: "general"`
-
-### 7-2. 원인 분석
-
-1. **Enum 값 불일치**: `tasks/question_generation.py`에서 템플릿 질문 저장 시 카테고리를 `"general"`로 하드코딩했으나, DB의 `QuestionCategory` Enum에는 해당 값이 없어 삽입 실패.
-2. **스테이지 매칭 실패 (Mismatch)**: 백엔드에서 초기 질문(자기소개, 지원동기) 생성 시 `question_type` 필드를 저장하지 않음. 이로 인해 워커가 마지막 단계를 항상 `"intro"`로 오판하여 다음 단계인 `"motivation"`을 중복 생성하려 함.
-
-### 7-3. 해결 조치
-
-- **조치 1 (Enum 수정)**: `"general"` 대신 유효한 Enum 값인 `"behavioral"`을 사용하도록 수정 및 시나리오 카테고리 매핑 로직 추가.
-- **조치 2 (백엔드 수정)**: `backend-core/routes/interviews.py`에서 초기 질문 생성 시 시나리오상의 `stage` 이름을 `question_type`에 정확히 저장하도록 수정.
-
----
-
-## 8. 추가 오류 분석: STT 모델 로드 실패 및 큐 격리
-
-### 8-1. 발생 현상
-
-- **현상**: 음성 인식(STT) 시도 시 `Worker Error: Model loading failed` 발생.
-- **원인**: 최적화(Lazy Loading)가 적용된 GPU 워커가 STT 작업을 배정받았으나, 성능 및 자원 보존을 위해 Whisper 모델 로드를 거부함.
-- **결과**: `celery` 공용 큐를 통해 STT 작업이 GPU 워커로 유입될 때마다 에러 발생.
-
-### 8-2. 해결 조치
-
-- **대상**: `docker-compose.yml`
-- **내용**: `ai-worker-gpu`의 청취 큐에서 `celery`를 제거하고 오직 `gpu_queue`만 전담하도록 격리.
-- **효과**: 모델이 없는 워커로 작업이 잘못 배달되는 '배달 사고'를 원천 차단.
-
----
-
-## 9. 추가 오류 분석: 시나리오 매칭 지능화 (Heuristic Pathfinding)
-
-### 9-1. 발생 현상
-
-- **현상**: 면접자가 1, 2단계를 마쳤음에도 다음 단계인 `skill` 지식 평가로 넘어가지 못하고 정체되거나 이전 단계를 반복함.
-- **원인**: DB 메타데이터(`question_type`)의 누락 혹은 초기화되지 않은 세션 정보로 인해 AI가 현재 진행 단계를 오판함.
-
-### 9-2. 해결 조치 (지능형 백업 로직)
-
-- **대상**: `ai-worker/tasks/question_generation.py`
-- **내용**:
-  - **키워드 기반 추론**: DB에 단계 정보가 없을 경우, 이전 질문의 텍스트 내용에서 "자기소개", "지원동기" 등 핵심 키워드를 찾아 현재 단계를 역추적하는 로직 추가.
-  - **기본값 보정**: 아무 기록이 없는 신규 면접의 경우 자동으로 `intro` 다음 단계가 시작되도록 보정.
-- **효과**: 데이터 오염이나 메타데이터 유실 상황에서도 시나리오 흐름을 잃지 않고 15단계까지 안정적으로 완주 가능.
-
----
-
-## 10. 최종 최적화: CPU 워커 병목 및 리포트 타임아웃 해결
-
-### 10-1. 발생 현상
-
-- **현상**: 면접 종료 후 리포트 페이지가 `404 Not Found` 혹은 타임아웃 발생.
-- **원인**: CPU 워커가 개별 답변 분석(`analyze_answer`)에 너무 많은 시간을 소요(개당 1~2분)하여, 정작 중요한 최종 리포트 생성 태스크가 큐 뒤쪽에서 한없이 대기함.
-- **결과**: 사용자가 리포트를 확인하기까지 15~20분 이상 대기해야 하는 최악의 UX 발생.
-
-### 10-2. 해결 조치 (CPU Fast-Lane)
-
-- **대상**: `ai-worker/tasks/evaluator.py`
-- **내용**:
-  - **조건부 스킵**: `n_gpu_layers == 0`(CPU 워커)인 경우, 개별 답변의 LLM 정밀 분석을 생략하고 기본 점수만 즉시 반환.
-  - **리소스 집중**: 아껴진 CPU 자원을 **최종 리포트 생성(`generate_final_report`)**에만 집중 투입하여 면접 종료 직후 1분 내외로 결과 확인 가능하도록 개선.
-- **효과**: 리포트 생성 대기 시간 혁신적 단축 및 서버 안정성 확보.
-
----
-
-## 11. 추가 오류 분석: 직무 키워드 'General' 고정 문제
-
-### 11-1. 발생 현석
-
-- **현상**: 이력서가 '보안 엔지니어'임에도 불구하고 AI 질문 키워드가 `'General 기술 스킬...'`로 생성됨.
-- **원인**: 이력서 파싱 실패 시 프론트엔드에서 직무를 `'General'`로 강제 폴백(Fallback) 처리함.
-
-### 11-2. 해결 조치
-
-- **대상**: `frontend/src/App.jsx`, `ResumePage.jsx`
-- **내용**:
-  - **사용자 수정 허용**: 이력서 로드 후 사용자가 직접 직무를 수정할 수 있는 입력 창 추가.
-  - **폴백 지능화**: 기본값을 `'General'` 대신 `'보안 엔지니어'` 혹은 프로젝트 내 핵심 키워드로 유추하도록 보정.
-  - **백엔드 로깅**: 직무 누락 원인 파악을 위해 인터뷰 생성 시 `position` 값을 백엔드 로그에 명시적으로 출력.
-
----
-
-## 12. 면접 조기 종료 이슈: LLM 생성 시간 vs 프론트엔드 대기 시간 불일치
-
-### 12-1. 발생 현상
-
-- **현상**: 1~2단계 질문(자기소개, 지원동기) 답변 후 면접이 갑자기 종료됨.
 - **원인**:
-  - AI 워커 로그 확인 결과, AI는 고품질의 직무 질문(예: Snort 기술 질문)을 생성하는 데 성공했으나 약 **246초(4분)** 소요됨.
-  - 프론트엔드(`App.jsx`)의 다음 질문 폴링 대기 시간이 **120초(2분)**로 설정되어 있어, AI가 채 끝나기도 전에 "더 이상 질문이 없다"고 판단하여 면접을 강제 종료 처리함.
+  - `stage_config` 객체가 `create_interview` 함수 내에 정의되어 있지 않음 (아마도 `create_realtime_interview` 코드를 복사하며 발생한 실수).
+  - `sqlalchemy.text` 함수가 임포트되지 않아 SQL 실행 시 오류 발생 가능.
+- **대상 파일**: `backend-core/routes/interviews.py` (Line 106, 120, 130)
 
-### 12-2. 해결 조치
+## 3. 수정 제안 (승인 필요)
 
-- **대상**: `frontend/src/App.jsx`
-- **내용**:
-  - `nextQuestion` 함수의 폴링 루프 횟수를 **60회 → 150회**로 상향.
-  - 대기 시간을 총 **300초(5분)**까지 확보하여 AI 모델 로딩 및 RAG 검색 시간을 충분히 커버하도록 개선.
-- **효과**: 고부하 모델 연산 상황에서도 면접 흐름이 끊기지 않고 모든 단계 완주 가능.
+### backend-core/routes/interviews.py 수정 사항:
+
+1. **임포트 추가**: `from sqlalchemy import text` 추가.
+2. **태스크 명칭 수정**: `tasks.question_generator.generate_questions` -> `tasks.question_generation.generate_questions`
+3. **변수명 통일**: `question_text` -> `q_text`로 수정.
+4. **임시 로직 제거/수정**: `stage_config` 참조 부분을 기본값 또는 적절한 로직으로 수정 (예: `question_type="intro"`, `order=i`).
 
 ---
 
-## 13. 인터뷰 질문 무한 루프 및 꼬리질문 부재 이슈 해결
+## 4. 추가 오류 분석 및 해결 상황 (2026-02-10)
 
-### 13-1. 발생 현상
+### D. SQLModel 테이블 중복 정의 에러 (`InvalidRequestError`) - **[해결 완료]**
 
-- **현상**: 특정 단계(예: 직무 지식)에서 질문이 다음 단계로 넘어가지 않고 동일한 주제로 반복됨. 또한, 답변에 기반한 꼬리질문(Follow-up)이 나오지 않고 계속해서 새로운 질문만 생성됨.
+- **현상**: `interview_worker_gpu`에서 태스크 실행 시 `Table 'users' is already defined...` 에러 발생.
+- **원인**: `ai-worker/db.py`와 `backend-core/models.py`에서 동일 테이블 중복 정의.
+- **조치**: `ai-worker/db.py`의 정의를 제거하고 `models.py`를 공통 참조하도록 구조 통합.
+
+### E. 면접 시나리오(`interview_scenario.py`) 미준수 - **[해결 완료]**
+
+- **현상**: 질문 생성 시 시나리오 단계를 건너뛰거나 초기화됨.
+- **원인**: 단계 감지 로직의 취약성 및 `question_type` 매핑 불일치.
+- **조치**: `generate_next_question_task` 내 단계 감지 로직 강화(Order 기반 역추적 추가) 및 매핑 보정.
+
+### F. 이력서 분석 무한 폴링 현상 (`GET /resumes/123` 반복) - **[해결 완료]**
+
+- **현상**: 분석 상태가 `pending`에서 멈춰 프론트엔드가 2초 간격으로 계속 서버에 요청을 보냄.
+- **원인**: `ai-worker/db.py` 통합 시 `User` 모델 임포트 누락으로 인해 워커가 분석 결과를 DB에 저장하지 못하고 중단됨.
+- **조치**: `ai-worker/db.py`에 `User` 모델 임포트 추가하여 워커 프로세스 정상화.
+
+### G. Vite HMR 및 JSX 구문 오류 - **[진행 중]**
+
+- **현상**: Vite 로그에 `JSXParserMixin` 관련 파싱 에러 발생.
+- **원인**: 프론트엔드(`App.jsx` 등) 소스 코드 내에 문법적인 오류(JSX 태그 닫힘 누락 등)가 있어 빌드가 차단됨.
+- **조치**: 프론트엔드 소스 코드 검토 및 수정 필요.
+
+### H. 이력서 분석 프로세스 중단 (processing_status가 pending에서 멈춤) - **[해결 완료]**
+
+- **현상**: 이력서 업로드 후 `processing_status`가 `pending`에서 변경되지 않아 프론트엔드가 무한 폴링 상태에 빠짐.
 - **원인**:
-  - **탐지 오류**: 시나리오 단계 탐지 시 `Transcript.order` 값에 의존했으나, 비동기 데이터 저장 시 순서 값이 겹치거나 누락되어 항상 특정 단계(motivation)를 마지막 단계로 오탐함.
-  - **Follow-up 로직 부재**: 시나리오상 `type: followup` 단계가 정의되어 있음에도, 코드에서 이를 일반 질문(`ai` 타입)과 동일하게 취급하여 RAG 검색 위주로만 동작함.
+  - `ai-worker/tasks/save_structured.py`에서 JSONB 컬럼에 데이터를 저장할 때 타입 캐스팅 누락.
+  - PostgreSQL의 JSONB 컬럼은 JSON 문자열을 직접 받을 수 없으며 `::jsonb` 캐스팅이 필요함.
+  - 워커가 DB 업데이트 실패로 인해 `processing_status`를 `completed`로 변경하지 못함.
+- **조치**: `save_structured.py`의 SQL 쿼리에 `::jsonb` 캐스팅 추가하여 JSONB 저장 정상화.
 
-### 13-2. 해결 조치
+### J. 모델 이름 충돌 및 ImportError (치명적) - **[해결 완료]**
+- **현상**: 워커가 `Exited (1)` 상태로 크래시됨. 로그에 `ImportError: cannot import name 'User' from 'models'` 발생.
+- **원인**: 
+  - `ai-worker` 폴더 안에 LLM 파일을 담는 `models/` 디렉토리가 존재함.
+  - 파이썬이 `backend-core/models.py` 대신 현재 디렉토리의 `models/` 폴더를 먼저 임포트함.
+  - 해당 폴더에는 DB 모델이 없으므로 임포트 실패 및 워커 중단.
+- **조치**: 
+  - `ai-worker/db.py`에서 `sys.path.insert(0, ...)`를 사용하여 `backend-core` 경로를 최우선 순위로 강제 지정.
+  - `resume_pipeline` 태스크를 `cpu_queue`로 이동하여 GPU 워커 부하를 줄이고 안정성 확보.
 
-- **대상**: `ai-worker/tasks/question_generation.py`
-- **내용**:
-  - **신뢰할 수 있는 단계 탐지**: 절대적인 순서를 보장하는 `Transcript.id.desc()`를 사용하여 가장 최근에 던진 AI 질문을 정확히 찾아내도록 수정.
-  - **꼬리질문(Follow-up) 엔진 구현**: 단계 타입이 `followup`인 경우, RAG 검색 대신 **사용자의 직전 답변**을 LLM의 컨텍스트로 주입하여 답변 내용을 파고드는 질문을 만들도록 개선.
-  - **Fallback 보강**: 텍스트 분석 기반 단계 유추 로직에 `skill`, `experience` 등 더 많은 키워드를 추가하여 데이터 유실 시에도 복구력을 높임.
-- **효과**: 시나리오가 15단계까지 매끄럽게 진행되며, 사용자의 답변을 반영한 지능적인 꼬리질문이 가능해짐.
+## 5. 최종 확인 사항
+- [x] 모델 정의 통합 (Duplicate Table Fix)
+- [x] 백엔드 라우트 변수명 및 태스크명 수정
+- [x] 질문 생성 단계 감지 로직 고도화
+- [x] 워커 내 누락 모델(`User`) 추가
+- [x] 이력서 분석 JSONB 저장 오류 수정
+- [x] **모델 이름 충돌(`ImportError`) 해결**
+- [x] **이력서 분석 큐를 CPU로 전환 (`gpu_queue` -> `cpu_queue`)**
+- [x] 워커 및 프론트엔드 전체 재시작
 
----
+## 6. 결론 및 보고
+- **무한 폴링의 원인**: GPU 워커가 이름 충돌로 인해 임포트 에러를 일으키며 죽어 있었고, 이로 인해 이력서 분석 태스크가 처리되지 못함.
+- **현재 상태**: 모든 수정사항 반영 및 워커 경로 우선순위 조정 완료. CPU 큐로 안전하게 우회 설정 완료.
 
-## 14. 성능 지연 분석: 임베딩 및 질문 생성 속도 저하
-
-### 14-1. 발생 현상
-
-- **현상**: 이력서 업로드 후 임베딩 과정과 면접 중 질문 생성 과정에서 수 분 가량의 긴 지연 시간 발생.
-- **상태**: GPU를 사용하고 있음에도 불구하고 실시간 대응이 어려운 수준의 속도 저하 관찰.
-
-### 14-2. 원인 분석 (Bottleneck Analysis)
-
-1. **모델의 물리적 무게**:
-   - EXAONE-7.8B(질문 생성)와 KURE-v1(임베딩) 모델은 각각 5GB, 2GB 이상의 메모리를 점유하며 연산 집약적임.
-2. **반복적인 모델 로딩 (가장 큰 원인)**:
-   - 현재 `tasks/embedding.py` 등 일부 모듈에서 태스크가 실행될 때마다 임베딩 모델을 매번 새롭게 메모리에 로드(Reloading)함. 로딩에만 약 30~50초 소요.
-3. **GPU 리소스 경합 및 Solo Pool 제약**:
-   - `celery --pool=solo` 설정으로 인해 하나의 무거운 작업(예: 임베딩)이 GPU를 점유하면, 다음 작업(예: 질문 생성)이 시작조차 못 하고 대기함.
-4. **VRAM 용량 초과에 따른 성능 폭락**:
-   - EXAONE과 임베딩 모델이 동시에 GPU에 올라갈 경우 약 8GB+의 VRAM이 필요하며, 사용 가능한 VRAM이 부족할 경우 속도가 느린 시스템 메모리(RAM)를 사용하여 성능이 10배 이상 저하됨.
-
-### 14-3. 권장 개선 방향
-
-- **모델 싱글톤화 및 상주**: 모델을 워커 시작 시 한 번만 로드하여 메모리에 상주시켜 로딩 시간 제거.
-- **워커 및 큐 분리**: 임베딩 작업을 CPU 워커로 이관하여 GPU를 질문 생성에만 집중하도록 자원 격리.
-- **경량 모델 도입 검토**: 속도 최우선 시 임베딩 모델을 더 가벼운 모델로 교체 검토.
+**이제 `docker-compose up -d` 또는 `docker-compose restart`를 실행하여 모든 서비스를 정상화해주시기 바랍니다.**
 
 ---
 
-## 15. 이력서 분석 타임아웃 이슈 (Resume Analysis Timeout)
+## 7. 추가 오류 분석 (2026-02-11)
 
-### 15-1. 발생 현상
+### K. 질문 생성 태스크에서 `ModuleNotFoundError: No module named 'utils.exaone_llm'` - **[해결 완료]**
 
-- **현상**: 이력서 업로드 후 "분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)" 경고창이 뜨며 업로드가 중단됨.
+- **발생 시각**: 2026-02-10 15:04:28 ~ 15:08:47
+- **현상**: 
+  - `generate_next_question_task` 및 `generate_questions_task` 실행 시 `utils.exaone_llm` 모듈을 찾지 못함.
+  - 백엔드는 fallback 질문으로 우회하여 면접이 생성되지만, AI 생성 질문은 작동하지 않음.
+  - 면접 시나리오가 정상적으로 진행되지 않는 근본 원인.
+
 - **원인**:
-  - 이력서 업로드 직후 실행되는 임베딩 모델(KURE-v1)이 약 2~3GB로 무겁고, 첫 실행 시 모델 로딩에만 1분 이상 소요될 수 있음.
-  - 기존 `ResumePage.jsx`의 폴링 대기 시간이 **180초(3분)**로 설정되어 있어, 시스템 자원 부족이나 모델 로딩 지연 시 임계치를 넘겨버림.
+  - `tasks/question_generation.py`에 Python 경로 설정(`sys.path`) 로직이 없음.
+  - `tasks/evaluator.py`에는 동일한 경로 설정이 있어 정상 작동하지만, `question_generation.py`는 누락됨.
+  - Docker 컨테이너 내에서 Celery 워커가 태스크를 실행할 때 작업 디렉토리가 `/app`이 아닐 수 있어, 상대 경로로 `utils` 모듈을 찾지 못함.
 
-### 15-2. 해결 조치
-
-- **대상**: `frontend/src/pages/landing/ResumePage.jsx`
-- **내용**:
-  - `maxPolls` 횟수를 **90회 → 150회**로 상향.
-  - 전체 대기 시간을 **300초(5분)**까지 늘려, 초기 구동 시 모델 로딩 시간을 충분히 견인하도록 수정.
-- **효과**: 콜드 스타트(Cold Start) 상황에서도 이력서 분석이 안정적으로 완료될 때까지 브라우저가 대기함.
-
----
-
-## 16. 이력서 분석 속도 저하 이슈 및 최적화 (Model Startup Latency)
-
-### 16-1. 발생 현상
-
-- **현상**: 이력서 업로드 후 분석 완료까지 수 분(2~4분) 이상의 긴 시간 소요. 이전 대비 속도가 현저히 느려짐.
-- **원인**:
-  - **중복 로딩**: 이력서 분석 요청이 들어올 때마다 약 2.5GB 규모의 임베딩 모델(`KURE-v1`)을 로컬 디스크에서 메모리로 새로 로드함.
-  - **Cold Start**: 모델 로딩에만 약 60~90초가 소요되며, 실제 벡터 연산 시간(수 초)보다 로딩 시간이 압도적으로 길어지는 비효율 발생.
-
-### 16-2. 해결 조치
-
-- **대상**: `ai-worker/tasks/embedding.py`, `ai-worker/utils/vector_utils.py`
-- **내용**:
-  - **싱글톤(Singleton) 패턴 적용**: 모델을 전역 인스턴스로 관리하여 한 번 로드된 모델은 메모리에 상주하도록 수정.
-  - **Warm Start 구현**: 두 번째 요청부터는 이미 메모리에 로드된 모델을 즉시 사용하여 로딩 시간을 **0초**로 단축.
-- **효과**: 반복적인 이력서 분석 속도가 혁신적으로 향상됨 (수 분 -> 수 초 내외).
-
----
-
-## 17. 모델 재다운로드 및 로딩 지연 이슈 해결 (Persistence Fix)
-
-### 17-1. 발생 현상
-
-- **현상**: 임베딩 단계(`STEP5`)에서 5분 이상의 시간이 소요되며 프론트엔드 타임아웃 발생.
-- **원인**:
-  - **휘발성 캐시**: `nlpai-lab/KURE-v1` 모델(약 2.5GB)이 컨테이너 내부의 임시 디렉토리(`~/.cache`)에 저장되어, 워커 재시작 시마다 매번 새로 다운로드됨.
-  - **네트워크 병목**: 기가비트망이 아닐 경우 2.5GB 다운로드에 3~5분이 소요되어 인터뷰 시작 전 병목 발생.
-
-### 17-2. 해결 조치
-
-- **대상**: `ai-worker/tasks/embedding.py`
-- **내용**:
-  - `cache_folder` 설정을 `/app/models/embeddings`로 고정하여 볼륨을 통한 **영구 저장** 활성화.
-  - 모델 로딩 전후로 장치 상태(`cuda`/`cpu`) 및 로딩 진행 상황을 출력하는 상세 로그 추가.
-- **효과**: 최초 1회 다운로드 이후에는 메모리 상주와 영구 캐시 덕분에 분석 속도가 **수 초 이내**로 단축됨.
-
----
-
-## 18. 전 시스템 모델 영구 저장소 지정 (Global Persistence Optimization)
-
-### 18-1. 발생 현상
-
-- **현상**: 임베딩 모델뿐만 아니라 STT(Whisper), 감정 분석(DeepFace) 등 다른 AI 모델들도 워커 재시작 시마다 소리 없이 재다운로드를 수행하여 시스템 부하 및 처리 지연을 유발함.
-
-### 18-2. 해결 조치
-
-- **대상**: `docker-compose.yml`, `ai-worker/*`
-- **내용**:
-  - **통합 환경 변수 설정**: 모든 AI 워커에 `HF_HOME`(HuggingFace용) 및 `DEEPFACE_HOME`(DeepFace용) 환경 변수를 추가하여 `/app/models` 하위의 영구 볼륨을 바라보도록 설정.
-  - **경로 통합**:
-    - HuggingFace 모델: `/app/models/.cache` 에 통합 저장
-    - DeepFace 가중치: `/app/models/.deepface` 에 통합 저장
-- **효과**:
-  - 어떤 AI 모델을 사용하더라도 최초 1회만 다운로드하면 이후에는 즉시 가딩(Warm Start) 가능.
-  - 네트워크 트래픽 절감 및 시스템 초기 구동 속도 극대화.
-
----
-
-## 19. 모듈 누락에 따른 파이프라인 중단 이슈 (Missing Module Fix)
-
-### 19-1. 발생 현상
-
-- **현상**: 이력서 업로드 후 로그에 `ModuleNotFoundError: No module named 'tasks.save_structured'` 에러가 출력되며 파이프라인이 즉시 중단됨.
-- **원인**: 최적화 및 리팩토링 과정에서 실수로 핵심 태스크 파일인 `tasks/save_structured.py`가 누락되거나 삭제됨.
-
-### 19-2. 해결 조치
-
-- **대상**: `ai-worker/tasks/save_structured.py`
-- **내용**:
-  - 파싱된 JSON 데이터를 DB의 `resumes.structured_data` 컬럼에 업데이트하는 `save_structured` 함수를 복구(재작성).
-  - SQLAlchemy를 사용하여 한글 깨짐 없이 JSONB 데이터를 안정적으로 저장하도록 구현.
-- **효과**: 이력서 분석 파이프라인의 2단계(DB 저장)가 정상화되어 전체 프로세스가 끝까지 진행됨.
-
----
-
-## 20. 큐 라우팅 불일치로 인한 작업 미전달 이슈 (Queue Routing Mismatch)
-
-### 20-1. 발생 현상
-
-- **현상**: 이력서 업로드 후 백엔드는 "파이프라인 전송 완료"라고 로그를 출력하지만, GPU 워커는 작업을 전혀 받지 못하고 프론트엔드는 무한 폴링 상태에 빠짐.
-- **원인**:
-  - 백엔드(`backend-core/routes/resumes.py`)에서 `celery_app.send_task()`로 작업을 보낼 때 **큐를 지정하지 않음**.
-  - Celery는 큐 지정이 없으면 기본 큐(`celery`)로 작업을 전송함.
-  - GPU 워커는 `gpu_queue`만 감시하도록 설정되어 있어, 기본 큐로 전송된 작업을 받지 못함.
-
-### 20-2. 해결 조치
-
-- **대상**: `backend-core/routes/resumes.py`
-- **내용**:
-  - 이력서 업로드 시 `send_task()` 호출에 `queue='gpu_queue'` 파라미터 추가 (98-101번 줄).
-  - 이력서 재처리 시 `send_task()` 호출에 `queue='gpu_queue'` 파라미터 추가 (217-220번 줄).
-  - 백엔드 재시작으로 변경사항 적용.
-- **효과**: 이력서 분석 작업이 정확히 GPU 워커로 전달되어 임베딩 및 파이프라인이 정상 실행됨.
-
----
-
-## 21. 질문 조회 정렬 오류로 인한 웹 미표시 이슈 (Question Retrieval Sorting Error)
-
-### 21-1. 발생 현상
-
-- **현상**:
-  - GPU 워커 로그에서 질문 생성 작업이 성공적으로 완료됨 (`Task succeeded`).
-  - DB에 질문이 정상적으로 저장되어 있음 (transcripts 테이블 확인 완료).
-  - 하지만 프론트엔드 웹 화면에는 질문이 표시되지 않고 무한 폴링 상태 지속.
-- **원인**:
-  - 백엔드 API (`/interviews/{id}/questions`)에서 질문 조회 시 `order_by(Transcript.order)`로 정렬.
-  - DB의 `transcripts.order` 컬럼이 **NULL** 상태로 저장되어 있음.
-  - NULL 값으로 정렬하면 결과가 예측 불가능하거나 빈 배열로 반환될 수 있음.
-
-### 21-2. 해결 조치
-
-- **대상**: `backend-core/routes/interviews.py` (165-175번 줄)
-- **내용**:
-  - `get_interview_questions` 함수의 정렬 기준을 `Transcript.order`에서 `Transcript.timestamp`로 변경.
-  - 시간 순서대로 질문을 반환하도록 수정.
-
+- **조치**:
   ```python
-  # 수정 전
-  ).order_by(Transcript.order)
-
-  # 수정 후
-  ).order_by(Transcript.timestamp)
+  # tasks/question_generation.py 상단에 추가
+  current_file_path = os.path.abspath(__file__)
+  tasks_dir = os.path.dirname(current_file_path)
+  ai_worker_root = os.path.dirname(tasks_dir)
+  
+  if ai_worker_root not in sys.path:
+      sys.path.insert(0, ai_worker_root)
   ```
-- **효과**:
-  - 질문이 생성된 시간 순서대로 정확히 조회됨.
-  - 프론트엔드에서 질문을 정상적으로 받아 화면에 표시 가능.
 
-### 21-3. 근본 원인 분석
+- **영향 범위**:
+  - ✅ 질문 생성 태스크 정상화
+  - ✅ 면접 시나리오 흐름 복구
+  - ✅ AI 기반 질문 생성 재개
 
-- `order` 컬럼은 초기 질문 생성 시에만 값이 설정되고, AI가 동적으로 생성하는 후속 질문에는 값이 설정되지 않음.
-- 향후 개선 방향: 질문 생성 시 `order` 값을 자동으로 채우거나, 아예 `timestamp`를 기본 정렬 기준으로 사용.
+### L. Media Server CUDA 드라이버 버전 불일치 - **[진행 중]**
 
----
+- **발생 시각**: 2026-02-10 15:08:50
+- **현상**: 
+  ```
+  ❌ Failed to load Local Whisper: CUDA failed with error 
+  CUDA driver version is insufficient for CUDA runtime version
+  ```
+  - Local Whisper (faster-whisper-large-v3-turbo) 모델 로딩 실패.
+  - STT 기능이 작동하지 않을 가능성.
 
-## 22. 꼬리질문 로직 오작동 이슈 (Followup Question Logic Failure)
-
-### 22-1. 발생 현상
-
-- **현상**:
-  - 꼬리질문(`experience_followup`, `skill_followup` 등) 단계에서 이전 답변을 바탕으로 질문해야 하는데, 엉뚱한 이력서 RAG 검색을 수행함.
-  - 로그 예시: `Detected Last Stage: experience_followup` → `RAG 검색: '문제 해결 기술적 난관 극복'` (다음 단계의 검색어 사용)
 - **원인**:
-  - `question_generation.py`의 191-202번 줄에서 꼬리질문 로직이 있지만, `if not contexts:` 조건이 제대로 작동하지 않음.
-  - 꼬리질문에서 contexts를 준비했음에도 불구하고, 이후 RAG 검색 로직으로 넘어가서 contexts를 덮어씀.
-  - 결과적으로 "이전 답변"이 아닌 "이력서 내용"을 기반으로 질문 생성.
+  - 호스트 시스템의 NVIDIA CUDA 드라이버 버전이 컨테이너 내 CUDA 런타임 버전보다 낮음.
+  - Docker 컨테이너가 요구하는 CUDA 버전과 호스트의 GPU 드라이버가 호환되지 않음.
 
-### 22-2. 해결 조치
+- **해결 방안**:
+  1. **호스트 NVIDIA 드라이버 업데이트** (권장):
+     - 최신 NVIDIA 드라이버 설치 (CUDA 12.x 이상 지원)
+  2. **컨테이너 CUDA 버전 다운그레이드**:
+     - `media-server/Dockerfile`에서 더 낮은 CUDA 버전의 베이스 이미지 사용
+  3. **Fallback 모드 사용**:
+     - CPU 기반 Whisper 모델로 전환 (성능 저하 감수)
 
-- **대상**: `ai-worker/tasks/question_generation.py` (186-207번 줄)
-- **내용**:
-  - 꼬리질문과 일반 질문의 컨텍스트 준비 로직을 `if-else`로 명확히 분리.
-  - 꼬리질문(`stage_type == "followup"`)일 때:
-    - 오직 이전 사용자 답변만 컨텍스트로 사용
-    - RAG 검색을 절대 실행하지 않음
-  - 일반 AI 질문일 때:
-    - 이력서 RAG 검색 실행
+- **현재 상태**: 
+  - STT 기능이 에러로 인해 작동하지 않을 가능성 높음.
+  - 면접 진행에는 영향 없으나, 음성 인식 기능 사용 불가.
 
-  ```python
-  # 수정 전: if not contexts 조건으로 인해 꼬리질문에서도 RAG 실행
-  if stage_type == "followup":
-      contexts = [...]
-  if not contexts:  # ← 문제: 꼬리질문에서도 여기로 넘어감
-      # RAG 검색
+## 8. 최종 확인 사항 (업데이트)
+- [x] 모델 정의 통합 (Duplicate Table Fix)
+- [x] 백엔드 라우트 변수명 및 태스크명 수정
+- [x] 질문 생성 단계 감지 로직 고도화
+- [x] 워커 내 누락 모델(`User`) 추가
+- [x] 이력서 분석 JSONB 저장 오류 수정
+- [x] 모델 이름 충돌(`ImportError`) 해결
+- [x] 이력서 분석 큐를 CPU로 전환
+- [x] **질문 생성 태스크 경로 설정 추가 (`question_generation.py`)**
+- [ ] **Media Server CUDA 드라이버 호환성 해결** (진행 중)
+- [ ] **AI Worker 재시작 필요** (`docker-compose restart ai-worker-gpu ai-worker-cpu`)
 
-  # 수정 후: if-else로 명확히 분리
-  if stage_type == "followup":
-      # 이전 답변만 사용
-      contexts = [...]
-  else:
-      # RAG 검색
-      contexts = retrieve_context(...)
-  ```
-- **효과**:
-  - 꼬리질문이 이전 답변을 정확히 참조하여 생성됨.
-  - "이전에 언급하신 ~에 대해 좀 더 구체적으로..." 같은 자연스러운 꼬리질문 가능.
+## 9. 다음 조치 사항
+1. ✅ `question_generation.py` 수정 완료
+2. ⏳ AI Worker 컨테이너 재시작 필요
+3. ⏳ Media Server CUDA 이슈 해결 (선택적 - STT 사용 시)
 
 ---
 
-**작성자**: Antigravity (AI Coding Assistant)
-**작성일**: 2026-02-10
+## 10. 추가 오류 분석 (2026-02-11 심화)
+
+### M. `utils.exaone_llm` 모듈 import 경로 문제 (치명적) - **[해결 완료]**
+
+- **발생 시각**: 2026-02-10 15:04:28 ~ 2026-02-11 00:19
+- **현상**:
+  - 초기: `ModuleNotFoundError: No module named 'utils.exaone_llm'` (라인 124)
+  - sys.path 추가 후: 라인 번호가 141로 변경되었으나 여전히 동일 에러
+  - 재시작 후: `'NoneType' object is not callable` 에러로 변경
+  - 수동 테스트: `docker exec`로 직접 import하면 성공
+
+- **근본 원인**:
+  1. **Celery 모듈 로딩 시점 문제**: Celery가 태스크 파일을 import할 때 작업 디렉토리가 `/app/tasks`일 수 있음
+  2. **파일 상단 import 실패**: 워커 시작 시 파일이 로드될 때 sys.path가 아직 설정되지 않은 상태에서 import 시도
+  3. **try-except로 인한 None 할당**: import 실패 시 `get_exaone_llm = None`으로 설정되어 이후 호출 시 `'NoneType' object is not callable` 발생
+  4. **함수 내부 import도 실패**: 초기에는 함수 내부에서도 import했으나, 파일 상단의 sys.path 설정이 Celery 로딩 시점에는 적용되지 않음
+
+- **시도한 해결 방법**:
+  1. ❌ **파일 상단에 sys.path 설정 추가** → 효과 없음 (Celery가 다른 경로에서 로드)
+  2. ❌ **파일 상단에서 import 후 함수에서 제거** → `None` 에러 발생
+  3. ❌ **워커 재시작** → 코드 변경 없이는 효과 없음
+  4. ✅ **파일 상단 import 제거 + 함수 내부에서만 import** → 성공!
+
+- **최종 해결책**:
+  ```python
+  # question_generation.py 상단
+  # AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
+  current_file_path = os.path.abspath(__file__)
+  tasks_dir = os.path.dirname(current_file_path)
+  ai_worker_root = os.path.dirname(tasks_dir)
+  
+  if ai_worker_root not in sys.path:
+      sys.path.insert(0, ai_worker_root)
+  
+  # ❌ 파일 상단에서 import하지 않음 (Celery 로딩 시점 문제)
+  # ✅ 함수 내부에서만 import
+  
+  @shared_task(name="tasks.question_generation.generate_next_question")
+  def generate_next_question_task(interview_id: int):
+      # ✅ 여기서 import (sys.path가 이미 설정된 상태)
+      from utils.exaone_llm import get_exaone_llm
+      ...
+  ```
+
+- **핵심 교훈**:
+  - Celery 워커는 태스크 파일을 로드할 때 예상과 다른 작업 디렉토리를 사용할 수 있음
+  - 파일 상단의 모듈 레벨 import는 Celery 로딩 시점에 실행되므로 sys.path 설정이 적용되지 않을 수 있음
+  - **함수 내부에서 import**하면 태스크가 실제로 실행될 때 import되므로 sys.path가 정상 적용됨
+  - try-except로 import 실패를 감추면 디버깅이 어려워짐 → 함수 내부 import로 명확한 에러 발생 유도
+
+- **영향 범위**:
+  - ✅ 질문 생성 태스크 정상화
+  - ✅ 면접 시나리오 흐름 복구
+  - ✅ AI 기반 실시간 질문 생성 재개
+
+## 11. 최종 확인 사항 (2차 업데이트)
+- [x] 모델 정의 통합 (Duplicate Table Fix)
+- [x] 백엔드 라우트 변수명 및 태스크명 수정
+- [x] 질문 생성 단계 감지 로직 고도화
+- [x] 워커 내 누락 모델(`User`) 추가
+- [x] 이력서 분석 JSONB 저장 오류 수정
+- [x] 모델 이름 충돌(`ImportError`) 해결
+- [x] 이력서 분석 큐를 CPU로 전환
+- [x] **질문 생성 태스크 경로 설정 추가**
+- [x] **Celery 모듈 로딩 시점 import 문제 해결**
+- [x] **함수 내부 import로 변경하여 경로 문제 완전 해결**
+- [ ] **Media Server CUDA 드라이버 호환성 해결** (진행 중)
+- [x] **AI Worker 재시작 완료**
+
+## 12. 검증 방법
+새로운 면접을 시작하여 다음을 확인:
+1. 이력서 업로드 → `processing_status`가 `completed`로 변경되는지
+2. 면접 생성 → 초기 템플릿 질문 2개 생성되는지
+3. 답변 제출 → 다음 질문이 AI로 생성되는지 (fallback 아님)
+4. 로그 확인 → `ModuleNotFoundError` 또는 `'NoneType' object is not callable` 에러가 없는지
+
+

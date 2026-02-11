@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 from celery import Celery
 from datetime import datetime
 from typing import List
@@ -44,12 +44,19 @@ async def create_interview(
     생성일자: 2026-02-06
     """
     
-    logger.info(f"🆕 Creating interview session for user {current_user.id}. Requested Position: {interview_data.position}")
+    logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
     
+    # 0. 이력서에서 직무 정보 가져오기 (프론트엔드 입력 대신 이력서 기반)
+    from models import Resume
+    resume = db.get(Resume, interview_data.resume_id)
+    auto_position = "일반"
+    if resume and resume.structured_data:
+        auto_position = resume.structured_data.get("header", {}).get("target_role") or "일반"
+
     # 1. Interview 레코드 생성
     new_interview = Interview(
         candidate_id=current_user.id,
-        position=interview_data.position,
+        position=auto_position, # 자동으로 찾아낸 직무 저장
         company_id=interview_data.company_id,
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
@@ -61,15 +68,15 @@ async def create_interview(
     db.refresh(new_interview)
     
     interview_id = new_interview.id
-    candidate_id = current_user.id
     
-    logger.info(f"Interview record created: ID={interview_id}")
+    logger.info(f"Interview record created: ID={interview_id} (Detected Position: {auto_position})")
     
     try:
         logger.info("Requesting question generation from AI-Worker...")
         task = celery_app.send_task(
-            "tasks.question_generator.generate_questions",
-            args=[interview_data.position, new_interview.id, 5]
+            "tasks.question_generation.generate_questions",
+            args=[new_interview.id, 5], # position 인자 제거
+            queue="gpu_queue"
         )
         generated_data = task.get(timeout=180)
         logger.info(f"Received {len(generated_data)} questions from AI-Worker")
@@ -100,10 +107,10 @@ async def create_interview(
 
             # 3-1. 질문 은행에 저장
             question = Question(
-                content=question_text,
+                content=q_text,
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
-                question_type=stage_config["stage"], # 단계 매칭을 위해 추가
+                question_type="intro" if i == 0 else "skill", # 'technical' 대신 시나리오 표준인 'skill' 사용
                 rubric_json={
                     "criteria": ["구체성", "직무 적합성", "논리력"], 
                     "weight": {"content": 0.5, "communication": 0.5},
@@ -115,7 +122,7 @@ async def create_interview(
             db.commit()
             db.refresh(question)
             
-            # Transcript 저장 (Raw SQL로 관계 꼬임 원칙적 차단)
+            # Transcript 저장 (Raw SQL로 관계 꼬입 원칙적 차단)
             db.execute(
                 text("""
                     INSERT INTO transcripts (interview_id, speaker, text, timestamp, question_id, "order")
@@ -124,10 +131,10 @@ async def create_interview(
                 {
                     "i_id": interview_id,
                     "spk": Speaker.AI,
-                    "txt": question_text,
+                    "txt": q_text,
                     "ts": datetime.utcnow(),
                     "q_id": question.id,
-                    "ord": stage_config["order"] - 1
+                    "ord": i
                 }
             )
             db.commit()

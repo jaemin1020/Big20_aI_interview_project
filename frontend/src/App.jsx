@@ -241,8 +241,7 @@ function App() {
   };
 
   const [isLoading, setIsLoading] = useState(false);
-
-  // ... (existing states)
+  const [subtitle, setSubtitle] = useState('');
 
   const initInterviewSession = async () => {
     setIsLoading(true);

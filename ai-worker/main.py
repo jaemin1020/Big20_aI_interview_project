@@ -1,6 +1,21 @@
 import logging
-from celery import Celery
+import os
+import sys
 import multiprocessing
+
+# 0. 경로 우선순위 조정 (중요)
+# ai-worker 루트가 backend-core보다 먼저 오도록 강제 (utils 폴더 충돌 방지)
+app_root = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+backend_root = os.path.abspath(os.path.join(app_root, "..", "backend-core"))
+
+# 우선 다 지우고 새로 추가 (순서 보장)
+for p in [app_root, backend_root]:
+    while p in sys.path: sys.path.remove(p)
+
+sys.path.insert(0, backend_root) # backend가 2순위
+sys.path.insert(0, app_root)     # app_root가 최종 1순위
+
+from celery import Celery
 
 # CUDA 호환성을 위해 spawn 방식 사용
 multiprocessing.set_start_method('spawn', force=True)
