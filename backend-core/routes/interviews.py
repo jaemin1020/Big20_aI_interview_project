@@ -7,7 +7,7 @@ import logging
 import os
 
 from database import get_session
-from models import (
+from db_models import (
     User, Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
@@ -47,7 +47,7 @@ async def create_interview(
     logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
     
     # 이력서에서 지원 직무(target_role) 가져오기
-    from models import Resume
+    from db_models import Resume
     resume = db.get(Resume, interview_data.resume_id)
     target_role = "일반"
     if resume and resume.structured_data:
@@ -382,7 +382,7 @@ async def create_realtime_interview(
         
         # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
         from config.interview_scenario import get_initial_stages
-        from models import Question, QuestionCategory, QuestionDifficulty
+        from db_models import Question, QuestionCategory, QuestionDifficulty
         
         initial_stages = get_initial_stages()
         

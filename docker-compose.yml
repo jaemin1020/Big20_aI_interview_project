@@ -81,14 +81,14 @@ services:
       - N_GPU_LAYERS=-1
       - USE_GPU=true
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-      - HF_HOME=/app/ai_models/.cache
-      - DEEPFACE_HOME=/app/ai_models/.deepface
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
     depends_on:
       - redis
       - db
     volumes:
       - ./ai-worker:/app
-      - ./ai-worker/ai_models:/app/ai_models
+      - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
     networks:
@@ -115,14 +115,14 @@ services:
       - N_GPU_LAYERS=0
       - USE_GPU=false
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-      - HF_HOME=/app/ai_models/.cache
-      - DEEPFACE_HOME=/app/ai_models/.deepface
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
     depends_on:
       - redis
       - db
     volumes:
       - ./ai-worker:/app
-      - ./ai-worker/ai_models:/app/ai_models
+      - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
     networks:

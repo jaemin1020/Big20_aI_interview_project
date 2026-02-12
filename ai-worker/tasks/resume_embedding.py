@@ -5,7 +5,7 @@ from datetime import datetime
 from celery import shared_task
 from sqlmodel import Session
 from db import engine
-from models import Resume
+from db_models import Resume
 from .embedding import embed_chunks
 from .chunking import chunk_resume
 from .pgvector_store import store_embeddings

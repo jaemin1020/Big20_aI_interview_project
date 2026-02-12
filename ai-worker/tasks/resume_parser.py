@@ -8,7 +8,7 @@ from sqlmodel import Session
 logger = logging.getLogger(__name__)
 
 try:
-    from models import Resume
+    from db_models import Resume
     from db import engine
 except ImportError as e:
     logger.error(f"❌ Critical Import Error in resume_parser: {e}")

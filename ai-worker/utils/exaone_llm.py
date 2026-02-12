@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger("EXAONE-ENGINE")
 
 # 모델 경로 (컨테이너 내부 경로)
-MODEL_PATH = "/app/ai_models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+MODEL_PATH = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 from typing import Any, List, Optional, ClassVar
 from langchain_core.language_models.llms import LLM
@@ -38,7 +38,7 @@ class ExaoneLLM(LLM):
         logger.info(f"🚀 Loading EXAONE Engine from: {MODEL_PATH}")
         
         if not os.path.exists(MODEL_PATH):
-            local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+            local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
             if os.path.exists(local_path):
                 target_path = local_path
             else:

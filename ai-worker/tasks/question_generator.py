@@ -4,6 +4,7 @@ import time
 import gc 
 import logging
 import torch
+from datetime import datetime
 from celery import shared_task
 from langchain_community.llms import LlamaCpp
 from langchain_core.callbacks import CallbackManager
@@ -20,8 +21,8 @@ logger = logging.getLogger("AI-Worker-QuestionGen")
 # -----------------------------------------------------------
 # [1. 모델 및 경로 설정]
 # -----------------------------------------------------------
-local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\ai_models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-docker_path = "/app/ai_models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 if os.path.exists(local_path):
     model_path = local_path
@@ -97,6 +98,19 @@ def generate_next_question_task(interview_id: int):
             logger.error(f"Interview {interview_id} not found.")
             return {"status": "error", "message": "Interview not found"}
             
+        # 🚨 [Race Condition 방지] 중복 생성 체크
+        # 마지막 AI 발화가 너무 최근(5초 이내)이면 중복 트리거로 간주하고 무시
+        stmt_check = select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.speaker == Speaker.AI
+        ).order_by(Transcript.id.desc())
+        last_any_ai = session.exec(stmt_check).first()
+        if last_any_ai and last_any_ai.timestamp:
+            diff = (datetime.utcnow() - last_any_ai.timestamp).total_seconds()
+            if diff < 5:
+                logger.warning(f"⚠️ [SKIP] Recent AI transcript found ({diff:.1f}s ago). Possible duplicate trigger.")
+                return {"status": "skipped", "reason": "too_recent"}
+
         # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
         stmt = select(Transcript).where(
             Transcript.interview_id == interview_id,
@@ -166,24 +180,35 @@ def generate_next_question_task(interview_id: int):
             output_parser = StrOutputParser()
             
             # 2. 컨텍스트 및 프롬프트 구성
+            from .rag_retrieval import get_retriever
+            
+            # [수정] 꼬리질문이든 일반 질문이든 기본적으로 이력서(RAG) 베이스라인을 가져옴
+            query_tmpl = next_stage_data.get("query_template", "{target_role}")
+            if stage_type == "followup" and not next_stage_data.get("query_template"):
+                parent_stage_name = next_stage_data.get("parent")
+                parent_data = get_stage_by_name(parent_stage_name) if parent_stage_name else None
+                query = parent_data.get("query_template", "{target_role}").format(target_role=interview.position) if parent_data else interview.position
+            else:
+                query = query_tmpl.format(target_role=interview.position)
+
+            # Retriever 기반 컨텍스트 검색
+            retriever = get_retriever(resume_id=interview.resume_id, top_k=2)
+            retrieved_docs = retriever.invoke(query)
+            rag_context = "\n".join([f"- {doc.page_content}" for doc in retrieved_docs]) if retrieved_docs else "이력서 근거 부족"
+
             if stage_type == "followup":
-                # 꼬리질문: 이전 답변 컨텍스트 추출
+                # 꼬리질문: RAG 컨텍스트 + 이전 답변 결합
                 user_stmt = select(Transcript).where(
                     Transcript.interview_id == interview_id,
                     Transcript.speaker == Speaker.USER
                 ).order_by(Transcript.id.desc())
                 last_user_ans = session.exec(user_stmt).first()
-                context_text = f"이전 답변: {last_user_ans.text}" if last_user_ans else "이전 답변 없음"
-            else:
-                # 일반 AI 질문: RAG Retriever 활용
-                from .rag_retrieval import get_retriever
-                query_tmpl = next_stage_data.get("query_template", "{target_role}")
-                query = query_tmpl.format(target_role=interview.position)
+                user_ans_text = last_user_ans.text if last_user_ans else "이전 답변 없음"
                 
-                # Retriever 기반 컨텍스트 검색
-                retriever = get_retriever(resume_id=interview.resume_id, top_k=2)
-                retrieved_docs = retriever.invoke(query)
-                context_text = "\n".join([f"- {doc.page_content}" for doc in retrieved_docs]) if retrieved_docs else "이력서 근거 부족"
+                context_text = f"[지원자 이력서 관련 정보]\n{rag_context}\n\n[지원자의 이전 답변]\n{user_ans_text}"
+            else:
+                # 일반 AI 질문: RAG 컨텍스트 그대로 활용
+                context_text = rag_context
 
             # 3. 지원자 정보 정제
             resume = session.get(Resume, interview.resume_id)

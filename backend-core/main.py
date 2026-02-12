@@ -15,7 +15,7 @@ from pathlib import Path
 # DB 설정
 from database import init_db, get_session
 # DB 테이블 모듈 임포트
-from models import (
+from db_models import (
     User, UserCreate, UserLogin, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,

@@ -20,16 +20,18 @@ engine = create_engine(DATABASE_URL)
 import sys
 import os
 
-# ai-worker 폴더 내의 models 디렉토리와의 충돌을 피하기 위해 경로 우선순위 조정
+# backend-core 경로 추가 (db_models 임포트를 위함)
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
 if backend_path not in sys.path:
-    sys.path.append(backend_path) # insert(0) 대신 append() 사용 하여 ai-worker 우선순위 보호
+    sys.path.append(backend_path)
 
+# DB 테이블 모듈 임포트
 try:
-    from models import (
+    from db_models import (
         User, UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
         Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
     )
+
 except ImportError as e:
     logger.error(f"❌ Failed to import models from {backend_path}: {e}")
     raise
