@@ -6,7 +6,11 @@ import requests
 import os
 
 from database import get_session
+<<<<<<< HEAD
 from db_models import User, UserCreate, UserLogin
+=======
+from models import User, UserCreate, UserLogin
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 from utils.auth_utils import get_password_hash, verify_password, create_access_token, get_current_user
 from utils.common import validate_email, validate_username
 

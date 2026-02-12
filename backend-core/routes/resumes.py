@@ -3,7 +3,11 @@
 """
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
 from sqlmodel import Session, select
+<<<<<<< HEAD
 from db_models import Resume, User
+=======
+from models import Resume, User
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 from database import get_session
 from utils.auth_utils import get_current_user
 from celery import Celery

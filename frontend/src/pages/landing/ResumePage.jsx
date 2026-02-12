@@ -132,6 +132,19 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600', padding: '4px 0' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
 
+<<<<<<< HEAD
+=======
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>이름</dt>
+              <dd>
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.name || uploadResult?.name || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
+                />
+              </dd>
+
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 회사</dt>
               <dd>
                 <input
@@ -153,13 +166,44 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
+<<<<<<< HEAD
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력 요약</dt>
+=======
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력</dt>
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ minHeight: '60px', whiteSpace: 'pre-wrap', lineHeight: '1.5', padding: '4px 0' }}
                 >
+<<<<<<< HEAD
                   {uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'}
+=======
+                  {(uploadResult?.structured_data?.activities || uploadResult?.activities)?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {(uploadResult?.structured_data?.activities || uploadResult?.activities)
+                        .slice()
+                        .sort((a, b) => {
+                          const getStartDate = (period) => {
+                            if (!period) return 0;
+                            const match = period.match(/(\d{4})[\s.년]*(\d{1,2})/);
+                            if (match) {
+                              return parseInt(match[1]) * 100 + parseInt(match[2]);
+                            }
+                            return 0;
+                          };
+                          return getStartDate(b.period) - getStartDate(a.period);
+                        })
+                        .map((activity, idx) => (
+                          <li key={idx} style={{ marginBottom: '4px' }}>
+                            {activity.organization.replace(/,/g, '').trim()} - {activity.role} ({activity.period})
+                          </li>
+                        ))}
+                    </ul>
+                  ) : (
+                    uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'
+                  )}
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
                 </div>
               </dd>
 
@@ -173,13 +217,32 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
+<<<<<<< HEAD
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>관련 기술</dt>
+=======
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>보유 자격증</dt>
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ padding: '4px 0', lineHeight: '1.5' }}
                 >
+<<<<<<< HEAD
                   {Array.isArray(uploadResult?.skills) ? uploadResult.skills.join(', ') : (uploadResult?.skills || '정보 없음')}
+=======
+                  {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)
+                        .map(cert => typeof cert === 'string' ? cert : cert.title)
+                        .filter(title => title && !['취득날짜', '날짜', 'Date', '상세 내용'].some(kw => title.includes(kw)))
+                        .map((title, idx) => (
+                          <li key={idx} style={{ marginBottom: '4px' }}>
+                            {title}
+                          </li>
+                        ))}
+                    </ul>
+                  ) : '정보 없음'}
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
                 </div>
               </dd>
             </dl>

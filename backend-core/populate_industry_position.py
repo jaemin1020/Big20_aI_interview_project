@@ -21,7 +21,11 @@ try:
     log("Loading models...")
     # models.py import를 위해 현재 디렉토리를 경로에 추가
     sys.path.append(os.getcwd())
+<<<<<<< HEAD
     from db_models import Question
+=======
+    from models import Question
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
     log("Models loaded.")
 
     # .env 파일 로드

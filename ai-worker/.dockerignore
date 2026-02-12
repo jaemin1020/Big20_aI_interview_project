@@ -1,6 +1,9 @@
 models/
+<<<<<<< HEAD
 ai_models/
 
+=======
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 __pycache__/
 *.pyc
 *.pyo

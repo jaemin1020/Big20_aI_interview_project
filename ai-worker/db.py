@@ -25,6 +25,7 @@ engine = create_engine(DATABASE_URL)
 import sys
 import os
 
+<<<<<<< HEAD
 # backend-core 경로 추가 (db_models 임포트를 위함)
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
 if backend_path not in sys.path:
@@ -37,6 +38,18 @@ try:
         Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
     )
 
+=======
+# ai-worker 폴더 내의 models 디렉토리와의 충돌을 피하기 위해 경로 우선순위 조정
+backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
+if backend_path not in sys.path:
+    sys.path.append(backend_path) # insert(0) 대신 append() 사용 하여 ai-worker 우선순위 보호
+
+try:
+    from models import (
+        User, UserRole, InterviewStatus, QuestionCategory, QuestionDifficulty, Speaker,
+        Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
+    )
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 except ImportError as e:
     logger.error(f"❌ Failed to import models from {backend_path}: {e}")
     raise
@@ -353,7 +366,11 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
 
 def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
+<<<<<<< HEAD
 
+=======
+    from models import QuestionDifficulty, Transcript, Speaker
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
     with Session(engine) as session:
         # 1. Question 테이블 저장
         question = Question(
@@ -365,9 +382,16 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
             is_active=True
         )
         session.add(question)
+<<<<<<< HEAD
         session.flush() # ID 생성을 위해 즉시 플러시
         
         # 2. Transcript 테이블에 AI 질문으로 저장
+=======
+        session.commit()
+        session.refresh(question)
+        
+        # 2. Transcript 테이블에 AI 질문으로 저장 (이게 되어야 프론트에서 보임)
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
         # 현재 면접의 마지막 순서를 파악
         stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
         last_transcript = session.exec(stmt).first()
@@ -382,8 +406,14 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
             timestamp=datetime.utcnow()
         )
         session.add(new_transcript)
+<<<<<<< HEAD
         session.commit() # 전체 확정
         
         logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) saved for Interview {interview_id}")
         return question.id
 
+=======
+        session.commit()
+        
+        return question.id
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf

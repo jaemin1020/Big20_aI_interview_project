@@ -4,7 +4,11 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session, text
 from sqlalchemy.exc import OperationalError
 
+<<<<<<< HEAD
 from db_models import User, Interview, Transcript, EvaluationReport, Question
+=======
+from models import User, Interview, Transcript, EvaluationReport, Question
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 
 # 로깅 설정
 logger = logging.getLogger("Database")
@@ -84,7 +88,11 @@ def seed_initial_data():
     생성자: ejm
     생성일자: 2026-02-06
     """
+<<<<<<< HEAD
     from db_models import User, UserRole
+=======
+    from models import User, UserRole
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
     from utils.auth_utils import get_password_hash
     from sqlmodel import select
 
