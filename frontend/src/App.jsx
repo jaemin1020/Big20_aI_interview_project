@@ -11,7 +11,8 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
-  getCurrentUser
+  getCurrentUser,
+  recognizeAudio
 } from './api/interview';
 
 // Layout & UI
@@ -97,6 +98,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
+  const audioChunksRef = useRef([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -364,14 +366,82 @@ function App() {
     console.log('[WebRTC] Connection established successfully');
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
+      // 녹음 중지 및 STT 처리
+      console.log('[STT] Stopping recording...');
       setIsRecording(false);
       isRecordingRef.current = false;
+      
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
     } else {
+      // 녹음 시작
+      console.log('[STT] Starting recording...');
       setTranscript('');
+      audioChunksRef.current = [];
       setIsRecording(true);
       isRecordingRef.current = true;
+
+      try {
+        // 비디오 스트림에서 오디오 트랙 가져오기
+        const stream = videoRef.current?.srcObject;
+        if (!stream) {
+          throw new Error('No media stream available');
+        }
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          throw new Error('No audio track found');
+        }
+
+        // 오디오만 포함하는 새 스트림 생성
+        const audioStream = new MediaStream(audioTracks);
+        
+        const mediaRecorder = new MediaRecorder(audioStream, { 
+          mimeType: 'audio/webm' 
+        });
+        mediaRecorderRef.current = mediaRecorder;
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          console.log('[STT] Processing audio...');
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          
+          try {
+            setIsLoading(true);
+            const result = await recognizeAudio(audioBlob);
+            console.log('[STT] Recognition result:', result);
+            
+            if (result.text && result.text.trim()) {
+              setTranscript(result.text);
+            } else {
+              setTranscript('음성이 인식되지 않았습니다.');
+            }
+          } catch (error) {
+            console.error('[STT] Recognition error:', error);
+            setTranscript('음성 인식 중 오류가 발생했습니다.');
+          } finally {
+            setIsLoading(false);
+            audioChunksRef.current = [];
+          }
+        };
+
+        mediaRecorder.start();
+        console.log('[STT] MediaRecorder started');
+        
+      } catch (error) {
+        console.error('[STT] Failed to start recording:', error);
+        alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
+        setIsRecording(false);
+        isRecordingRef.current = false;
+      }
     }
   };
 

@@ -67,6 +67,7 @@ const InterviewPage = ({
       return;
     }
 
+    // 타이머 설정
     const timer = setInterval(() => {
       setTimeLeft(prev => prev - 1);
     }, 1000);
