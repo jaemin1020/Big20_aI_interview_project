@@ -399,6 +399,16 @@ function App() {
   };
 
   const finishInterview = async () => {
+    // 0. 마지막 답변이 있다면 저장 후 종료
+    if (transcript.trim()) {
+      try {
+        await createTranscript(interview.id, 'User', transcript.trim(), questions[currentIdx].id);
+        console.log('[finishInterview] Final transcript saved.');
+      } catch (e) {
+        console.warn('[finishInterview] Failed to save final transcript:', e);
+      }
+    }
+
     if (wsRef.current) wsRef.current.close();
     if (pcRef.current) pcRef.current.close();
 
