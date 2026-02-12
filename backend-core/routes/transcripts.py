@@ -39,12 +39,20 @@ async def create_transcript(
         interview_id=transcript_data.interview_id,
         speaker=transcript_data.speaker,
         text=transcript_data.text,
-        question_id=transcript_data.question_id
+        
+        question_id=transcript_data.question_id,
+        vision_analysis=transcript_data.vision_analysis # [NEW] 비전 데이터 저장
     )
     db.add(transcript)
     db.commit()
     db.refresh(transcript)
     
+    # [수정: 2026-02-12] 비전 데이터 수신 확인 로그 추가
+    if transcript.vision_analysis:
+        logger.info(f"👁️ [Vision Data Received] ID={transcript.id} | Gaze={transcript.vision_analysis.get('gaze_center_pct')}% | Smile={transcript.vision_analysis.get('avg_smile_score')}")
+    else:
+        logger.warning(f"⚠️ [No Vision Data] ID={transcript.id} - Video analysis might be missing.")
+
     logger.info(f"Transcript saved: Interview={transcript.interview_id}, Speaker={transcript.speaker}")
     
     # 사용자 답변인 경우 AI 평가 요청 (비동기)

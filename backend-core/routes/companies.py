@@ -21,8 +21,6 @@ class CompanyResponse(BaseModel):
         ideal (str | None): 이상향
         description (str | None): 설명
     
-    생성자: ejm
-    생성일자: 2026-02-08
     """
     id: str
     company_name: str

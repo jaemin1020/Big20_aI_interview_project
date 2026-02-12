@@ -10,14 +10,7 @@ logger = logging.getLogger("ResumeEmbedder")
 
 
 class ResumeEmbedder:
-    """이력서 섹션별 임베딩 생성 클래스
-    
-    Attributes:
-        generator: 임베딩 생성기
-    
-    생성자: ejm
-    생성일자: 2026-02-04
-    """
+    """이력서 섹션별 임베딩 생성 클래스"""
     
     def __init__(self):
         self.generator = get_embedding_generator()
@@ -28,18 +21,7 @@ class ResumeEmbedder:
     
     @staticmethod
     def serialize_profile(profile: Dict) -> str:
-        """
-        프로필 정보를 텍스트로 변환
-        
-        Args:
-            profile: 프로필 정보 (dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """프로필 정보를 텍스트로 변환"""
         return f"""
 이름: {profile.get('name', '')}
 지원직무: {profile.get('target_position', '')}
@@ -49,18 +31,7 @@ class ResumeEmbedder:
     
     @staticmethod
     def serialize_experience(exp: Dict) -> str:
-        """
-        경력 정보를 텍스트로 변환
-        
-        Args:
-            exp: 경력 정보 (dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """경력 정보를 텍스트로 변환"""
         return f"""
 회사: {exp.get('company', '')}
 지역: {exp.get('location', '')}
@@ -71,18 +42,7 @@ class ResumeEmbedder:
     
     @staticmethod
     def serialize_project(proj: Dict) -> str:
-        """
-        프로젝트 정보를 텍스트로 변환
-        
-        Args:
-            proj: 프로젝트 정보 (dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """프로젝트 정보를 텍스트로 변환"""
         return f"""
 프로젝트명: {proj.get('title', '')}
 기간: {proj.get('period', '')}
@@ -91,75 +51,31 @@ class ResumeEmbedder:
     
     @staticmethod
     def serialize_education(edu: Dict) -> str:
-        """
-        학력 정보를 텍스트로 변환
-        
-        Args:
-            edu: 학력 정보 (dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """학력 정보를 텍스트로 변환"""
         return f"""
 학교: {edu.get('school', '')}
 전공: {edu.get('major', '')}
-학위: {edu.get('degree', '')}
+학의: {edu.get('degree', '')}
 기간: {edu.get('period', '')}
 """.strip()
     
     @staticmethod
     def serialize_certifications(certs: List[Dict]) -> str:
-        """
-        자격증 정보를 텍스트로 변환
-        
-        Args:
-            certs: 자격증 정보 (list of dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """자격증 정보를 텍스트로 변환"""
         if not certs:
             return ""
         return "\n".join([f"{c.get('name', '')} {c.get('date', '')}" for c in certs])
     
     @staticmethod
     def serialize_languages(langs: List[Dict]) -> str:
-        """
-        어학 정보를 텍스트로 변환
-        
-        Args:
-            langs: 어학 정보 (list of dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """어학 정보를 텍스트로 변환"""
         if not langs:
             return ""
         return "\n".join([f"{l.get('name', '')} {l.get('level', '')} {l.get('date', '')}" for l in langs])
     
     @staticmethod
     def serialize_skills(skills: Dict) -> str:
-        """
-        기술 스택 정보를 텍스트로 변환
-        
-        Args:
-            skills: 기술 스택 정보 (dict)
-            
-        Returns:
-            str: 변환된 텍스트
-        
-        생성자: ejm,lyn
-        생성일자: 2026-02-04
-        """
+        """기술 스택 정보를 텍스트로 변환"""
         if not skills:
             return ""
         
@@ -177,21 +93,7 @@ class ResumeEmbedder:
     # =========================
     
     def build_resume_embeddings(self, resume_data: Dict) -> Dict:
-        """
-        이력서 전체 섹션별 임베딩 생성
-        
-        Args:
-            resume_data: 파싱된 이력서 데이터 (dict)
-        
-        Returns:
-            dict: 섹션별 임베딩 벡터
-        
-        Raises:
-            ValueError: resume_data가 dict 타입이 아닐 때
-
-        생성자: lyn
-        생성일자: 2026-02-04
-        """
+        """이력서 전체 섹션별 임베딩 생성"""
         logger.info("이력서 멀티 섹션 임베딩 생성 시작")
         
         output = {
@@ -252,10 +154,7 @@ class ResumeEmbedder:
         
         # -------- 자기소개 --------
         for si in resume_data.get("self_introduction", []):
-            si_text = f"""
-질문: {si.get('question', '')}
-답변: {si.get('answer', '')}
-""".strip()
+            si_text = f"질문: {si.get('question', '')}\n답변: {si.get('answer', '')}".strip()
             
             q = si.get("question", "")
             
@@ -306,23 +205,7 @@ class ResumeEmbedder:
         return output
     
     def search_relevant_sections(self, query: str, resume_embeddings: Dict, top_k: int = 3) -> List[Dict]:
-        """
-        쿼리와 가장 관련있는 이력서 섹션 검색
-        
-        Args:
-            query: 검색 쿼리 (예: "프로젝트 경험")
-            resume_embeddings: build_resume_embeddings()의 결과
-            top_k: 반환할 상위 결과 개수
-        
-        Returns:
-            list: 유사도가 높은 섹션 리스트
-        
-        Raises:
-            ValueError: resume_embeddings가 dict 타입이 아닐 때
-        
-        생성자: lyn,ejm
-        생성일자: 2026-02-04
-        """
+        """쿼리와 가장 관련있는 이력서 섹션 검색"""
         from numpy import dot
         from numpy.linalg import norm
         

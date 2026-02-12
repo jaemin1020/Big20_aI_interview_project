@@ -20,35 +20,38 @@ class VisionAnalyzer:
     (화면 그리기 기능 제거, 순수 데이터 분석용)
     """
     def __init__(self):
-        # 모델 경로 (Docker 환경에 맞게 수정 필요)
-        # 현재 경로: /app (media-server root)
-        # 모델은 미리 다운로드 되어 있어야 함
+        # 모델 경로
         self.model_path = 'model_repository/face_landmarker.task'
         
         self.detector = None
         self.is_ready = False
 
-        # 모델 파일 존재 확인
-        if not os.path.exists(self.model_path):
-            logger.warning(f"⚠️ 모델 파일 없음: {self.model_path}")
-            # 컨테이너 내에서 모델 다운로드 시도 (curl)
+        if not os.path.exists(self.model_path) or os.path.getsize(self.model_path) < 1000:
+            logger.warning(f"⚠️ 모델 파일 없음 또는 손상됨: {self.model_path}")
             try:
-                logger.info("-> Google 서버에서 모델 다운로드 시도...")
-                os.makedirs("model_repository", exist_ok=True)
-                os.system(f"curl -L -o {self.model_path} https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task")
+                import urllib.request
+                url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+                logger.info(f"-> Google 서버에서 모델 다운로드 시작: {url}")
+                
+                os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
+                urllib.request.urlretrieve(url, self.model_path)
+                
+                if os.path.exists(self.model_path) and os.path.getsize(self.model_path) > 1000:
+                    logger.info(f"✅ 모델 다운로드 성공")
+                else:
+                    raise Exception("다운로드된 파일이 유효하지 않음")
             except Exception as e:
-                logger.error(f"모델 다운로드 실패: {e}")
+                logger.error(f"❌ 모델 다운로드 실패: {e}")
                 return
             
         try:
             base_options = python.BaseOptions(model_asset_path=self.model_path)
             options = vision.FaceLandmarkerOptions(
                 base_options=base_options,
-                output_face_blendshapes=True, # 표정 분석 활성화
-                running_mode=vision.RunningMode.VIDEO, # 비디오 스트림 모드
-                num_faces=1 # 면접자 1명만 분석
+                output_face_blendshapes=True,
+                running_mode=vision.RunningMode.VIDEO,
+                num_faces=1
             )
-            # 모델 로드
             self.detector = vision.FaceLandmarker.create_from_options(options)
             logger.info("✅ MediaPipe FaceLandmarker 로드 완료")
             self.is_ready = True
@@ -56,7 +59,7 @@ class VisionAnalyzer:
             logger.error(f"❌ Vision 모델 로드 실패: {e}")
             self.is_ready = False
 
-        # 영점 (Calibration) 기본값 (PoC와 동일)
+        # 영점 (Calibration) 기본값
         self.calibrated_gaze_x = 0.43
         self.calibrated_gaze_y = 0.36
         self.calibrated_pitch = 0.05
@@ -83,48 +86,58 @@ class VisionAnalyzer:
             blendshapes = result.face_blendshapes[0]
             
             # 1. 시선 분석 (Gaze)
-            left_iris = landmarks[468] # 왼쪽 눈동자
+            left_iris = landmarks[468] 
             diff_x = left_iris.x - self.calibrated_gaze_x
             diff_y = left_iris.y - self.calibrated_gaze_y
             
             gaze_status = "center"
-            if diff_x < -GAZE_TOLERANCE_X: gaze_status = "left"
-            elif diff_x > GAZE_TOLERANCE_X: gaze_status = "right"
-            elif diff_y < -GAZE_TOLERANCE_Y: gaze_status = "up"
-            elif diff_y > GAZE_TOLERANCE_Y: gaze_status = "down"
+            if abs(diff_x) > GAZE_TOLERANCE_X or abs(diff_y) > GAZE_TOLERANCE_Y:
+                gaze_status = "distracted"
             
-            # 2. 자세 분석 (Head Pose)
+            # 2. 자세 및 태도 분석 (Posture & Attitude)
             nose_tip = landmarks[1]
             chin = landmarks[152]
-            pitch_val = chin.z - nose_tip.z # 고개 끄덕임
-            head_status = "stable" if abs(pitch_val - self.calibrated_pitch) < HEAD_SENSITIVITY else "unstable"
+            left_ear = landmarks[234]
+            right_ear = landmarks[454]
             
-            # 3. 감정 분석 (Blendshapes)
-            # 결과를 딕셔너리로 변환
+            pitch = chin.z - nose_tip.z  # 상하
+            yaw = left_ear.z - right_ear.z # 좌우 회전
+            roll = left_ear.y - right_ear.y # 좌우 기울기
+            
+            posture_stable = abs(pitch - self.calibrated_pitch) < HEAD_SENSITIVITY
+            attitude_status = "stable" if posture_stable and abs(yaw) < 0.05 else "unstable"
+            
+            # 3. 집중도 점수 (Focus Score: 0~100)
+            focus_score = 100
+            if gaze_status == "distracted": focus_score -= 40
+            if attitude_status == "unstable": focus_score -= 30
+            focus_score -= min(30, abs(diff_x) * 100 + abs(diff_y) * 100)
+            focus_score = max(0, round(focus_score, 1))
+            
+            # 4. 감정 및 표정 분석 (Emotion)
             bs_map = {b.category_name: b.score for b in blendshapes}
-            
-            # 주요 지표 추출
             smile_score = (bs_map.get('mouthSmileLeft', 0) + bs_map.get('mouthSmileRight', 0)) / 2
-            brow_down_score = (bs_map.get('browDownLeft', 0) + bs_map.get('browDownRight', 0)) / 2
+            anxiety_score = (bs_map.get('browDownLeft', 0) + bs_map.get('browDownRight', 0)) / 2
+            surprise_score = (bs_map.get('eyeWideLeft', 0) + bs_map.get('eyeWideRight', 0)) / 2
             
             emotion_label = "neutral"
             if smile_score > 0.4: emotion_label = "happy"
-            if brow_down_score > 0.4: emotion_label = "anxious" # 긴장/찌푸림
-            
-            # [Explicit Log for User Verification]
-            if int(timestamp_ms) % 1000 < 100: # Log roughly once per second
-                logger.info(f"📊 [Vision Score] Emotion: {emotion_label} | Smile: {smile_score:.2f} | Anxiety: {brow_down_score:.2f} | Gaze: {gaze_status}")
-            
+            elif anxiety_score > 0.4: emotion_label = "anxious"
+            elif surprise_score > 0.4: emotion_label = "surprised"
+
             return {
                 "status": "detected",
                 "gaze": gaze_status,
-                "head": head_status,
+                "posture": attitude_status,
                 "emotion": emotion_label,
+                "focus_score": focus_score,
                 "scores": {
                     "smile": round(smile_score, 3),
-                    "anxiety": round(brow_down_score, 3),
-                    "gaze_x": round(diff_x, 3),
-                    "gaze_y": round(diff_y, 3)
+                    "anxiety": round(anxiety_score, 3),
+                    "surprise": round(surprise_score, 3),
+                    "pitch": round(pitch, 4),
+                    "yaw": round(yaw, 4),
+                    "focus": focus_score
                 }
             }
             

@@ -54,7 +54,7 @@ class VideoAnalysisTrack(MediaStreamTrack):
     def __init__(self, track, session_id):
         super().__init__()
         self.track = track
-        self.session_id = session_id
+        self.session_id = str(session_id) # [FIX] Ensure string for Dict mapping
         self.last_frame_time = 0
 
         self.last_frame_time = 0
@@ -93,24 +93,39 @@ class VideoAnalysisTrack(MediaStreamTrack):
             result = self.analyzer.process_frame(img, timestamp_ms)
             
             if result:
-                # 1. 터미널 로그 (디버깅용, 2초마다)
+                # 1. 터미널 로그 (1초마다 실제 분석 점수 출력)
                 current_time = time.time()
-                if current_time - getattr(self, 'last_log_time', 0) > 2.0:
+                if current_time - getattr(self, 'last_log_time', 0) > 1.0:
                     self.last_log_time = current_time
-                    logger.info(f"[{self.session_id}] Vision: {result['emotion']} / {result['gaze']} (Smile: {result['scores']['smile']})")
+                    # [변경] 고도화된 지표(집중도, 자세 등)를 포함하여 로그 출력
+                    logger.info(
+                        f"📊 [ANALYSIS] Session={self.session_id} | "
+                        f"Focus={result['focus_score']}% | "
+                        f"Posture={result['posture']} | "
+                        f"Gaze={result['gaze']} | "
+                        f"Emotion={result['emotion']} | "
+                        f"Smile={result['scores']['smile']}"
+                    )
 
                 # 2. WebSocket 전송 (프론트엔드 시각화용)
                 ws = active_websockets.get(self.session_id)
                 if ws:
                     await send_to_websocket(ws, {
-                        "type": "vision_analysis", # 통합된 비전 데이터 타입
+                        "type": "vision_analysis",
                         "data": result,
                         "timestamp": current_time
                     })
+                else:
+                    # [DEBUG] WebSocket 못 찾을 경우 로그 (ID 타입 확인용)
+                    logger.warning(f"⚠️ WebSocket not found for Session={self.session_id} (Type: {type(self.session_id)})")
         except Exception as e:
             logger.error(f"Vision analysis failed: {e}")
 
     async def recv(self):
+        # [삭제] 생존 신고 로그 제거 (사용자 요청: 불필요한 로그 소음 제거)
+        # self.frame_count = getattr(self, 'frame_count', 0) + 1
+        # if self.frame_count % 30 == 0:
+        #     logger.info(f"[{self.session_id}] VideoAnalysisTrack.recv is ALIVE (Frame {self.frame_count})")
         frame = await self.track.recv()
         current_time = time.time()
 
@@ -121,9 +136,7 @@ class VideoAnalysisTrack(MediaStreamTrack):
             # timestamp용으로 time.time() * 1000 사용
             asyncio.create_task(self.process_vision(frame, int(current_time * 1000)))
 
-        # 2. (구버전) 감정 분석 태스크 호출 제거
-        # MediaPipe가 감정까지 다 하므로 더 이상 필요 없음.
-        # if current_time - self.last_frame_time > 2.0: ...
+       
 
         return frame
 
@@ -276,7 +289,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 async def offer(request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    session_id = params.get("session_id", "unknown")
+    session_id = str(params.get("session_id", "unknown")) # [FIX] Force string
 
     # STUN 서버 설정은 유지 (비디오 연결 안정성을 위해)
     pc = RTCPeerConnection(
@@ -298,8 +311,16 @@ async def offer(request: Request):
             
         elif track.kind == "video":
             # 비디오 트랙: 감정 분석 처리
-            pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
-            logger.info(f"[{session_id}] Video analysis track added")
+            # [수정: 2026-02-12] Loopback 트랙 제거 및 서버 측 소비(Consume) 로직 추가
+            # 이전 코드: pc.addTrack(VideoAnalysisTrack(...))
+            # 문제점: 클라이언트가 Loopback된 비디오를 수신(Play)하지 않으면 recv()가 호출되지 않아 분석이 안 됨.
+            # 해결책: 서버 내부에서 asyncio Task로 프레임을 강제로 소비(recv)하게 함.
+            
+            video_track = VideoAnalysisTrack(relay.subscribe(track), session_id)
+            # pc.addTrack(video_track) # 클라이언트에게 되쏘지 않으므로 주석 처리
+            
+            asyncio.ensure_future(consume_audio(video_track)) # consume_audio 함수 재사용 (내부 로직은 recv() 호출뿐이므로 동일)
+            logger.info(f"[{session_id}] Video analysis track started (Server-side processing)")
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
@@ -312,6 +333,7 @@ async def offer(request: Request):
 
 async def consume_audio(track):
     """오디오 트랙을 소비하여 버퍼가 차지 않도록 함"""
+    logger.info(f"▶️ Starting consume loop for track: {track.kind} (ID: {track.id})")
     try:
         while True:
             await track.recv()

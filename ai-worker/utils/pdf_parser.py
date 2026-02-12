@@ -174,8 +174,6 @@ class ResumePDFParser:
         Returns:
             str: 정제된 텍스트
         
-        생성자: ejm
-        생성일자: 2026-02-04
         """
         # 여러 개의 공백을 하나로
         text = re.sub(r'\s+', ' ', text)

@@ -86,6 +86,72 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     
     start_ts = time.time()
     
+    # [수정: 2026-02-12] 비전 데이터(Vision Analysis) 조회 및 통합
+    vision_data = None
+    with Session(engine) as session:
+        t = session.get(Transcript, transcript_id)
+        if t and t.vision_analysis:
+            vision_data = t.vision_analysis
+
+    vision_summary = "비전 분석 데이터 없음"
+    vision_score_breakdown = {}
+    
+    if vision_data:
+        # [POC 점수 로직 구현]
+        # 참고: ai-worker/poc/cv_poc/CV-V2-TASK.py
+        
+        # 1. 상수 및 가중치 설정
+        WEIGHT_CONFIDENCE = 0.3   # 자신감 (미소)
+        WEIGHT_FOCUS      = 0.3   # 시선 집중 (정면 응시)
+        WEIGHT_POSTURE    = 0.2   # 자세 안정 (고개 흔들림 없음)
+        WEIGHT_EMOTION    = 0.2   # 정서 안정 (불안/찌푸림 없음)
+        
+        # 2. 원본 데이터 추출 및 정규화
+        total_frames = vision_data.get('duration_frames', 1)
+        if total_frames == 0: total_frames = 1
+        
+        # 시선 비율 (이미 퍼센트 단위)
+        gaze_ratio = vision_data.get('gaze_center_pct', 0) 
+        
+        # 미소 점수 (0.0-1.0 -> 0-100 환산)
+        avg_smile = vision_data.get('avg_smile_score', 0) * 100
+        
+        # 불안 점수 (0.0-1.0 -> 0-100 환산)
+        avg_anxiety = vision_data.get('avg_anxiety_score', 0) * 100
+        
+        # 자세 안정 비율 (프론트엔드에서 수집한 'posture_stable_pct' 사용)
+        posture_ratio = vision_data.get('posture_stable_pct', 80.0) # 없으면 기본 80
+        
+        # 3. 가중치 점수 계산 (PoC 가중치 적용)
+        score_conf = avg_smile * WEIGHT_CONFIDENCE
+        score_focus = gaze_ratio * WEIGHT_FOCUS
+        score_posture = posture_ratio * WEIGHT_POSTURE
+        score_emotion = (100 - avg_anxiety) * WEIGHT_EMOTION
+        
+        overall_vision_score = score_conf + score_focus + score_posture + score_emotion
+        
+        vision_score_breakdown = {
+            "confidence": round(score_conf, 1),
+            "focus": round(score_focus, 1),
+            "posture": round(score_posture, 1),
+            "emotion": round(score_emotion, 1),
+            "total": round(overall_vision_score, 1)
+        }
+        
+        logger.info(f"📊 [Vision Score Breakdown] Transcript={transcript_id} | Total={overall_vision_score} | Breakdown={vision_score_breakdown}")
+        
+        vision_summary = f"""
+[비언어적 태도 채점 결과 (총점: {overall_vision_score:.1f}/100)]
+1. 자신감(미소): {score_conf:.1f}점 (배점 30점) - 평균 미소: {avg_smile:.1f}%
+2. 시선집중: {score_focus:.1f}점 (배점 30점) - 정면 응시: {gaze_ratio}%
+3. 자세안정: {score_posture:.1f}점 (배점 20점) - 안정 유지: {posture_ratio}% (추정치)
+4. 정서안정: {score_emotion:.1f}점 (배점 20점) - 불안 지수: {avg_anxiety:.1f}% (낮을수록 좋음)
+
+* 이 점수는 POC(V4.5) 알고리즘에 기반하여 산출되었습니다.
+"""
+    # [수정: 2026-02-12] 도커 로그에 비전 점수 출력 (User Request - Critical)
+    logger.info(f"📊 [Vision Score Breakdown] {vision_summary}")
+
     try:
         # GPU 레이어 확인 (CPU 워커면 무거운 분석 생략하여 큐 정체 방지)
         n_gpu_layers = int(os.getenv("N_GPU_LAYERS", "0"))
@@ -127,7 +193,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
                 result = parser.parse(raw_output)
             except Exception as parse_err:
                 logger.error(f"Failed to parse LLM output: {parse_err}")
-                # 폴백: 정규표현식 시도 또는 기본값
+                # 폴백: 정규표현식 시도
                 json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
                 if json_match:
                     result = json.loads(json_match.group())
@@ -171,8 +237,6 @@ def generate_final_report(interview_id: int):
     Raises:
         ValueError: 답변이 없는 경우
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     logger.info(f"Generating Final Report for Interview {interview_id}")
     from db import create_or_update_evaluation_report, update_interview_overall_score, get_interview_transcripts

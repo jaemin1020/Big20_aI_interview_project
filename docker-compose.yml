@@ -45,7 +45,6 @@ services:
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
@@ -116,7 +115,6 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - N_GPU_LAYERS=0
       - USE_GPU=false
-      - USE_GPU=false
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - HF_HOME=/app/models/.cache
       - DEEPFACE_HOME=/app/models/.deepface
@@ -138,7 +136,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
       - REDIS_URL=redis://redis:6379/0
     depends_on:
@@ -161,7 +158,6 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8000
-      - VITE_DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     depends_on:
       - backend
     networks:

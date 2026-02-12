@@ -52,8 +52,6 @@ def get_best_questions_by_position(position: str, limit: int = 10):
     Returns:
         List[Question]: 직무별로 가장 좋은 질문
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Question).where(
@@ -73,8 +71,6 @@ def increment_question_usage(question_id: int):
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         question = session.get(Question, question_id)
@@ -94,8 +90,6 @@ def update_question_avg_score(question_id: int, new_score: float):
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         question = session.get(Question, question_id)
@@ -120,8 +114,6 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
@@ -142,8 +134,6 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
     Returns:
         EvaluationReport: 평가 보고서
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
@@ -173,8 +163,6 @@ def get_interview_transcripts(interview_id: int):
     Returns:
         List[Transcript]: 면접 스크립트
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order)
@@ -190,8 +178,6 @@ def get_user_answers(interview_id: int):
     Returns:
         List[Transcript]: 사용자 답변
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Transcript).where(
@@ -211,8 +197,6 @@ def update_interview_overall_score(interview_id: int, score: float):
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -237,8 +221,6 @@ def create_company(company_id: str, company_name: str, ideal: str = None, descri
     Returns:
         Company: 회사 정보
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         company = Company(
@@ -263,8 +245,6 @@ def get_company_by_id(company_id: str):
     Returns:
         Company: 회사 정보
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         return session.get(Company, company_id)
@@ -280,8 +260,6 @@ def update_company_embedding(company_id: str, embedding: List[float]):
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         company = session.get(Company, company_id)
@@ -302,8 +280,6 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
     Returns:
         List[Company]: 유사 회사
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Company).where(
@@ -325,8 +301,6 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
     Returns:
         None
     
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -350,38 +324,48 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             session.add(interview)
             session.commit()
 
-def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
+def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, session: Session = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
+    
+    # 세션이 전달되지 않았으면 새로 생성 (자체 트랜잭션)
+    if session is None:
+        with Session(engine) as new_session:
+            result = _save_limit_logic(new_session, interview_id, content, category, stage, guide)
+            new_session.commit() # 여기서 커밋 수행
+            return result
+    else:
+        # 외부 세션 사용 (커밋 위임)
+        return _save_limit_logic(session, interview_id, content, category, stage, guide)
 
-    with Session(engine) as session:
-        # 1. Question 테이블 저장
-        question = Question(
-            content=content,
-            category=category,
-            difficulty=QuestionDifficulty.MEDIUM,
-            question_type=stage,
-            rubric_json={"guide": guide},
-            is_active=True
-        )
-        session.add(question)
-        session.flush() # ID 생성을 위해 즉시 플러시
-        
-        # 2. Transcript 테이블에 AI 질문으로 저장
-        # 현재 면접의 마지막 순서를 파악
-        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
-        last_transcript = session.exec(stmt).first()
-        next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
+def _save_limit_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None):
+    # 1. Question 테이블 저장
+    question = Question(
+        content=content,
+        category=category,
+        difficulty=QuestionDifficulty.MEDIUM,
+        question_type=stage,
+        rubric_json={"guide": guide},
+        is_active=True
+    )
+    session.add(question)
+    session.flush() # ID 생성을 위해 즉시 플러시
+    
+    # 2. Transcript 테이블에 AI 질문으로 저장
+    # 현재 면접의 마지막 순서를 파악
+    stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+    last_transcript = session.exec(stmt).first()
+    next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
 
-        new_transcript = Transcript(
-            interview_id=interview_id,
-            speaker=Speaker.AI,
-            text=content,
-            question_id=question.id,
-            order=next_order,
-            timestamp=datetime.utcnow()
-        )
-        session.add(new_transcript)
-        session.commit() # 전체 확정
-        
-        logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) saved for Interview {interview_id}")
-        return question.id
+    new_transcript = Transcript(
+        interview_id=interview_id,
+        speaker=Speaker.AI,
+        text=content,
+        question_id=question.id,
+        order=next_order,
+        timestamp=datetime.utcnow()
+    )
+    session.add(new_transcript)
+    # session.commit() # [수정] 내부 커밋 제거
+    
+    logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) flushed for Interview {interview_id}")
+    return question.id

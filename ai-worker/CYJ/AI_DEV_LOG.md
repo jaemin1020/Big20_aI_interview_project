@@ -165,3 +165,69 @@
     4. [추가] `target_position` 필드가 문자열("Unknown")로 들어올 때 `.get()` 호출로 인한 `AttributeError` 해결 (타입 체크 로직 추가).
 
 ---
+
+### 2.5. 🖥️ Frontend (UI/UX)
+
+#### 🔴 Issue: 면접 질문 건너뛰기 (Double Increment)
+
+* **발생일**: 2026-02-12
+* **위치**: `frontend/src/pages/interview/InterviewPage.jsx`
+* **증상**: "다음 질문" 버튼을 빠르게 두 번 클릭하면 질문 번호가 2개씩 건너뛰어지는 현상.
+* **원인**: AI가 질문을 생성하는 로딩 시간(`isLoading`) 동안 버튼이 비활성화되지 않아, 사용자의 중복 클릭 이벤트가 모두 처리됨.
+* **해결**: `isLoading` 상태일 때 버튼을 `disabled` 처리하고 시각적 피드백(투명도 조절, 커서 변경) 추가.
+
+### 2.6. 🔄 System Integration (시스템 통합)
+
+#### 🔴 Issue: DB Transaction Warning (Nested Session)
+
+* **발생일**: 2026-02-12
+* **위치**: `ai-worker/db.py`, `tasks/question_generator.py`
+* **증상**: `WARNING: there is already a transaction in progress` 로그 발생 및 데이터 저장 간헐적 실패.
+* **원인**: `save_generated_question` 함수가 내부에서 새로운 DB 세션을 생성(`with Session(engine)`)하는데, 이미 세션이 열려 있는 상태에서 호출되어 트랜잭션 충돌 발생.
+* **해결**: 함수 인자로 `session`을 전달받도록 수정하여 기존 세션을 재사용(Reuse)하도록 리팩토링 완료.
+
+#### ✨ Feature: MediaPipe Vision 분석 통합 (Integration)
+
+* **발생일**: 2026-02-12
+* **작업**: 면접 영상에서 시선(Gaze), 감정(Emotion), 자세(Posture) 데이터를 실시간 수집하여 DB에 저장 및 결과 리포트에 시각화.
+* **구현**:
+    1.  **Frontend**: 녹음 중 비전 데이터 프레임 단위 수집 -> 평균값 계산 -> `createTranscript` API 전송.
+    2.  **Backend**: `Transcript` 테이블에 `vision_analysis` JSON 컬럼 추가 및 저장 로직 구현.
+    3.  **ResultPage**: `recharts`를 사용하여 시선 집중도, 긍정 표정, 긴장도 변화 추이 그래프 구현.
+
+#### 🔴 Issue: 질문 건너뛰기 및 빈 화면 (Data Missing after Sync)
+
+* **발생일**: 2026-02-12
+* **증상**: 3번째 질문에서 '다음' 버튼을 누르면 4번째 질문이 로드되지 않고 빈 화면이 뜨거나, 다시 누르면 에러가 발생함.
+* **원인**: 
+    1. AI가 다음 질문을 생성하기 전에 프론트엔드가 먼저 페이지를 넘겨버림 (인덱스 증가).
+    2. 서버와 데이터 동기화(`sync`)를 시도했으나 여전히 새 질문이 없어서 `safeQuestions[currentIdx]`가 `undefined`가 됨.
+* **해결**: `App.jsx`에서 데이터 동기화 실패 시, **강제로 인덱스를 이전 질문으로 롤백(`setCurrentIdx(prev - 1)`)** 하여 빈 화면에 머무르는 것을 방지함.
+
+#### 🔴 Issue: 타임아웃 시 비전 데이터 누락
+
+* **발생일**: 2026-02-12
+* **위치**: `InterviewPage.jsx`
+* **증상**: 답변 시간 초과(Timer)로 인해 자동으로 넘어갈 때, 비전 분석 데이터가 저장되지 않음.
+* **원인**: `nextQuestion()` 호출 시 인자를 전달하지 않음.
+* **해결**: `nextQuestion(calculateVisionStats())`로 수정하여 타임아웃 시에도 데이터가 전송되도록 함.
+
+
+
+### 2.7. 🚫 Policy Violation (정책 위반 및 개선)
+
+#### 🔴 Issue: 임의 파일/폴더 생성 및 라이브러리 추가 (Unauthorized Changes)
+
+* **발생일**: 2026-02-12
+* **위치**: `media-server/`
+* **내용**: 
+    1. `model_repository` 폴더가 예고 없이 생성되어 디스크 용량을 점유함.
+    2. `import random` 구문이 설명 없이 추가됨.
+* **사용자 피드백**: "이상한 폴더 파일 만들어서 용량 먹게 하지 말라", "추가했으면 귀뜸이라도 해달라".
+* **원인**: 
+    1. NVIDIA Triton Inference Server 관련 설정 파일이 라이브러리 내부 동작으로 자동 생성되었거나, AI가 최적화를 위해 임의로 폴더를 구성함.
+    2. 로깅 확률 제어(`random.random() < 0.1`)를 위해 `random` 모듈을 임의로 추가함.
+* **조치**: 
+    1. 발견 즉시 `model_repository` 폴더 삭제 완료.
+    2. `main.py`에서 `import random` 제거 및 결정론적 로깅(Frame Count 기반)으로 변경.
+    3. **[원칙 수립]**: 향후 새로운 라이브러리나 대용량 폴더가 필요한 경우, **반드시 사용자에게 사전 승인**을 받고 `task.md`에 명시하기로 함.

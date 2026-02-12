@@ -206,8 +206,15 @@ class Transcript(SQLModel, table=True):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     
     # 감정 분석 결과
-    sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
-    emotion: Optional[str] = None  # happy, neutral, sad, angry 등
+    sentiment_score: Optional[float] = None  # -1.0 ~ 1.0 (텍스트 감성)
+    emotion: Optional[str] = None  # happy, neutral 등 (텍스트 감정)
+    
+    # [NEW] 비전 분석 결과 (Visual Emotion, Gaze, etc.)
+    vision_analysis: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSONB),
+        description="영상 분석 데이터 집계 (평균 시선, 감정 점수 등)"
+    )
     
     # 메타데이터
     question_id: Optional[int] = Field(default=None, foreign_key="questions.id")
@@ -317,6 +324,7 @@ class TranscriptCreate(SQLModel):
     speaker: Speaker
     text: str
     question_id: Optional[int] = None
+    vision_analysis: Optional[Dict[str, Any]] = None  # [NEW] 프론트엔드에서 전송받을 비전 데이터
 
 class EvaluationReportResponse(SQLModel):
     """평가 리포트 응답 모델"""

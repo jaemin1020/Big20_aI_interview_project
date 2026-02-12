@@ -417,7 +417,7 @@ function App() {
     }
   };
 
-  const nextQuestion = async () => {
+  const nextQuestion = async (visionAnalysisStats = null) => { // [NEW] visionAnalysisStats 추가
     console.log('[nextQuestion] Start - Current Index:', currentIdx);
 
     // [Safety Check] 데이터 비동기화 감지 및 복구
@@ -451,7 +451,17 @@ function App() {
         qLen: safeQuestions?.length,
         currentIdx
       });
-      alert("다음 질문을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+
+      // [수정: 2026-02-12] 데이터 동기화 실패 시 복구 로직 추가
+      // 이전 코드: alert 후 return하여 화면이 멈추거나 빈 화면이 유지됨.
+      // 변경 사유: 질문 데이터가 로드되지 않았는데 인덱스만 증가하여 '빈 질문' 상태가 되는 문제 해결.
+      // 변경 내용: 인덱스를 이전 질문으로 롤백하고 알림 표시.
+      if (currentIdx > 0) {
+        alert("다음 질문을 불러오는 데 실패했습니다. 다시 시도해 주세요.");
+        setCurrentIdx(prev => prev - 1);
+      } else {
+        alert("질문 데이터를 불러올 수 없습니다. 새로고침 해주세요.");
+      }
       return;
     }
 
@@ -459,7 +469,12 @@ function App() {
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
       console.log('[nextQuestion] Saving transcript for question ID:', safeQuestions[currentIdx].id);
-      await createTranscript(interview.id, 'User', answerText, safeQuestions[currentIdx].id);
+
+      // [DEBUG] 비전 데이터 페이로드 확인
+      console.log("👁️ [App.jsx] Sending visionAnalysisStats:", visionAnalysisStats);
+
+      // [NEW] 비전 데이터 포함하여 전송
+      await createTranscript(interview.id, 'User', answerText, safeQuestions[currentIdx].id, visionAnalysisStats);
       console.log('[nextQuestion] Transcript saved successfully');
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
@@ -495,22 +510,51 @@ function App() {
       }
     } catch (err) {
       console.error('Answer submission error:', err);
-      alert('답변 제출에 실패했습니다.');
+
+      if (err.response && err.response.status === 401) {
+        alert('로그인 세션이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.');
+
+      } else {
+        alert('답변 제출에 실패했습니다. (서버 연결 확인 필요)');
+      }
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
-      const initMedia = async () => {
-        try {
-          await setupWebRTC(interview.id);
-          setupWebSocket(interview.id);
-        } catch (err) {
-          console.error("Media init error:", err);
+    if (step === 'interview' && interview) {
+
+
+      const MAX_RETRIES = 10;
+      let retries = 0;
+      let timeoutId;
+
+      const tryInit = async () => {
+        if (videoRef.current && !pcRef.current) {
+          console.log("[App] videoRef ready, initializing WebRTC...");
+          try {
+            await setupWebRTC(interview.id);
+            setupWebSocket(interview.id);
+          } catch (err) {
+            console.error("Media init error:", err);
+          }
+        } else if (!videoRef.current) {
+          if (retries < MAX_RETRIES) {
+            console.log(`[App] videoRef not ready, retrying... (${retries + 1}/${MAX_RETRIES})`);
+            retries++;
+            timeoutId = setTimeout(tryInit, 500); // 0.5초 대기 후 재시도
+          } else {
+            console.error("[App] Failed to initialize camera: videoRef never became ready.");
+            alert("카메라 초기화에 실패했습니다. 페이지를 새로고침 해주세요.");
+          }
         }
       };
-      initMedia();
+
+      tryInit();
+
+      return () => {
+        if (timeoutId) clearTimeout(timeoutId);
+      };
     }
   }, [step, interview]);
 

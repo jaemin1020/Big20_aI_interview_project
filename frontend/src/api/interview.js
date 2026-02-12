@@ -95,12 +95,13 @@ export const recognizeAudio = async (audioBlob) => {
 };
 
 
-export const createTranscript = async (interviewId, speaker, text, questionId = null) => {
+export const createTranscript = async (interviewId, speaker, text, questionId = null, visionAnalysis = null) => {
     const response = await api.post('/transcripts', {
         interview_id: interviewId,
         speaker: speaker,
         text: text,
-        question_id: questionId
+        question_id: questionId,
+        vision_analysis: visionAnalysis // [NEW] 추가
     });
     return response.data;
 };

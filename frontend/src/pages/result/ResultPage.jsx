@@ -7,10 +7,18 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  ResponsiveContainer
+  ResponsiveContainer,
+  BarChart, // [NEW]
+  Bar, // [NEW]
+  XAxis, // [NEW]
+  YAxis, // [NEW]
+  CartesianGrid, // [NEW]
+  Tooltip, // [NEW]
+  Legend // [NEW]
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { getInterviewTranscripts } from '../../api/interview'; // [NEW]
 
 const ResultPage = ({ results, report, interview, onReset }) => {
   const resultRef = useRef(null);
@@ -50,6 +58,28 @@ const ResultPage = ({ results, report, interview, onReset }) => {
       alert("PDF 저장 중 오류가 발생했습니다.");
     }
   };
+
+  // [NEW] Vision Data State
+  const [visionStats, setVisionStats] = React.useState(null);
+
+  React.useEffect(() => {
+    if (interview?.id) {
+      getInterviewTranscripts(interview.id).then(transcripts => {
+        // Filter user transcripts with vision analysis
+        const userTranscripts = transcripts.filter(t => t.speaker === 'User' && t.vision_analysis);
+
+        if (userTranscripts.length > 0) {
+          const stats = userTranscripts.map((t, idx) => ({
+            question: `Q${idx + 1}`,
+            attention: t.vision_analysis.gaze_center_pct || 0,
+            smile: Math.round((t.vision_analysis.avg_smile_score || 0) * 100),
+            anxiety: Math.round((t.vision_analysis.avg_anxiety_score || 0) * 100)
+          }));
+          setVisionStats(stats);
+        }
+      }).catch(err => console.error("Failed to load vision stats:", err));
+    }
+  }, [interview]);
 
   return (
     <div className="result-container animate-fade-in" style={{
@@ -91,6 +121,42 @@ const ResultPage = ({ results, report, interview, onReset }) => {
           </div>
         </GlassCard>
 
+        {/* [NEW] Vision Analysis Chart */}
+        {visionStats && (
+          <GlassCard style={{ padding: '2rem' }}>
+            <h3 style={{
+              color: '#8b5cf6',
+              borderBottom: '2px solid rgba(139, 92, 246, 0.3)',
+              paddingBottom: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>👁️</span> 비언어적 태도 분석 (AI Vision)
+            </h3>
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={visionStats} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="question" stroke="var(--text-muted)" />
+                  <YAxis stroke="var(--text-muted)" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="attention" name="시선 집중도(%)" fill="#10b981" />
+                  <Bar dataKey="smile" name="긍정 표정(%)" fill="#f59e0b" />
+                  <Bar dataKey="anxiety" name="긴장도(%)" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
+              * 각 질문별 답변 구간에서의 평균 시선 처리와 표정 변화를 AI가 분석한 결과입니다.
+            </p>
+          </GlassCard>
+        )}
 
         {/* 2. 직무 역량 평가 (Text Feedback) */}
         <GlassCard style={{ padding: '2rem' }}>

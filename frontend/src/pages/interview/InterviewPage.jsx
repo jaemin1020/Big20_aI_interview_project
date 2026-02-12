@@ -81,7 +81,10 @@ const InterviewPage = ({
       if (!isRecording) {
         console.log("Time over, moving to next question.");
         isTimeOverRef.current = true; // 처리 완료 플래그 설정
-        nextQuestion();
+        // [수정: 2026-02-12] 타임아웃 시에도 비전 데이터 전송 & 로그 출력
+        // 이전 코드: nextQuestion(calculateVisionStats())
+        const stats = getVisionStatsAndLog();
+        nextQuestion(stats);
       }
       return;
     }
@@ -97,6 +100,95 @@ const InterviewPage = ({
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+
+  // [NEW] 비전 데이터 누적을 위한 Ref
+  const visionLogsRef = React.useRef([]);
+
+  // [NEW] 녹음 중일 때 비전 데이터 수집
+  // [NEW] 녹음 중일 때 비전 데이터 수집
+  // [수정: 2026-02-12] isRecording 상태와 무관하게 현재 질문에 대한 데이터를 계속 수집 (데이터 부족 방지)
+  React.useEffect(() => {
+    if (visionData) {
+      visionLogsRef.current.push({
+        timestamp: Date.now(),
+        ...visionData
+      });
+    }
+  }, [visionData]);
+
+  // [NEW] MediaPipe 데이터 수신 확인 로그 (사용자 검증용 - 항상 출력)
+  React.useEffect(() => {
+    if (visionData && visionData.status === 'detected') {
+      // [수정: 2026-02-12] 사용자 요청으로 로그 항상 출력 (디버깅용)
+      // 기존 5% 확률 제한 제거 -> 매 프레임마다 로그가 찍히면 너무 많으므로 1초에 한번 정도만 찍히게는 못하지만,
+      // 일단 사용자가 '작동 여부'를 궁금해하므로 매번 찍거나, UI에 표시하는게 나음.
+      // 여기서는 콘솔에 확실히 찍히도록 함.
+      console.log(`[MediaPipe] 👁️ Vision Data: Emotion=${visionData.emotion} | Gaze=${visionData.gaze} | Score=${JSON.stringify(visionData.scores)}`);
+    }
+  }, [visionData]);
+
+  // [NEW] 질문 변경 시 비전 로그 초기화
+  React.useEffect(() => {
+    visionLogsRef.current = [];
+  }, [currentIdx]);
+
+  // [NEW] 비전 데이터 통계 계산 함수
+  const calculateVisionStats = () => {
+    const logs = visionLogsRef.current;
+    if (logs.length === 0) return null;
+
+    const totalFrames = logs.length;
+    let gazeCenterCount = 0;
+    let postureStableCount = 0; // [NEW] 자세 안정 카운트 추가
+    let emotionCounts = { happy: 0, neutral: 0, anxious: 0, angry: 0, sad: 0, surprised: 0 };
+    let totalSmileScore = 0;
+    let totalAnxietyScore = 0;
+
+    logs.forEach(log => {
+      // 1. 시선 (Media-Server에서 'center'로 준 것)
+      if (log.gaze === 'center') gazeCenterCount++;
+
+      // 2. 자세 (Media-Server에서 'stable'로 준 것)
+      if (log.posture === 'stable') postureStableCount++;
+
+      // 3. 감정
+      if (log.emotion) emotionCounts[log.emotion] = (emotionCounts[log.emotion] || 0) + 1;
+
+      // 4. 점수
+      if (log.scores) {
+        totalSmileScore += (log.scores.smile || 0);
+        totalAnxietyScore += (log.scores.anxiety || 0);
+      }
+    });
+
+    return {
+      duration_frames: totalFrames,
+      gaze_center_pct: Math.round((gazeCenterCount / totalFrames) * 100),
+      posture_stable_pct: Math.round((postureStableCount / totalFrames) * 100), // [NEW] 추가
+      emotion_distribution: emotionCounts,
+      avg_smile_score: totalSmileScore / totalFrames,
+      avg_anxiety_score: totalAnxietyScore / totalFrames,
+      timestamp: Date.now()
+    };
+  };
+
+  // [NEW] 비전 데이터 집계 및 로그 출력 (사용자 검증용)
+  const getVisionStatsAndLog = () => {
+    const stats = calculateVisionStats();
+    if (stats) {
+      console.log(`\n============== [Q${currentIdx + 1} Vision Analysis Result] ==============`);
+      console.log(`✅ 총 분석 프레임: ${stats.duration_frames}`);
+      console.log(`👀 시선 집중도: ${stats.gaze_center_pct}% (정면 응시 비율)`);
+      console.log(`😊 평균 미소 점수: ${(stats.avg_smile_score * 100).toFixed(1)}점`);
+      console.log(`😟 평균 긴장 점수: ${(stats.avg_anxiety_score * 100).toFixed(1)}점`);
+      console.log(`📊 감정 분포: Happy=${stats.emotion_distribution.happy}, Anxious=${stats.emotion_distribution.anxious}, Neutral=${stats.emotion_distribution.neutral}`);
+      console.log(`=============================================================\n`);
+    } else {
+      console.warn(`[Q${currentIdx + 1}] 비전 데이터가 충분하지 않습니다. (분석 실패 가능성)`);
+    }
+    return stats;
   };
 
   return (
@@ -353,8 +445,21 @@ const InterviewPage = ({
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}
           </PremiumButton>
           <PremiumButton
-            onClick={nextQuestion}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            onClick={() => {
+              // [NEW] 비전 통계 포함하여 전송
+              const stats = calculateVisionStats();
+              nextQuestion(stats);
+            }}
+            disabled={isLoading}
+            style={{
+              flex: 1,
+              minWidth: '140px',
+              padding: '1rem',
+              fontSize: '1rem',
+              fontWeight: '700',
+              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading ? 'not-allowed' : 'pointer'
+            }}
           >
             {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
           </PremiumButton>

@@ -44,8 +44,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
+            # [수정: 2026-02-12] 디버깅 로그 추가
+            # 변경 사유: 401 에러 발생 시 토큰은 유효한데 사용자명이 없는 케이스인지 확인하기 어려움.
+            print("[AuthDebug] Username is None in payload")
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
+        # [수정: 2026-02-12] 구체적인 JWT 에러 출력
+        # 이전 코드: 모든 JWTError를 뭉뚱그려 처리함.
+        # 변경 내용: 서명 불일치인지, 만료(Expired)인지 구분하기 위해 에러 내용을 콘솔에 출력.
+        print(f"[AuthDebug] JWT Error: {e}")
         raise credentials_exception
     
     statement = select(User).where(User.username == username)
