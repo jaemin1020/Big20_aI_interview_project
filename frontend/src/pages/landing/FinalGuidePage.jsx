@@ -124,7 +124,7 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
             {isLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <div className="spinner" style={{ width: '20px', height: '20px', margin: 0, borderTopColor: '#fff', borderRightColor: 'rgba(255,255,255,0.3)', borderBottomColor: 'rgba(255,255,255,0.3)', borderLeftColor: 'rgba(255,255,255,0.3)' }}></div>
-                <span>면접실 생성 중...</span>
+                <span>면접실 입장 중...</span>
               </div>
             ) : '지금 면접 시작하기'}
           </PremiumButton>
