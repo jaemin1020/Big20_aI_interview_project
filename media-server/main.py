@@ -326,6 +326,31 @@ async def root():
         "mode": "Video Analysis + Remote STT (via AI-Worker)"
     }
 
+# [복구: 2026-02-12]
+# EnvTestPage.jsx 테스트를 위한 필수 엔드포인트
+from fastapi import UploadFile, File, HTTPException
+
+@app.post("/stt/recognize")
+async def stt_recognize(file: UploadFile = File(...)):
+    """
+    STT 테스트용 엔드포인트 (EnvTestPage.jsx에서 호출)
+    """
+    try:
+        audio_bytes = await file.read()
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        task = celery_app.send_task(
+            "tasks.stt.recognize",
+            args=[audio_b64],
+            queue="gpu_queue"
+        )
+        # 테스트용이므로 결과 대기
+        result = task.get(timeout=30)
+        return result
+    except Exception as e:
+        logger.error(f"STT Test Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")
