@@ -34,6 +34,14 @@ class ExaoneLLM(LLM):
         super().__init__(**kwargs)
         if hasattr(self, "_initialized") and self._initialized:
             return
+        
+        # CPU 환경에서는 EXAONE 로딩 건너뛰기 (libcuda.so.1 에러 방지)
+        use_gpu = os.getenv("USE_GPU", "true").lower() == "true"
+        if not use_gpu:
+            logger.warning("⚠️ USE_GPU=false detected. Skipping EXAONE engine loading (CPU mode).")
+            logger.warning("⚠️ EXAONE-based tasks will not work in this worker.")
+            ExaoneLLM._initialized = True
+            return
             
         logger.info(f"🚀 Loading EXAONE Engine from: {MODEL_PATH}")
         
