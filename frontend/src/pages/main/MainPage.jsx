@@ -96,10 +96,10 @@ const MainPage = ({
               onClick={onStartInterview}
               style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}
             >
-              무료로 시작하기
+              면접 시작하기
             </PremiumButton>
             <button className="secondary-button" onClick={onAbout}>
-              <span>작동 원리 보기</span>
+              <span>브랜드 소개</span>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -109,9 +109,9 @@ const MainPage = ({
           <div className="trust-badges animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
             <div className="trust-item">
               <span className="trust-number">
-                <CountUp end={98} suffix="%" duration={2000} delay={0.5} />
+                <CountUp end={225} suffix="+" duration={2000} delay={0.5} />
               </span>
-              <span className="trust-label">분석 정확도</span>
+              <span className="trust-label">검증된 기업 데이터</span>
             </div>
             <div className="trust-divider"></div>
             <div className="trust-item">
@@ -240,7 +240,7 @@ const MainPage = ({
           mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
           -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
         }
-        
+
         body.dark-theme .bg-grid {
           background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
@@ -404,11 +404,11 @@ const MainPage = ({
           object-fit: cover;
           border-radius: 40px;
           filter: drop-shadow(0 20px 40px rgba(0,0,0,0.15));
-          
+
           /* Natural blending with vignette mask */
           mask-image: radial-gradient(ellipse at center, black 60%, transparent 100%);
           -webkit-mask-image: radial-gradient(ellipse at center, black 60%, transparent 100%);
-          
+
           transform: scale(1.05);
           z-index: 10;
           transition: transform 0.3s ease;
@@ -492,14 +492,14 @@ const MainPage = ({
           white-space: nowrap;
           animation: ticker 60s linear infinite;
         }
-        
+
         .ticker-item-group {
           display: flex;
           align-items: center;
           gap: 4rem;
           padding-right: 4rem;
         }
-        
+
         .ticker span {
           color: var(--text-muted);
           font-size: 1.1rem;
@@ -507,7 +507,7 @@ const MainPage = ({
           letter-spacing: 0.05em;
           transition: color 0.3s ease;
         }
-        
+
         .ticker .separator {
           color: var(--primary);
           font-size: 0.8rem;
@@ -527,7 +527,7 @@ const MainPage = ({
           0% { transform: translate(0, 0) rotate(0deg); }
           100% { transform: translate(5%, 5%) rotate(5deg); }
         }
-        
+
         .animate-fade-in-up {
           opacity: 0;
           transform: translateY(20px);
