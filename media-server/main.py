@@ -39,8 +39,9 @@ relay = MediaRelay()
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 
-# 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
+# 3. WebSocket 및 PeerConnection 연결 관리
 active_websockets: Dict[str, WebSocket] = {}
+active_pcs: Dict[str, RTCPeerConnection] = {}
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -153,32 +154,31 @@ async def start_remote_stt(track, session_id):
     """
     logger.info(f"[{session_id}] Remote STT Task Loop Started")
     
-    audio_buffer = []
-    # 2초 분량 모아서 전송 (빈번한 Task 생성 방지)
-    # 16kHz, 16bit(2bytes), Mono -> 2초 = 16000 * 2 * 2 = 64000 bytes
+    # 2초 분량으로 변경하여 Whisper 인식률 향상 (16kHz, 16bit, Mono -> 16000 * 2 * 2 = 64000 bytes)
     BUFFER_SIZE = 64000 
     
+    # 리샘플러를 루프 밖에서 한 번만 초기화
+    resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+    
     try:
+        frame_count = 0
         while True:
             frame = await track.recv()
+            frame_count += 1
             
-            # 1. 리샘플링 (WebRTC 48k -> Whisper 16k)
-            resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+            # 리샘플링
             resampled_frames = resampler.resample(frame)
-            
             for f in resampled_frames:
-                # av.AudioFrame.to_ndarray() -> numpy array
-                # tobytes()로 raw bytes 추출
-                data = f.to_ndarray().tobytes()
-                audio_buffer.append(data)
+                audio_buffer.append(f.to_ndarray().tobytes())
                 
-            # 2. 버퍼 크기 확인
             current_size = sum(len(b) for b in audio_buffer)
-            
+            if frame_count % 100 == 0:
+                logger.info(f"[{session_id}] 🔊 Audio streaming... Received {frame_count} frames. Buffer: {current_size} bytes")
+
             if current_size >= BUFFER_SIZE:
-                # 청크 병합
+                logger.info(f"[{session_id}] 🎤 Sending 2s audio chunk to STT...")
                 full_audio = b"".join(audio_buffer)
-                audio_buffer = [] # 초기화
+                audio_buffer = [] 
                 
                 # Base64 인코딩
                 b64_audio = base64.b64encode(full_audio).decode('utf-8')
@@ -273,7 +273,16 @@ async def offer(request: Request):
             iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
         )
     )
+    active_pcs[session_id] = pc
     logger.info(f"[{session_id}] WebRTC 연결 시도")
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        logger.info(f"[{session_id}] Connection state is {pc.connectionState}")
+        if pc.connectionState == "failed" or pc.connectionState == "closed":
+            if session_id in active_pcs:
+                del active_pcs[session_id]
+            logger.info(f"[{session_id}] PC cleaned up")
 
     @pc.on("track")
     def on_track(track):
@@ -283,9 +292,9 @@ async def offer(request: Request):
             pc.addTrack(VideoAnalysisTrack(relay.subscribe(track), session_id))
             logger.info(f"[{session_id}] Video analysis track added")
         elif track.kind == "audio":
-            # [변경] AI Worker로 위임 (Remote STT)
+            # [변경] 직접 트랙에서 수신 (데이터 흐름 직접 확인)
             asyncio.ensure_future(start_remote_stt(track, session_id))
-            logger.info(f"[{session_id}] Audio track processing started (Remote STT)")
+            logger.info(f"[{session_id}] Audio track processing started (Direct STT)")
         else:
             logger.warning(f"[{session_id}] Unknown track type: {track.kind}")
 

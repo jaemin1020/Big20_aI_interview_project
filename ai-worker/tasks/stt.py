@@ -17,7 +17,6 @@ MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 def load_stt_model():
     """
     Faster-Whisper 모델을 로드합니다. (싱글톤 패턴)
-    Compute Type: int8 (CPU 성능 최적화)
     """
     global stt_model
     
@@ -25,13 +24,20 @@ def load_stt_model():
         return
 
     try:
-        device = "cpu"
-        # CPU에서 int8 양자화 사용 시 속도 대폭 향상
-        compute_type = "int8" 
+        # GPU 사용 가능 여부 확인
+        import torch
+        if torch.cuda.is_available():
+            device = "cuda"
+            compute_type = "float16" # GPU에서는 float16이 가장 빠름
+            logger.info("📡 [STT_LOAD] Using CUDA for Faster-Whisper")
+        else:
+            device = "cpu"
+            compute_type = "int8" # CPU에서는 int8 양자화가 효율적
+            logger.info("📡 [STT_LOAD] Using CPU for Faster-Whisper")
         
         logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device} (compute_type={compute_type})...")
         
-        # 모델 로드 (최초 실행 시 다운로드됨)
+        # 모델 로드
         stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
         
         logger.info("✅ Faster-Whisper loaded successfully.")
@@ -68,29 +74,36 @@ def recognize_audio_task(audio_b64: str):
         except Exception as e:
             return {"status": "error", "message": f"Base64 decode failed: {e}"}
         
-        # 임시 파일 저장 (faster-whisper는 파일 경로 입력 권장)
-        # suffix는 webm으로 가정하나, ffmpeg가 알아서 처리함
+        # 1. raw PCM 확인 (media-server에서 보낸 2초 chunks인 경우)
+        # 16000Hz * 1ch * 2bytes(int16) * 2sec = 64000 bytes
+        import numpy as np
+        if len(audio_bytes) == 64000:
+            try:
+                # np.int16 -> np.float32 (Whisper 권장 포맷)
+                audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                segments, info = stt_model.transcribe(audio_np, beam_size=5, language="ko")
+                full_text = "".join([s.text for s in segments]).strip()
+                if full_text:
+                    logger.info(f"STT Success (Raw): {len(full_text)} chars.")
+                    return {"status": "success", "text": full_text}
+            except Exception as e:
+                logger.warning(f"Raw PCM processing failed, falling back to file: {e}")
+
+        # 2. 파일 기반 처리 (기존 로직 - backend-core 등에서 사용)
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             temp_path = tmp.name
         
-        # Inference
-        # segments는 generator이므로 순회해야 실제 추론이 수행됨
         segments, info = stt_model.transcribe(
             temp_path, 
             beam_size=5, 
             language="ko", 
-            vad_filter=True, # 음성 구간 감지 활성화 (무음 제거)
+            vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500)
         )
         
-        full_text = ""
-        for segment in segments:
-            full_text += segment.text
-        
-        full_text = full_text.strip()
-        logger.info(f"STT Success: {len(full_text)} chars. Preview: {full_text[:50]}")
-        
+        full_text = "".join([s.text for s in segments]).strip()
+        logger.info(f"STT Success (File): {len(full_text)} chars.")
         return {"status": "success", "text": full_text}
         
     except Exception as e:

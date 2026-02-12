@@ -78,9 +78,9 @@ const InterviewPage = ({
       if (isTimeOverRef.current) return;
 
       if (!isRecording) {
-        console.log("Time over, moving to next question.");
-        isTimeOverRef.current = true; // 처리 완료 플래그 설정
-        nextQuestion();
+        console.log("Time over. Please click Next to continue.");
+        // isTimeOverRef.current = true;
+        // nextQuestion();
       }
       return;
     }

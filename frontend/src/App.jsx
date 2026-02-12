@@ -424,7 +424,7 @@ function App() {
   };
 
   const nextQuestion = async () => {
-    console.log('[nextQuestion] Start - Current Index:', currentIdx);
+    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
     if (!interview || !questions || !questions[currentIdx]) {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
