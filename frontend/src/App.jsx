@@ -519,7 +519,7 @@ function App() {
       )}
 
       {/* Theme Toggle Button */}
-      <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
           style={{
