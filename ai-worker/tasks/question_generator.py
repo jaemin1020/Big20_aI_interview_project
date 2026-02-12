@@ -101,14 +101,34 @@ def generate_next_question_task(interview_id: int):
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
         # 마지막 AI 발화가 너무 최근(10초 이내)이면 중복 생성 요청으로 간주
-        stmt_check = select(Transcript).where(
-            Transcript.interview_id == interview_id
-        ).order_by(Transcript.id.desc())
-        last_transcript = session.exec(stmt_check).first()
+        # 🚨 [Race Condition Fix] Retry waiting for User transcript
+        # 백엔드에서 User Transcript가 커밋되었으나, 워커에서 아직 보이지 않는 경우 대비 (Replication Lag or Transaction Isolation)
+        last_transcript = None
+        for attempt in range(5): # Max 2.5 seconds delay
+            stmt_check = select(Transcript).where(
+                Transcript.interview_id == interview_id
+            ).order_by(Transcript.id.desc())
+            last_transcript = session.exec(stmt_check).first()
+            
+            if not last_transcript:
+                break
+                
+            if last_transcript.speaker == Speaker.USER:
+                logger.info(f"✅ Found User Answer (ID: {last_transcript.id}). Proceeding to generate next question.")
+                break
+            
+            if last_transcript.speaker == Speaker.AI:
+                 logger.warning(f"⏳ Attempt {attempt+1}/5: Last speaker is AI (ID: {last_transcript.id}). Waiting for User answer to appear...")
+                 time.sleep(0.5)
+                 session.expire_all() # Clear session cache to get fresh data
         
+        if last_transcript:
+             logger.info(f"🧐 [Check] Final Last Transcript ID: {last_transcript.id} | Speaker: {last_transcript.speaker} | Time: {last_transcript.timestamp} | Text: {last_transcript.text[:20]}...")
+        
+        # Retry 후에도 여전히 AI가 마지막이고, 시간이 짧다면 스킵
         if last_transcript and last_transcript.speaker == Speaker.AI:
             diff = (datetime.utcnow() - last_transcript.timestamp).total_seconds()
-            if diff < 10: # AI가 방금 말했는데 또 말하라고 하면 스킵
+            if diff < 5: 
                 logger.warning(f"⚠️ [SKIP] AI just spoke {diff:.1f}s ago. Waiting for user response.")
                 return {"status": "skipped", "reason": "ai_just_spoke"}
 
@@ -224,21 +244,8 @@ def generate_next_question_task(interview_id: int):
             # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
             
-<<<<<<< HEAD
-            # AI 질문 생성 실행
-            content = exaone.generate_human_like_question(
-                name=candidate_name,
-<<<<<<< HEAD
-=======
-                position=target_role,
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-                stage=stage_name,
-                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                context_list=contexts
-            )
-=======
+            # LCEL 체인 정의 (Prompt | LLM | Parser)
             chain = prompt | llm | output_parser
->>>>>>> 린_phase4
             
             logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
             content = chain.invoke({

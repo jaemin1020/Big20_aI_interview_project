@@ -419,15 +419,47 @@ function App() {
 
   const nextQuestion = async () => {
     console.log('[nextQuestion] Start - Current Index:', currentIdx);
+
+    // [Safety Check] 데이터 비동기화 감지 및 복구
+    let safeQuestions = questions;
     if (!interview || !questions || !questions[currentIdx]) {
-      console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
+      console.warn('[nextQuestion] Local data missing or index out of bounds. Attempting to re-sync with server...');
+      try {
+        const freshQuestions = await getInterviewQuestions(interview.id);
+        if (freshQuestions && freshQuestions.length > questions.length) {
+          console.log('[nextQuestion] Server has more questions! Syncing...');
+          setQuestions(freshQuestions);
+          safeQuestions = freshQuestions;
+          // 만약 인덱스가 여전히 범위를 벗어난다면, 마지막 질문으로 조정하지 않고
+          // "새 질문"이 로드된 것이므로 그대로 진행 가능할 수 있음.
+          // 하지만 safeQuestions[currentIdx]가 여전히 없으면 문제임.
+        } else {
+          // 서버에도 없다면? 인덱스가 잘못된 것임.
+          console.error('[nextQuestion] Server sync failed to find missing question.');
+          // alert("질문 데이터에 오류가 있습니다. 이전 질문으로 돌아갑니다.");
+          // setCurrentIdx(questions.length - 1); 
+          // return;
+        }
+      } catch (e) {
+        console.error('[nextQuestion] Sync failed:', e);
+      }
+    }
+
+    if (!interview || !safeQuestions[currentIdx]) {
+      console.error('[nextQuestion] Critical: Data still missing after sync:', {
+        interviewId: interview?.id,
+        qLen: safeQuestions?.length,
+        currentIdx
+      });
+      alert("다음 질문을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       return;
     }
+
     const answerText = transcript.trim() || "답변 내용 없음";
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
-      console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
-      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
+      console.log('[nextQuestion] Saving transcript for question ID:', safeQuestions[currentIdx].id);
+      await createTranscript(interview.id, 'User', answerText, safeQuestions[currentIdx].id);
       console.log('[nextQuestion] Transcript saved successfully');
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인

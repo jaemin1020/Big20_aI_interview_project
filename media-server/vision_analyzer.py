@@ -111,11 +111,15 @@ class VisionAnalyzer:
             if smile_score > 0.4: emotion_label = "happy"
             if brow_down_score > 0.4: emotion_label = "anxious" # 긴장/찌푸림
             
+            # [Explicit Log for User Verification]
+            if int(timestamp_ms) % 1000 < 100: # Log roughly once per second
+                logger.info(f"📊 [Vision Score] Emotion: {emotion_label} | Smile: {smile_score:.2f} | Anxiety: {brow_down_score:.2f} | Gaze: {gaze_status}")
+            
             return {
                 "status": "detected",
-                "gaze": gaze_status,       # center, left, right...
-                "head": head_status,       # stable, unstable
-                "emotion": emotion_label,  # neutral, happy, anxious
+                "gaze": gaze_status,
+                "head": head_status,
+                "emotion": emotion_label,
                 "scores": {
                     "smile": round(smile_score, 3),
                     "anxiety": round(brow_down_score, 3),

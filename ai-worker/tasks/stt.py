@@ -14,7 +14,7 @@ stt_model = None
 # CPU 환경을 위해 기본값은 'medium' 또는 'small' 권장.
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 
-def load_stt_pipeline():
+def load_stt_model():
     """
     Faster-Whisper 모델을 로드합니다. (싱글톤 패턴)
     Compute Type: int8 (CPU 성능 최적화)
@@ -89,6 +89,25 @@ def recognize_audio_task(audio_b64: str):
             output_path
         ], check=True)
         
+        # [Diagnosis] Calculate Audio RMS (Volume) to check for silence
+        import numpy as np
+        
+        # Read WAV header (44 bytes) to skip it? stt_model handles it, but for RMS we need raw samples
+        # pcm_s16le = 2 bytes per sample.
+        with open(output_path, "rb") as f:
+            raw_data = f.read()
+            # Skip 44 bytes header (WAV) roughly
+            pcm_data = np.frombuffer(raw_data[44:], dtype=np.int16)
+            
+        if len(pcm_data) > 0:
+            rms = np.sqrt(np.mean(pcm_data**2))
+            logger.info(f"🔊 Audio RMS (Volume Level): {rms:.2f} (Max: {np.max(np.abs(pcm_data))})")
+            
+            if rms < 100: # Very quiet
+                logger.warning("⚠️ Audio is extremely quiet! (Near Silence). Check microphone.")
+        else:
+            logger.error("❌ Converted audio file is empty.")
+
         # Inference using the CONVERTED file
         logger.info(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})")
         
@@ -96,8 +115,8 @@ def recognize_audio_task(audio_b64: str):
             output_path, 
             beam_size=1, 
             language="ko",
-            vad_filter=False, # [DEBUG] VAD temporarily disabled to check raw audio
-            # vad_parameters=dict(min_silence_duration_ms=500)
+            vad_filter=True, # [Restore] Re-enable VAD to prevent Hallucination
+            vad_parameters=dict(min_silence_duration_ms=500)
         )
         
         full_text = ""

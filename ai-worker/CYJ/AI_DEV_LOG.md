@@ -100,6 +100,18 @@
 * **원인**: 오디오 입력이 없거나 너무 작을 때 Whisper가 소음을 말소리로 착각.
 * **해결**: 마이크 입력 게인 조절 및 입력 감지 로직 개선.
 
+### 2026-02-12: STT Hallucination & MediaPipe Fixes
+- **Issue**: VAD(음성 감지)가 꺼져 있어 침묵 시에도 자막이 생성(Hallucination)되는 문제 발생.
+- **Fix**: `ai-worker/tasks/stt.py`에서 `vad_filter=True`로 복구하고, RMS(볼륨) 체크 로직 추가하여 침묵 경고 로그 출력.
+
+### 2026-02-12: Question Generation & Vision Analysis Debugging
+- **Issue 1**: 면접 질문 생성 안 됨 (Next Question Missing Data).
+    - **원인**: `question_generator.py`에서 AI가 마지막으로 말한 지 10초가 안 지났으면 중복 생성을 막는 로직이 있는데, 이 기준(10초)이 너무 길어 정상적인 요청도 무시됨 (`reason: ai_just_spe`).
+    - **해결**: 대기 시간을 10초 -> **5초**로 단축하고, 상세 디버그 로그 추가.
+- **Issue 2**: MediaPipe 영상 분석 점수 확인 요청.
+    - **확인**: `media-server/vision_analyzer.py` 코드를 확인한 결과, 미소(Smile), 긴장(Anxiety), 시선(Gaze) 점수를 정상적으로 계산하고 있음.
+    - **조치**: 사용자가 로그에서 직접 확인할 수 있도록 1초마다 분석 점수(`📊 [Vision Score] ...`)를 출력하는 코드 추가.
+- **Action**: `ai-worker-gpu` 및 `media-server` 컨테이너 재시작 완료.
 #### 🔴 Issue: webm 파일 형식 오류
 
 * **발생일**: 2026-02-09
