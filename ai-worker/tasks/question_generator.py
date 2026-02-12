@@ -99,17 +99,19 @@ def generate_next_question_task(interview_id: int):
             return {"status": "error", "message": "Interview not found"}
             
         # 🚨 [Race Condition 방지] 중복 생성 체크
-        # 마지막 AI 발화가 너무 최근(5초 이내)이면 중복 트리거로 간주하고 무시
+        # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
+        # 마지막 AI 발화가 너무 최근(10초 이내)이면 중복 생성 요청으로 간주
         stmt_check = select(Transcript).where(
-            Transcript.interview_id == interview_id,
-            Transcript.speaker == Speaker.AI
+            Transcript.interview_id == interview_id
         ).order_by(Transcript.id.desc())
-        last_any_ai = session.exec(stmt_check).first()
-        if last_any_ai and last_any_ai.timestamp:
-            diff = (datetime.utcnow() - last_any_ai.timestamp).total_seconds()
-            if diff < 5:
-                logger.warning(f"⚠️ [SKIP] Recent AI transcript found ({diff:.1f}s ago). Possible duplicate trigger.")
-                return {"status": "skipped", "reason": "too_recent"}
+        last_transcript = session.exec(stmt_check).first()
+        
+        if last_transcript and last_transcript.speaker == Speaker.AI:
+            diff = (datetime.utcnow() - last_transcript.timestamp).total_seconds()
+            if diff < 10: # AI가 방금 말했는데 또 말하라고 하면 스킵
+                logger.warning(f"⚠️ [SKIP] AI just spoke {diff:.1f}s ago. Waiting for user response.")
+                return {"status": "skipped", "reason": "ai_just_spoke"}
+
 
         # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
         stmt = select(Transcript).where(

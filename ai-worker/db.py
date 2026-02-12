@@ -348,7 +348,7 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
 
 def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
-    from models import QuestionDifficulty, Transcript, Speaker
+
     with Session(engine) as session:
         # 1. Question 테이블 저장
         question = Question(
