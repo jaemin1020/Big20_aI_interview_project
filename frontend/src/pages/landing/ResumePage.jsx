@@ -13,14 +13,22 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
 
   const handleFile = (selectedFile) => {
-    if (selectedFile && selectedFile.type === 'application/pdf') {
+    if (!selectedFile) return;
+
+    // 10MB Check
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      alert("10MB 이하의 파일만 업로드 가능합니다.");
+      return;
+    }
+
+    if (selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(selectedFile));
       if (onFileSelect) {
         onFileSelect(selectedFile);
       }
-    } else if (selectedFile) {
+    } else {
       alert("PDF 형식의 파일만 업로드 가능합니다.");
     }
   };
@@ -139,6 +147,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                   value={uploadResult?.structured_data?.header?.name || uploadResult?.name || '정보 없음'}
                   readOnly
                   className="confirm-input readonly"
+                  style={{ color: 'var(--primary)', fontWeight: '600' }}
                 />
               </dd>
 
@@ -149,6 +158,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                   value={uploadResult?.structured_data?.header?.target_company || uploadResult?.target_company || '정보 없음'}
                   readOnly
                   className="confirm-input readonly"
+                  style={{ color: 'var(--primary)', fontWeight: '600' }}
                 />
               </dd>
 
