@@ -17,7 +17,7 @@ from .parse_resume import parse_resume_final
 
 logger.info("✅ Task Module 'tasks.resume_pipeline' is being loaded.")
 
-@shared_task(bind=True, name="tasks.resume_pipeline.process_resume_pipeline", queue='gpu_queue')
+@shared_task(bind=True, name="parse_resume_pdf", queue='gpu_queue')
 def parse_resume_pdf(self, resume_id: int, file_path: str):
     """
     이력서 PDF 파일을 파싱하여 구조화된 데이터를 DB에 저장하고, 임베딩 생성을 요청합니다.
