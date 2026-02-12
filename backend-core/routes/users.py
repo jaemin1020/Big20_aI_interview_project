@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends
 <<<<<<< HEAD
+<<<<<<< HEAD
 from db_models import User
 =======
 from models import User
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+from db_models import User
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from utils.auth_utils import get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])

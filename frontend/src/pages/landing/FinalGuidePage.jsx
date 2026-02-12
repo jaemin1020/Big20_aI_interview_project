@@ -4,6 +4,7 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
 <<<<<<< HEAD
+<<<<<<< HEAD
   return (
     <div className="final-guide animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
       <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
@@ -56,6 +57,8 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
           </PremiumButton>
           <PremiumButton variant="secondary" onClick={onPrev} disabled={isLoading}>이전 단계</PremiumButton>
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
   const isAudioOk = sessionStorage.getItem('env_audio_ok') === 'true';
   const isVideoOk = sessionStorage.getItem('env_video_ok') === 'true';
   const allPassed = isAudioOk && isVideoOk;
@@ -156,7 +159,10 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
               </div>
             </div>
           </div>
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         </div>
 
         {/* Buttons */}

@@ -5,18 +5,27 @@ import gc
 import logging
 import torch
 <<<<<<< HEAD
+<<<<<<< HEAD
 from datetime import datetime
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+from datetime import datetime
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from celery import shared_task
 from langchain_community.llms import LlamaCpp
 from langchain_core.callbacks import CallbackManager
 from langchain_core.prompts import PromptTemplate
 <<<<<<< HEAD
+<<<<<<< HEAD
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
 if "/app" not in sys.path:
@@ -31,13 +40,19 @@ local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7
 docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 if os.path.exists(local_path):
     model_path = local_path
 else:
     model_path = docker_path
+<<<<<<< HEAD
 =======
 model_path = local_path if os.path.exists(local_path) else docker_path
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # 🚨 DB 조회를 위해 추가
 try:
@@ -85,6 +100,7 @@ PROMPT_TEMPLATE = """[|system|]
 # -----------------------------------------------------------
 # -----------------------------------------------------------
 # [3. 질문 생성 핵심 함수]
+<<<<<<< HEAD
 <<<<<<< HEAD
 # [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
 =======
@@ -170,6 +186,9 @@ def generate_questions_task(interview_id, count=5, resume_id=None):
         
     return exaone.generate_questions(target_role, context=resume_context, count=count)
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+# [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
@@ -193,6 +212,9 @@ def generate_next_question_task(interview_id: int):
             return {"status": "error", "message": "Interview not found"}
             
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
         # 마지막 AI 발화가 너무 최근(10초 이내)이면 중복 생성 요청으로 간주
@@ -208,8 +230,11 @@ def generate_next_question_task(interview_id: int):
                 return {"status": "skipped", "reason": "ai_just_spoke"}
 
 
+<<<<<<< HEAD
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
         stmt = select(Transcript).where(
             Transcript.interview_id == interview_id,
@@ -273,6 +298,9 @@ def generate_next_question_task(interview_id: int):
             return {"status": "success", "stage": stage_name}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # [LangChain LCEL] AI 생성 파이프라인
         try:
             # 1. 모델 및 파서 준비
@@ -322,7 +350,21 @@ def generate_next_question_task(interview_id: int):
             # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
             
+<<<<<<< HEAD
+            # AI 질문 생성 실행
+            content = exaone.generate_human_like_question(
+                name=candidate_name,
+<<<<<<< HEAD
+=======
+                position=target_role,
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+                stage=stage_name,
+                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
+                context_list=contexts
+            )
+=======
             chain = prompt | llm | output_parser
+>>>>>>> 린_phase4
             
             logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
             content = chain.invoke({
@@ -342,6 +384,7 @@ def generate_next_question_task(interview_id: int):
             db_category = category_map.get(category_raw, "technical")
             
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
+<<<<<<< HEAD
 =======
         # AI 생성 루틴
         try:
@@ -411,6 +454,8 @@ def generate_next_question_task(interview_id: int):
             db_category = category_map.get(category_raw, "technical")
             
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
             return {"status": "success", "stage": stage_name, "question": content}
         except Exception as e:

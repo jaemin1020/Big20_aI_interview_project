@@ -8,10 +8,14 @@ import os
 
 from database import get_session
 <<<<<<< HEAD
+<<<<<<< HEAD
 from db_models import (
 =======
 from models import (
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+from db_models import (
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     User, Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
     Transcript, TranscriptCreate, Speaker,
@@ -52,10 +56,14 @@ async def create_interview(
     
     # 이력서에서 지원 직무(target_role) 가져오기
 <<<<<<< HEAD
+<<<<<<< HEAD
     from db_models import Resume
 =======
     from models import Resume
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+    from db_models import Resume
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     resume = db.get(Resume, interview_data.resume_id)
     target_role = "일반"
     if resume and resume.structured_data:
@@ -80,6 +88,9 @@ async def create_interview(
     logger.info(f"Interview record created: ID={interview_id} (Target Role: {target_role})")
     
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     # 2. 템플릿 질문 즉시 생성 (사용자 대기 시간 0초)
     try:
         from utils.interview_helpers import get_candidate_info, generate_template_question
@@ -103,6 +114,7 @@ async def create_interview(
                     "weight": {"content": 0.6, "communication": 0.4}
                 },
                 position=target_role
+<<<<<<< HEAD
 =======
     try:
         logger.info("Requesting question generation from AI-Worker...")
@@ -151,12 +163,17 @@ async def create_interview(
                 },
                 position=interview_data.position
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             )
             db.add(question)
             db.commit()
             db.refresh(question)
             
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             # Transcript 저장 (실시간 대화 내역)
             transcript = Transcript(
                 interview_id=new_interview.id,
@@ -181,6 +198,7 @@ async def create_interview(
         # 실패 시 인터뷰 삭제
         db.execute(text("DELETE FROM interviews WHERE id = :i_id"), {"i_id": interview_id})
         db.commit()
+<<<<<<< HEAD
 =======
             # Transcript 저장 (Raw SQL로 관계 꼬입 원칙적 차단)
             db.execute(
@@ -217,6 +235,8 @@ async def create_interview(
         except:
             pass
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         raise HTTPException(status_code=500, detail=f"면접 생성 실패: {str(e)}")
 
     # 응답 보내기 전 마지막 상태 확인
@@ -300,11 +320,16 @@ async def get_interview_questions(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
 <<<<<<< HEAD
+<<<<<<< HEAD
     ).order_by(Transcript.id)
 
 =======
     ).order_by(Transcript.timestamp)
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+    ).order_by(Transcript.id)
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     
     results = db.exec(stmt).all()
     
@@ -481,6 +506,7 @@ async def create_realtime_interview(
         
         # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
 <<<<<<< HEAD
+<<<<<<< HEAD
         from config.interview_scenario import get_initial_stages
         from db_models import Question, QuestionCategory, QuestionDifficulty
 =======
@@ -492,6 +518,10 @@ async def create_realtime_interview(
         from interview_scenario import get_initial_stages
         from models import Question, QuestionCategory, QuestionDifficulty
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+        from config.interview_scenario import get_initial_stages
+        from db_models import Question, QuestionCategory, QuestionDifficulty
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         
         initial_stages = get_initial_stages()
         

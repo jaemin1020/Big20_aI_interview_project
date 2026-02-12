@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import PremiumButton from '../../components/ui/PremiumButton';
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 const CountUp = ({ end, duration = 2000, suffix = '', decimals = 0, delay = 0 }) => {
   const [count, setCount] = useState(0);
 
@@ -39,18 +42,26 @@ const CountUp = ({ end, duration = 2000, suffix = '', decimals = 0, delay = 0 })
   return <>{count.toFixed(decimals)}{suffix}</>;
 };
 
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 const MainPage = ({
   onStartInterview,
   onLogin,
   onRegister,
   user,
 <<<<<<< HEAD
+<<<<<<< HEAD
   onLogout
 =======
   onLogout,
   onAbout
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+  onLogout,
+  onAbout
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 }) => {
   const [scrollY, setScrollY] = useState(0);
 
@@ -62,10 +73,13 @@ const MainPage = ({
 
   return (
 <<<<<<< HEAD
+<<<<<<< HEAD
     <div className="main-container animate-fade-in" style={{
       flex: 1,
       width: '100%',
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     <div className="main-container" style={{
       position: 'absolute',
       top: 0,
@@ -74,12 +88,16 @@ const MainPage = ({
       height: '100vh',
       paddingTop: '72px',
       boxSizing: 'border-box',
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
       zIndex: 0,
     }}>
+<<<<<<< HEAD
 <<<<<<< HEAD
       {/* Auth Buttons removed - handled by Header */}
 
@@ -146,6 +164,8 @@ const MainPage = ({
         zIndex: -1
       }}></div>
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       {/* Abstract Background Shapes */}
       <div className="bg-shape shape-1" />
       <div className="bg-shape shape-2" />
@@ -667,7 +687,10 @@ const MainPage = ({
           color: #fff;
         }
       `}</style>
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     </div>
   );
 };

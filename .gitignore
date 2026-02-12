@@ -225,6 +225,9 @@ docs/QUALITY_FINAL_SUMMARY.md
 
 .agent/
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 lsj/
 
 C:\big20\Big20_aI_interview_project\lyn
@@ -232,7 +235,11 @@ C:\big20\Big20_aI_interview_project\lyn
 C:\big20\Big20_aI_interview_project\ai-worker\models
 
 *.gguf
+<<<<<<< HEAD
 ai-worker/ai_models/
 =======
 lsj/
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+ai-worker/ai_models/
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea

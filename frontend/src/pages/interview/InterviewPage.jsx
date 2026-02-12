@@ -22,6 +22,7 @@ const InterviewPage = ({
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+<<<<<<< HEAD
     
 =======
   // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
@@ -39,6 +40,9 @@ const InterviewPage = ({
 
   React.useEffect(() => {
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     // TTS 재생 로직
     const playTTS = () => {
       // 1. 서버 제공 오디오 URL이 있는 경우
@@ -51,10 +55,14 @@ const InterviewPage = ({
         audioRef.current = audio;
         audio.play().catch(e => console.error("Audio play failed:", e));
 <<<<<<< HEAD
+<<<<<<< HEAD
       } 
 =======
       }
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+      }
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
         if (window.speechSynthesis) {
@@ -62,10 +70,14 @@ const InterviewPage = ({
           const utterance = new SpeechSynthesisUtterance(question);
           utterance.lang = 'ko-KR';
 <<<<<<< HEAD
+<<<<<<< HEAD
           utterance.rate = 1.0; 
 =======
           utterance.rate = 1.0;
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+          utterance.rate = 1.0;
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
           utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }

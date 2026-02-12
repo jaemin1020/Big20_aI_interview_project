@@ -18,6 +18,9 @@
 
 ### 1. `backend-core/` (메인 API 서버)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 사용자의 요청을 처리하고 데이터베이스와 상호작용하며, 필요한 경우 AI Worker에 작업을 요청합니다.
 
@@ -27,6 +30,7 @@
   - `resumes.py`: 이력서 업로드 및 관리
   - `companies.py`: 채용 공고 및 기업 정보 관리
   - `stt.py` & `transcripts.py`: 면접 답변의 텍스트 변환 및 기록 관리
+<<<<<<< HEAD
 =======
 사용자의 요청을 처리하고 데이터베이스와 상호작용하며, 필요한 경우 AI Worker에 작업을 요청합니다.
 
@@ -37,12 +41,17 @@
     - `companies.py`: 채용 공고 및 기업 정보 관리
     - `stt.py` & `transcripts.py`: 면접 답변의 텍스트 변환 및 기록 관리
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 - `models.py`: SQLModel을 사용한 데이터베이스 스키마 정의 (User, Interview, Question 등)
 - `database.py`: SQLAlchemy 기반 DB 연결 및 세션 관리
 - `data/`: 초기 데이터 및 전처리된 데이터 (JSON 형식) 저장
 
 ### 2. `ai-worker/` (AI 프로세싱 엔진)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 비동기적으로 무거운 AI 작업을 수행합니다. 주로 `tasks/` 폴더 내에 핵심 로직이 위치합니다.
 
@@ -60,6 +69,7 @@
 
 ### 3. `frontend/` (사용자 인터페이스)
 
+<<<<<<< HEAD
 =======
 비동기적으로 무거운 AI 작업을 수행합니다. 주로 `tasks/` 폴더 내에 핵심 로직이 위치합니다.
 
@@ -77,6 +87,8 @@
 
 ### 3. `frontend/` (사용자 인터페이스)
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 React를 기반으로 한 웹 서비스입니다.
 
 - `src/pages/`: 주요 화면 구성 (홈, 면접 대기실, 면접 진행, 결과 리포트 등)
@@ -86,18 +98,26 @@ React를 기반으로 한 웹 서비스입니다.
 
 ### 4. `media-server/` (실시간 미디어 서버)
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 면접 중 발생하는 실시간 스트리밍 데이터를 처리합니다.
 
 - `main.py`: WebRTC 연결 설정 및 실시간 음성/영상 데이터 처리 로직
 
 ### 5. 기타 디렉토리
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 - `docker/`: Dockerfile 및 환경 구성 파일
 - `infra/`: 배포 자동화 및 클라우드 인프라 관련 스크립트
 - `test/`: 각종 통합 및 단위 테스트 코드

@@ -1,5 +1,8 @@
 """
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 EXAONE-3.5-7.8B-Instruct 순수 LLM 엔진 모듈 (GGUF 버전)
 프롬프트나 비즈니스 로직 없이, 모델 로딩 및 텍스트 생성 기능만 제공합니다.
 """
@@ -8,6 +11,7 @@ import logging
 # from llama_cpp import Llama (Moved inside ExaoneLLM.__init__)
 
 logger = logging.getLogger("EXAONE-ENGINE")
+<<<<<<< HEAD
 =======
 EXAONE-3.5-7.8B-Instruct 통합 LLM 모듈 (GGUF 버전)
 질문 생성 및 답변 평가를 하나의 모델로 처리
@@ -22,11 +26,16 @@ from llama_cpp import Llama
 
 logger = logging.getLogger("EXAONE-LLM")
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # 모델 경로 (컨테이너 내부 경로)
 MODEL_PATH = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from typing import Any, List, Optional, ClassVar
 from langchain_core.language_models.llms import LLM
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
@@ -118,6 +127,7 @@ class ExaoneLLM(LLM):
 def get_exaone_llm() -> ExaoneLLM:
     """엔진 싱글톤 인스턴스 반환"""
     return ExaoneLLM()
+<<<<<<< HEAD
 =======
 class ExaoneLLM:
     """
@@ -444,3 +454,5 @@ def get_exaone_llm() -> ExaoneLLM:
 # [최적화] 모듈 임포트 시 즉시 로딩(Warmup) 제거. 
 # 이제 각 워커가 실제 태스크를 수행할 때 필요에 따라 로드함.
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea

@@ -60,6 +60,9 @@ def get_embedder():
 # [핵심] 검색 함수 (하이브리드 검색 적용)
 # -----------------------------------------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from langchain_community.vectorstores import PGVector
 
 # -----------------------------------------------------------
@@ -72,6 +75,7 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
     print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_category})")
     
     # 1. 임베딩 모델 및 연결 설정
+<<<<<<< HEAD
 =======
 def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
     """
@@ -85,12 +89,17 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
     
     # 임베딩 모델 가져오기 (지연 로딩)
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     embedder = get_embedder()
     if not embedder:
         print("❌ 임베딩 모델을 사용할 수 없습니다.")
         return []
     
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
     
     try:
@@ -162,6 +171,7 @@ def get_retriever(resume_id=1, top_k=3, filter_category=None):
             "filter": search_filter
         }
     )
+<<<<<<< HEAD
 =======
     # 1. 검색어(Query)를 벡터로 변환
     try:
@@ -220,6 +230,8 @@ def get_retriever(resume_id=1, top_k=3, filter_category=None):
         
     return results
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # -----------------------------------------------------------
 # 테스트 코드

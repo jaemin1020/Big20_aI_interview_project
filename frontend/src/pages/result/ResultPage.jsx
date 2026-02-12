@@ -16,6 +16,7 @@ const ResultPage = ({ results, report, interview, onReset }) => {
   const resultRef = useRef(null);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   // 1. 계산: 종합 점수 (Evaluate report or calculate average)
   const averageScore = report?.overall_score || (results && results.length > 0
     ? Math.round(results.reduce((acc, curr) => acc + (curr.evaluation?.score || 0), 0) / results.length)
@@ -30,6 +31,8 @@ const ResultPage = ({ results, report, interview, onReset }) => {
     { subject: '성장 가능성', A: 88, fullMark: 100 }, // 예시
     { subject: '문화 적합성', A: report?.cultural_fit_score || 80, fullMark: 100 },
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
   // Helper to safely get text content
   const getText = (data, defaultText) => data || defaultText;
 
@@ -41,7 +44,10 @@ const ResultPage = ({ results, report, interview, onReset }) => {
     { subject: '의사소통', A: report?.communication_score || 80, fullMark: 100 },
     { subject: '책임감', A: report?.responsibility_score || 95, fullMark: 100 },
     { subject: '성장 의지', A: report?.growth_score || 90, fullMark: 100 },
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
   ];
 
   const handleDownloadPDF = async () => {
@@ -49,6 +55,7 @@ const ResultPage = ({ results, report, interview, onReset }) => {
 
     try {
       const canvas = await html2canvas(resultRef.current, {
+<<<<<<< HEAD
 <<<<<<< HEAD
         scale: 2, // 고화질
         useCORS: true,
@@ -58,6 +65,11 @@ const ResultPage = ({ results, report, interview, onReset }) => {
         useCORS: true,
         backgroundColor: '#111827' // Dark mode background
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#111827' // Dark mode background
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -84,6 +96,7 @@ const ResultPage = ({ results, report, interview, onReset }) => {
       flexDirection: 'column',
       gap: '2rem'
     }}>
+<<<<<<< HEAD
 <<<<<<< HEAD
       {/* 1. 헤더 메시지 */}
       <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
@@ -214,6 +227,8 @@ const ResultPage = ({ results, report, interview, onReset }) => {
         <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem' }}>
           📄 PDF 리포트 저장
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       {/* Header Message */}
       <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
         <h1 className="text-gradient">면접 결과 리포트</h1>
@@ -376,7 +391,10 @@ const ResultPage = ({ results, report, interview, onReset }) => {
         </PremiumButton>
         <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
           📄 리포트 저장 (PDF)
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         </PremiumButton>
       </div>
 
@@ -384,6 +402,7 @@ const ResultPage = ({ results, report, interview, onReset }) => {
   );
 };
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 // Helper Component for Skill Bar
 const SkillBar = ({ label, score, color }) => (
@@ -396,6 +415,8 @@ const SkillBar = ({ label, score, color }) => (
       <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '4px' }}></div>
     </div>
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 // Sub-component for Text Feedback items
 const FeedbackItem = ({ title, content }) => (
   <div style={{
@@ -406,7 +427,10 @@ const FeedbackItem = ({ title, content }) => (
   }}>
     <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.1rem' }}>{title}</h4>
     <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: '1.6', fontSize: '0.95rem' }}>{content}</p>
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
   </div>
 );
 

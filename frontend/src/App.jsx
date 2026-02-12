@@ -29,10 +29,15 @@ import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 import AboutPage from './pages/about/AboutPage';
 
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+import AboutPage from './pages/about/AboutPage';
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 function App() {
   const [step, setStep] = useState('main');
@@ -473,6 +478,7 @@ function App() {
         setIsLoading(false);
       } else {
 <<<<<<< HEAD
+<<<<<<< HEAD
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
@@ -489,6 +495,8 @@ function App() {
             setQuestions(updatedQs);
             setCurrentIdx(updatedQs.length - 1); // 항상 가장 마지막 질문으로 인덱스 이동
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
@@ -499,7 +507,10 @@ function App() {
           if (updatedQs.length > questions.length) {
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             setTranscript('');
             foundNew = true;
             break;
@@ -507,9 +518,12 @@ function App() {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         if (!foundNew) {
           // 더 이상 질문이 없으면 면접 종료
           console.log('[nextQuestion] No more questions found. Finishing interview.');
@@ -550,10 +564,14 @@ function App() {
 
   return (
 <<<<<<< HEAD
+<<<<<<< HEAD
     <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
 =======
     <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+    <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
@@ -642,6 +660,7 @@ function App() {
             user={user}
             onLogout={handleLogout}
 <<<<<<< HEAD
+<<<<<<< HEAD
           />
         )}
 
@@ -654,21 +673,29 @@ function App() {
             handleAuth={handleAuth}
             authError={authError}
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             onAbout={() => setStep('about')}
           />
         )}
 
         {step === 'about' && (
           <AboutPage
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             onBack={() => setStep('main')}
           />
         )}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         {step === 'auth' && (
           <AuthPage
             authMode={authMode}
@@ -683,7 +710,10 @@ function App() {
 
 
 
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         {step === 'landing' && (
           <LandingPage
             startInterview={startInterviewFlow}

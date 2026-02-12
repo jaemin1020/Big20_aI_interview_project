@@ -9,18 +9,25 @@ const LandingPage = ({
   return (
     <div className="landing-container animate-fade-in" style={{
 <<<<<<< HEAD
+<<<<<<< HEAD
       flex: 1,
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       position: 'absolute',
       top: 0,
       left: 0,
       width: '100vw',
       height: '100vh',
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
+<<<<<<< HEAD
 <<<<<<< HEAD
       width: '100%'
     }}>
@@ -31,6 +38,8 @@ const LandingPage = ({
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
             </div>
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       padding: '2rem',
       boxSizing: 'border-box'
     }}>
@@ -50,7 +59,10 @@ const LandingPage = ({
         <div className="header-section">
           <div className="logo-wrapper" style={{ width: '180px', marginBottom: '1.5rem', margin: '0 auto' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
           </div>
           <h1 className="text-gradient" style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '1rem' }}>
             모의면접 시작하기
@@ -60,6 +72,7 @@ const LandingPage = ({
           </p>
         </div>
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         <div style={{
           border: '1px solid var(--glass-border)',
@@ -93,6 +106,8 @@ const LandingPage = ({
         </div>
       </GlassCard>
 =======
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         {/* Info Grid */}
         <div className="info-grid" style={{
           display: 'grid',
@@ -140,7 +155,10 @@ const LandingPage = ({
           면접 시작하기
         </PremiumButton>
       </div>
+<<<<<<< HEAD
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     </div>
   );
 };

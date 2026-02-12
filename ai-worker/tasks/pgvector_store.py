@@ -26,6 +26,9 @@ except ImportError as e:
 # 벡터 데이터 저장 함수
 # -----------------------------------------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from langchain_community.vectorstores import PGVector
 from langchain_core.documents import Document
 
@@ -44,14 +47,20 @@ def store_embeddings(resume_id, embedded_chunks):
     """
     LangChain의 PGVector를 사용하여 벡터 데이터를 저장합니다.
     """
+<<<<<<< HEAD
 =======
 def store_embeddings(resume_id, embedded_chunks):
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     if not embedded_chunks:
         print("❌ 저장할 임베딩 데이터가 없습니다.")
         return
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     print(f"\n[STEP6] DB 저장 시작 (Resume ID: {resume_id}, LangChain PGVector 활용)...")
 
     # 1. 문서화 (Document 객체 생성)
@@ -95,6 +104,7 @@ def store_embeddings(resume_id, embedded_chunks):
 
     except Exception as e:
         print(f"\n❌ LangChain PGVector 저장 실패: {e}")
+<<<<<<< HEAD
 =======
     # 1. 벡터 차원 확인 (예: 768 or 1024)
     # 첫 번째 청크의 벡터 길이를 확인하여 테이블 생성 시 사용
@@ -150,6 +160,8 @@ def store_embeddings(resume_id, embedded_chunks):
             print("💡 힌트: DB에 이미 존재하는 테이블의 벡터 차원과 현재 모델의 차원이 다를 수 있습니다.")
             print("   (해결책: DROP TABLE resume_embeddings; 명령어로 테이블을 지우고 다시 시도하세요.)")
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # -----------------------------------------------------------
 # 메인 실행: 전체 파이프라인 테스트

@@ -26,6 +26,9 @@ import sys
 import os
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 # backend-core 경로 추가 (db_models 임포트를 위함)
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
 if backend_path not in sys.path:
@@ -38,6 +41,7 @@ try:
         Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
     )
 
+<<<<<<< HEAD
 =======
 # ai-worker 폴더 내의 models 디렉토리와의 충돌을 피하기 위해 경로 우선순위 조정
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend-core"))
@@ -50,6 +54,8 @@ try:
         Company, Resume, Interview, Question, Transcript, EvaluationReport, AnswerBank
     )
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 except ImportError as e:
     logger.error(f"❌ Failed to import models from {backend_path}: {e}")
     raise
@@ -367,10 +373,14 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
 def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
     from models import QuestionDifficulty, Transcript, Speaker
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     with Session(engine) as session:
         # 1. Question 테이블 저장
         question = Question(
@@ -383,6 +393,7 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
         )
         session.add(question)
 <<<<<<< HEAD
+<<<<<<< HEAD
         session.flush() # ID 생성을 위해 즉시 플러시
         
         # 2. Transcript 테이블에 AI 질문으로 저장
@@ -392,6 +403,11 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
         
         # 2. Transcript 테이블에 AI 질문으로 저장 (이게 되어야 프론트에서 보임)
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+        session.flush() # ID 생성을 위해 즉시 플러시
+        
+        # 2. Transcript 테이블에 AI 질문으로 저장
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # 현재 면접의 마지막 순서를 파악
         stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
         last_transcript = session.exec(stmt).first()
@@ -407,13 +423,19 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
         )
         session.add(new_transcript)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         session.commit() # 전체 확정
         
         logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) saved for Interview {interview_id}")
         return question.id
 
+<<<<<<< HEAD
 =======
         session.commit()
         
         return question.id
 >>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
