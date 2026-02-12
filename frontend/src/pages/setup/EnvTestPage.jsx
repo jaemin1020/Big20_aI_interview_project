@@ -46,11 +46,14 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
 
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
         analyser.smoothingTimeConstant = 0.8;
         analyser.fftSize = 1024;
 
         microphone.connect(analyser); // Source -> Analyser
+        analyser.connect(javascriptNode);
+        javascriptNode.connect(audioContext.destination);
 
         javascriptNode.onaudioprocess = () => {
           const array = new Uint8Array(analyser.frequencyBinCount);
