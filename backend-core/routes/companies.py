@@ -4,7 +4,8 @@ from typing import List
 import logging
 
 from database import get_session
-from db_models import Company
+
+from models import Company
 from pydantic import BaseModel
 
 logger = logging.getLogger("Backend-Core")
