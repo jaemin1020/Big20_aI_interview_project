@@ -42,6 +42,7 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
 
+<<<<<<< HEAD
 # 4. Local Whisper 설정
 WHISPER_MODEL = None
 LOCAL_MODEL_SIZE = "large-v3-turbo" # or small, medium, etc.
@@ -59,6 +60,9 @@ def load_local_whisper():
             logger.info(f"✅ Local Whisper Model Loaded on {device}")
     except Exception as e:
         logger.error(f"❌ Failed to load Local Whisper: {e}")
+=======
+
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""

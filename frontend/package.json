@@ -10,7 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+<<<<<<< HEAD
     "@deepgram/sdk": "^3.11.0",
+=======
+
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
     "axios": "^1.6.2",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
