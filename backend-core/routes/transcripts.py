@@ -4,7 +4,7 @@ from celery import Celery
 import logging
 
 from database import get_session
-from models import User, Transcript, TranscriptCreate, Speaker, Question
+from db_models import User, Transcript, TranscriptCreate, Speaker, Question
 from utils.auth_utils import get_current_user
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])

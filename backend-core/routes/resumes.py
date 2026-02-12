@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
 from sqlmodel import Session, select
-from models import Resume, User
+from db_models import Resume, User
 from database import get_session
 from utils.auth_utils import get_current_user
 from celery import Celery
@@ -91,7 +91,7 @@ async def upload_resume(
     # 비동기 파싱 및 처리 파이프라인 전송 (Celery)
     try:
         celery_app.send_task(
-            "tasks.resume_pipeline.process_resume_pipeline",
+            "parse_resume_pdf",
             args=[resume.id, file_path],
             queue='gpu_queue'
         )
@@ -204,7 +204,7 @@ async def reprocess_resume(
     # 재처리 작업 전송
     try:
         celery_app.send_task(
-            "tasks.resume_pipeline.process_resume_pipeline",
+            "parse_resume_pdf",
             args=[resume_id, resume.file_path],
             queue='gpu_queue'
         )

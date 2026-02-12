@@ -1,4 +1,7 @@
 models/
+
+ai_models/
+
 __pycache__/
 *.pyc
 *.pyo

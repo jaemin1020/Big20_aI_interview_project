@@ -31,6 +31,8 @@ const InterviewPage = ({
   }
 
   React.useEffect(() => {
+    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+
     // TTS 재생 로직
     const playTTS = () => {
       // 1. 서버 제공 오디오 URL이 있는 경우

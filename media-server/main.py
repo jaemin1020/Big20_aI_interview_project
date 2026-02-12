@@ -42,8 +42,6 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
 
-
-
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
     kind = "video"
