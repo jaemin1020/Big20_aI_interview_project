@@ -417,8 +417,26 @@ function App() {
             console.log('[STT] Recognition result:', result);
             
             if (result.text && result.text.trim()) {
-              setTranscript(result.text);
-              console.log('[STT] ✅ Success:', result.text);
+              const recognizedText = result.text.trim();
+              setTranscript(recognizedText);
+              console.log('[STT] ✅ Success:', recognizedText);
+              
+              // 자동 저장: DB에 transcript 저장
+              if (interview && questions && questions[currentIdx]) {
+                try {
+                  console.log('[STT] Auto-saving transcript to DB...');
+                  await createTranscript(
+                    interview.id, 
+                    'User', 
+                    recognizedText, 
+                    questions[currentIdx].id
+                  );
+                  console.log('[STT] ✅ Transcript saved to DB');
+                } catch (saveError) {
+                  console.error('[STT] ❌ Failed to save transcript:', saveError);
+                  // 저장 실패해도 transcript는 화면에 표시
+                }
+              }
             } else {
               setTranscript('음성이 인식되지 않았습니다.');
               console.warn('[STT] ⚠️ Empty result');
@@ -608,7 +626,7 @@ function App() {
       )}
 
       {/* Theme Toggle Button */}
-      <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
           style={{

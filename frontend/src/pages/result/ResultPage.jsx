@@ -9,8 +9,7 @@ import {
   PolarRadiusAxis,
   ResponsiveContainer
 } from 'recharts';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// html2canvas & jsPDF removed for vector print support
 
 const ResultPage = ({ results, report, interview, onReset }) => {
   const resultRef = useRef(null);
@@ -28,248 +27,284 @@ const ResultPage = ({ results, report, interview, onReset }) => {
     { subject: '성장 의지', A: report?.growth_score || 90, fullMark: 100 },
   ];
 
-  const handleDownloadPDF = async () => {
-    if (!resultRef.current) return;
-
-    try {
-      // 캡처 정확도를 높이기 위해 스크롤을 맨 위로 이동
-      window.scrollTo(0, 0);
-
-      const canvas = await html2canvas(resultRef.current, {
-        scale: 2, // 고해상도 캡처
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#111827', // PDF 배경색 (다크모드)
-        scrollY: 0, // 스크롤 위치 보정
-        onclone: (clonedDoc) => {
-          // 캡처 시 Glassmorphism 효과(backdrop-filter) 제거 (검은 화면 방지)
-          const glassCards = clonedDoc.querySelectorAll('.premium-card, .glass-effect');
-          glassCards.forEach((card) => {
-            card.style.backdropFilter = 'none';
-            card.style.webkitBackdropFilter = 'none';
-            card.style.background = '#1e293b'; // 불투명한 다크 그레이 배경
-            card.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-            card.style.boxShadow = 'none';
-          });
-
-          // 텍스트 가독성 확보
-          const texts = clonedDoc.querySelectorAll('*');
-          texts.forEach(el => {
-            const style = getComputedStyle(el);
-            if (style.color === 'rgba(0, 0, 0, 0)') { // 투명 텍스트 방지
-              el.style.color = '#e2e8f0';
-            }
-          });
-        }
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-
-      const imgWidth = 210; // A4 가로 (mm)
-      const pageHeight = 297; // A4 세로 (mm)
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      // 첫 페이지 렌더링
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      // 내용이 한 페이지를 넘어가면 추가 페이지 생성
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const fileName = `Interview_Report_${interview?.company_name || 'Interview'}.pdf`;
-      pdf.save(fileName);
-    } catch (err) {
-      console.error("PDF Download failed:", err);
-      alert("PDF 저장 중 오류가 발생했습니다.");
-    }
+  const handleDownloadPDF = () => {
+    window.print();
   };
 
   return (
-    <div className="result-container animate-fade-in" style={{
-      flex: 1,
-      width: '100%',
-      maxWidth: '1200px',
-      margin: '0 auto',
-      padding: '4rem 1rem',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2rem'
-    }}>
-      {/* Header Message */}
-      <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-        <h1 className="text-gradient">면접 결과 리포트</h1>
-        <p style={{ color: 'var(--text-muted)' }}>AI 면접관이 분석한 역량별 상세 평가 결과입니다.</p>
-      </div>
+    <>
+      <style>
+        {`
+          @media print {
+            @page { margin: 10mm; size: A4 portrait; }
+            html, body {
+              width: 210mm;
+              height: 100%;
+              background: white !important;
+              color: black !important;
+              font-size: 10pt; /* 전체 폰트 크기 축소 */
+              line-height: 1.3;
+            }
+            .no-print, header, nav, .premium-button { display: none !important; }
 
-      <div ref={resultRef} style={{ display: 'flex', flexDirection: 'column', gap: '2rem', background: 'var(--bg-color)', padding: '2rem', borderRadius: '16px' }}>
+            /* 컨테이너 여백 제거 및 너비 최대화 */
+            .result-container {
+              width: 100% !important;
+              max-width: none !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
 
-        {/* 1. Interview Info */}
-        <GlassCard style={{ padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-          <div style={{ display: 'flex', gap: '3rem', alignItems: 'center' }}>
-            <div>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 회사</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.company_name || '회사명 미상'}</span>
+            /* 제목 섹션 축소 */
+            h1 { font-size: 18pt !important; margin-bottom: 5px !important; }
+            h3 { font-size: 14pt !important; margin-bottom: 10px !important; padding-bottom: 5px !important; }
+            p { color: #333 !important; margin-bottom: 5px !important; }
+
+            /* 새 페이지 강제 분리 클래스 */
+            .page-break-before {
+              page-break-before: always !important;
+              break-before: page !important;
+              margin-top: 20mm !important;
+            }
+
+            /* 카드 스타일 및 내부 요소 잘림 방지 */
+            .glass-card, div[class*="GlassCard"] {
+              break-inside: avoid-page; /* 페이지 중간 잘림 방지 (강력) */
+              background: white !important;
+              border: 1px solid #ddd !important;
+              box-shadow: none !important;
+              padding: 10mm !important; /* 패딩 축소 */
+              margin-bottom: 10px !important; /* 카드 간 간격 축소 */
+              border-radius: 8px !important;
+              page-break-inside: avoid;
+            }
+
+            /* 새 페이지 강제 분리 클래스 */
+            .page-break-before {
+              page-break-before: always !important;
+              break-before: page !important;
+              margin-top: 20mm !important; /* 페이지 넘김 후 여백 */
+            }
+
+            /* 내부 항목 단위로도 잘림 방지 (FeedbackItem 등) */
+            .glass-card > div > div,
+            .glass-card div,
+            li,
+            h3,
+            p {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+
+            /* 피드백 아이템 그리드 형태로 변경하여 공간 절약 */
+            .glass-card > div[style*="display: grid"] {
+              display: grid !important;
+              grid-template-columns: 1fr 1fr; /* 2단 배열 */
+              gap: 10px !important;
+            }
+
+            /* 로고 및 아이콘 크기 조정 */
+            span[role="img"] { display: none; } /* 이모지 숨김 (선택사항) */
+
+            /* 차트(SVG) 스타일 보정 */
+            .recharts-wrapper svg {
+              overflow: visible !important;
+            }
+            .recharts-polar-grid-angle line,
+            .recharts-polar-grid-concentric path {
+              stroke: #ccc !important; /* 그리드 라인을 회색으로 */
+              stroke-opacity: 1 !important;
+            }
+            .recharts-text {
+              fill: #000 !important; /* 텍스트를 검정색으로 */
+            }
+            .recharts-layer path[name="My Score"] {
+              stroke: #2563eb !important; /* 데이터 라인을 파란색으로 */
+              fill: #2563eb !important;
+              fill-opacity: 0.3 !important;
+            }
+
+          }
+        `}
+      </style>
+      <div className="result-container animate-fade-in" style={{
+        flex: 1,
+        width: '100%',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '4rem 1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2rem'
+      }}>
+        {/* Header Message */}
+        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+          <h1 className="text-gradient">면접 결과 리포트</h1>
+          <p style={{ color: 'var(--text-muted)' }}>AI 면접관이 분석한 역량별 상세 평가 결과입니다.</p>
+        </div>
+
+        <div ref={resultRef} style={{ display: 'flex', flexDirection: 'column', gap: '2rem', background: 'var(--bg-color)', padding: '2rem', borderRadius: '16px' }}>
+
+          {/* 1. Interview Info */}
+          <GlassCard style={{ padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+            <div style={{ display: 'flex', gap: '3rem', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 회사</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.company_name || '회사명 미상'}</span>
+              </div>
+              <div style={{ width: '1px', height: '50px', background: 'var(--glass-border)' }}></div>
+              <div>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 직무</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.position || '직무 미상'}</span>
+              </div>
             </div>
-            <div style={{ width: '1px', height: '50px', background: 'var(--glass-border)' }}></div>
-            <div>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 직무</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.position || '직무 미상'}</span>
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>면접 일자</span>
-            <span style={{ fontSize: '1.1rem', fontWeight: '600' }}>
-              {interview?.created_at ? new Date(interview.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
-            </span>
-          </div>
-        </GlassCard>
-
-
-        {/* 2. 직무 역량 평가 (Text Feedback) */}
-        <GlassCard style={{ padding: '2rem' }}>
-          <h3 style={{
-            color: '#3b82f6',
-            borderBottom: '2px solid rgba(59, 130, 246, 0.3)',
-            paddingBottom: '10px',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>💻</span> 직무 역량 평가
-          </h3>
-          <div style={{ display: 'grid', gap: '1.5rem' }}>
-            <FeedbackItem
-              title="기술 이해도"
-              content={getText(report?.technical_feedback, "지원자는 지원한 기술 스택(React, Node.js 등)에 대한 깊은 이해를 보여주었습니다. 특히 최신 트렌드와 라이브러리 활용에 대한 식견이 돋보이며, 이를 실제 프로젝트에 적용한 경험을 구체적으로 설명할 수 있습니다.")}
-            />
-            <FeedbackItem
-              title="직무 관련 경험"
-              content={getText(report?.experience_feedback, "과거 프로젝트 수행 경험을 통해 실무에서 발생할 수 있는 이슈들을 미리 파악하고 대비하는 능력이 우수합니다. 본인이 주도적으로 문제를 해결한 성과가 명확히 드러났습니다.")}
-            />
-            <FeedbackItem
-              title="문제 해결 능력"
-              content={getText(report?.problem_solving_feedback, "복잡한 문제 상황에서도 논리적이고 체계적으로 접근하는 사고방식을 가지고 있습니다. 원인 분석부터 해결책 도출까지의 과정이 매우 설득력 있게 전달되었습니다.")}
-            />
-          </div>
-        </GlassCard>
-
-        {/* 3. 인성 및 태도 평가 (Text Feedback) */}
-        <GlassCard style={{ padding: '2rem' }}>
-          <h3 style={{
-            color: '#10b981',
-            borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
-            paddingBottom: '10px',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>🤝</span> 인성 및 태도 평가
-          </h3>
-          <div style={{ display: 'grid', gap: '1.5rem' }}>
-            <FeedbackItem
-              title="의사소통 능력"
-              content={getText(report?.communication_feedback, "질문의 의도를 정확히 파악하고, 자신의 생각을 명료하게 전달하는 능력이 뛰어납니다. 상대방의 입장을 고려하며 대화를 이끌어가는 태도가 돋보입니다.")}
-            />
-            <FeedbackItem
-              title="책임감"
-              content={getText(report?.responsibility_feedback, "맡은 업무에 대해 끝까지 책임을 지려는 강한 의지를 보여주었습니다. 어려움에 직면했을 때 회피하지 않고 완수해내는 끈기가 인상적입니다.")}
-            />
-            <FeedbackItem
-              title="성장 의지"
-              content={getText(report?.growth_feedback, "지속적인 자기 계발을 통해 역량을 강화하려는 의지가 뚜렷합니다. 실패로부터 배우고 더 나은 방향으로 나아가려는 긍정적인 마인드셋을 갖추고 있습니다.")}
-            />
-          </div>
-        </GlassCard>
-
-
-        {/* 4. 종합 평가 (Chart + Strengths/Weaknesses) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-
-          {/* 육각형 그래프 */}
-          <GlassCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h3 style={{ width: '100%', borderLeft: '4px solid var(--primary)', paddingLeft: '10px', marginBottom: '1rem', color: 'var(--text-main)' }}>
-              종합 역량 분석표
-            </h3>
-            <div style={{ width: '100%', height: '350px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                  <PolarGrid stroke="rgba(255,255,255,0.1)" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 13, fontWeight: 'bold' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                  <Radar
-                    name="My Score"
-                    dataKey="A"
-                    stroke="var(--primary)"
-                    fill="var(--primary)"
-                    fillOpacity={0.6}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>면접 일자</span>
+              <span style={{ fontSize: '1.1rem', fontWeight: '600' }}>
+                {interview?.created_at ? new Date(interview.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
+              </span>
             </div>
           </GlassCard>
 
-          {/* 강점 & 보완점 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
-              <h4 style={{ color: '#10b981', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🏆</span> 주요 강점
-              </h4>
-              <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: 'var(--text-main)' }}>
-                {report?.strengths ? (
-                  report.strengths.map((point, i) => <li key={i} style={{ marginBottom: '8px' }}>{point}</li>)
-                ) : (
-                  <>
-                    <li>탄탄한 기초 역량을 바탕으로 한 높은 기술 이해도</li>
-                    <li>논리적인 사고를 통한 문제 해결 접근 방식</li>
-                    <li>팀워크를 중시하는 협력적인 태도</li>
-                  </>
-                )}
-              </ul>
+
+          {/* 2. 직무 역량 평가 (Text Feedback) */}
+          <GlassCard style={{ padding: '2rem' }}>
+            <h3 style={{
+              color: '#3b82f6',
+              borderBottom: '2px solid rgba(59, 130, 246, 0.3)',
+              paddingBottom: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>💻</span> 직무 역량 평가
+            </h3>
+            <div style={{ display: 'grid', gap: '1.5rem' }}>
+              <FeedbackItem
+                title="기술 이해도"
+                content={getText(report?.technical_feedback, "지원자는 지원한 기술 스택(React, Node.js 등)에 대한 깊은 이해를 보여주었습니다. 특히 최신 트렌드와 라이브러리 활용에 대한 식견이 돋보이며, 이를 실제 프로젝트에 적용한 경험을 구체적으로 설명할 수 있습니다.")}
+              />
+              <FeedbackItem
+                title="직무 관련 경험"
+                content={getText(report?.experience_feedback, "과거 프로젝트 수행 경험을 통해 실무에서 발생할 수 있는 이슈들을 미리 파악하고 대비하는 능력이 우수합니다. 본인이 주도적으로 문제를 해결한 성과가 명확히 드러났습니다.")}
+              />
+              <FeedbackItem
+                title="문제 해결 능력"
+                content={getText(report?.problem_solving_feedback, "복잡한 문제 상황에서도 논리적이고 체계적으로 접근하는 사고방식을 가지고 있습니다. 원인 분석부터 해결책 도출까지의 과정이 매우 설득력 있게 전달되었습니다.")}
+              />
+            </div>
+          </GlassCard>
+
+          {/* 3. 인성 및 태도 평가 (Text Feedback) */}
+          <GlassCard className="page-break-before" style={{ padding: '2rem' }}>
+            <h3 style={{
+              color: '#10b981',
+              borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
+              paddingBottom: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>🤝</span> 인성 및 태도 평가
+            </h3>
+            <div style={{ display: 'grid', gap: '1.5rem' }}>
+              <FeedbackItem
+                title="의사소통 능력"
+                content={getText(report?.communication_feedback, "질문의 의도를 정확히 파악하고, 자신의 생각을 명료하게 전달하는 능력이 뛰어납니다. 상대방의 입장을 고려하며 대화를 이끌어가는 태도가 돋보입니다.")}
+              />
+              <FeedbackItem
+                title="책임감"
+                content={getText(report?.responsibility_feedback, "맡은 업무에 대해 끝까지 책임을 지려는 강한 의지를 보여주었습니다. 어려움에 직면했을 때 회피하지 않고 완수해내는 끈기가 인상적입니다.")}
+              />
+              <FeedbackItem
+                title="성장 의지"
+                content={getText(report?.growth_feedback, "지속적인 자기 계발을 통해 역량을 강화하려는 의지가 뚜렷합니다. 실패로부터 배우고 더 나은 방향으로 나아가려는 긍정적인 마인드셋을 갖추고 있습니다.")}
+              />
+            </div>
+          </GlassCard>
+
+
+          {/* 4. 종합 평가 (Chart + Strengths/Weaknesses) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+
+            {/* 육각형 그래프 */}
+            <GlassCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <h3 style={{ width: '100%', borderLeft: '4px solid var(--primary)', paddingLeft: '10px', marginBottom: '1rem', color: 'var(--text-main)' }}>
+                종합 역량 분석표
+              </h3>
+              <div style={{ width: '100%', height: '350px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
+                    <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 13, fontWeight: 'bold' }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                    <Radar
+                      name="My Score"
+                      dataKey="A"
+                      stroke="var(--primary)"
+                      fill="var(--primary)"
+                      fillOpacity={0.6}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
             </GlassCard>
 
-            <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
-              <h4 style={{ color: '#f59e0b', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🔥</span> 보완 필요 사항
-              </h4>
-              <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: 'var(--text-main)' }}>
-                {report?.improvements ? (
-                  report.improvements.map((point, i) => <li key={i} style={{ marginBottom: '8px' }}>{point}</li>)
-                ) : (
-                  <>
-                    <li>긴장된 상황에서의 유연한 대처 능력 강화 필요</li>
-                    <li>답변 시 두괄식 표현을 사용하여 명확성 높이기</li>
-                    <li>구체적인 수치 데이터를 활용한 성과 어필</li>
-                  </>
-                )}
-              </ul>
-            </GlassCard>
+            {/* 강점 & 보완점 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+                <h4 style={{ color: '#10b981', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🏆</span> 주요 강점
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: 'var(--text-main)' }}>
+                  {report?.strengths ? (
+                    report.strengths.map((point, i) => <li key={i} style={{ marginBottom: '8px' }}>{point}</li>)
+                  ) : (
+                    <>
+                      <li>탄탄한 기초 역량을 바탕으로 한 높은 기술 이해도</li>
+                      <li>논리적인 사고를 통한 문제 해결 접근 방식</li>
+                      <li>팀워크를 중시하는 협력적인 태도</li>
+                    </>
+                  )}
+                </ul>
+              </GlassCard>
+
+              <GlassCard style={{ padding: '1.5rem', flex: 1 }}>
+                <h4 style={{ color: '#f59e0b', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🔥</span> 보완 필요 사항
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: 'var(--text-main)' }}>
+                  {report?.improvements ? (
+                    report.improvements.map((point, i) => <li key={i} style={{ marginBottom: '8px' }}>{point}</li>)
+                  ) : (
+                    <>
+                      <li>긴장된 상황에서의 유연한 대처 능력 강화 필요</li>
+                      <li>답변 시 두괄식 표현을 사용하여 명확성 높이기</li>
+                      <li>구체적인 수치 데이터를 활용한 성과 어필</li>
+                    </>
+                  )}
+                </ul>
+              </GlassCard>
+            </div>
           </div>
+
+        </div>
+
+        {/* Button Area */}
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '2rem' }}>
+          <PremiumButton onClick={onReset} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
+            처음으로 돌아가기
+          </PremiumButton>
+          <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
+            📄 리포트 저장 (PDF)
+          </PremiumButton>
         </div>
 
       </div>
-
-      {/* Button Area */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '2rem' }}>
-        <PremiumButton onClick={onReset} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
-          처음으로 돌아가기
-        </PremiumButton>
-        <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
-          📄 리포트 저장 (PDF)
-        </PremiumButton>
-      </div>
-
-    </div>
+    </>
   );
 };
 
