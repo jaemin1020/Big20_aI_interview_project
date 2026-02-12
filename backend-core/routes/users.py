@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from models import User
+from db_models import User
 from utils.auth_utils import get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])

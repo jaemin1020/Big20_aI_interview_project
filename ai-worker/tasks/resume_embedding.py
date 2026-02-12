@@ -5,13 +5,14 @@ from datetime import datetime
 from celery import shared_task
 from sqlmodel import Session
 from db import engine
-from models import Resume
+from db_models import Resume
 from .embedding import embed_chunks
 from .chunking import chunk_resume
+from .pgvector_store import store_embeddings
 
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True, name="generate_resume_embeddings", queue='gpu_queue')
+@shared_task(bind=True, name="tasks.resume_embedding.generate_resume_embeddings", queue='gpu_queue')
 def generate_resume_embeddings(self, resume_id: int):
     """
     구조화된 이력서 데이터를 기반으로 청킹 및 임베딩을 생성하여 DB에 저장합니다.
@@ -59,7 +60,15 @@ def generate_resume_embeddings(self, resume_id: int):
             # pgvector 컬럼(Vector(1024))에 맞게 저장
             if embedded_data and 'vector' in embedded_data[0]:
                  resume.embedding = embedded_data[0]['vector']
-                 logger.info(f"Saved embedding vector (dim: {len(resume.embedding)})")
+                 logger.info(f"Saved representative embedding vector (dim: {len(resume.embedding)})")
+            
+            # 3. 벡터 DB(resume_embeddings 테이블)에 전체 청크 저장
+            try:
+                store_embeddings(resume_id, embedded_data)
+                logger.info(f"Successfully stored {len(embedded_data)} chunks to vector DB")
+            except Exception as e:
+                logger.error(f"Failed to store chunks to vector DB: {e}")
+                # 전체 저장은 실패해도 개별 상태는 completed로 감 (최소한 요약 벡터는 저장됨)
             
             # 완료 처리
             resume.processing_status = "completed"

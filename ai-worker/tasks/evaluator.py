@@ -4,6 +4,9 @@ import re
 import json
 import sys
 import os
+from pydantic import BaseModel, Field
+from typing import List
+from langchain_core.output_parsers import JsonOutputParser
 from celery import shared_task
 
 # DB Helper Functions
@@ -26,8 +29,30 @@ if ai_worker_root not in sys.path:
     sys.path.insert(0, ai_worker_root)
 
 # utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
+try:
+    from utils.exaone_llm import get_exaone_llm
+except ImportError:
+    def get_exaone_llm():
+        from ai_worker.utils.exaone_llm import get_exaone_llm
+        return get_exaone_llm()
 
 logger = logging.getLogger("AI-Worker-Evaluator")
+
+# -----------------------------------------------------------
+# [Schema] 평가 데이터 구조 정의 (Pydantic)
+# -----------------------------------------------------------
+class AnswerEvalSchema(BaseModel):
+    technical_score: int = Field(description="기술적 지식 및 숙련도 점수 (0-5)")
+    communication_score: int = Field(description="의사소통 및 전달 능력 점수 (0-5)")
+    feedback: str = Field(description="답변에 대한 구체적이고 건설적인 피드백")
+
+class FinalReportSchema(BaseModel):
+    technical_score: int = Field(description="전체 기술 면접 점수 (0-100)")
+    communication_score: int = Field(description="전체 의사소통 점수 (0-100)")
+    cultural_fit_score: int = Field(description="조직 적합성 점수 (0-100)")
+    summary_text: str = Field(description="면접 전체 요약 (3문장 내외)")
+    strengths: List[str] = Field(description="지원자의 주요 강점 3가지")
+    weaknesses: List[str] = Field(description="보완이 필요한 약점 및 개선점")
 
 @shared_task(name="tasks.evaluator.analyze_answer")
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
@@ -35,7 +60,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
     
     # 🔗 즉시 다음 질문 생성 트리거 (분석 완료를 기다리지 않고 바로 생성 시작)
     try:
-        from tasks.question_generation import generate_next_question_task
+        from tasks.question_generator import generate_next_question_task
         interview_id = None
         with Session(engine) as session:
             t = session.get(Transcript, transcript_id)
@@ -43,8 +68,8 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
                 interview_id = t.interview_id
         
         if interview_id:
-            generate_next_question_task.delay(interview_id)
-            logger.info(f"🚀 [IMMEDIATE] delay() called for Interview {interview_id}")
+            generate_next_question_task.apply_async(args=[interview_id], queue='gpu_queue')
+            logger.info(f"🚀 [IMMEDIATE] apply_async(queue='gpu_queue') called for Interview {interview_id}")
         else:
             logger.error(f"Could not find interview_id for transcript {transcript_id}")
     except Exception as e:
@@ -66,20 +91,48 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         n_gpu_layers = int(os.getenv("N_GPU_LAYERS", "0"))
         
         if n_gpu_layers == 0:
-            logger.info("⚡ [FAST MODE] CPU Worker spotted. Skipping heavy LLM for individual answer evaluation to speed up the process.")
-            # 개별 분석은 기본값만 부여 (최종 리포트에서 전체 요약 수행)
+            logger.info("⚡ [FAST MODE] CPU Worker spotted. Skipping heavy LLM for individual answer evaluation.")
             result = {
                 "technical_score": 3,
                 "communication_score": 3,
                 "feedback": "답변이 수신되었습니다. 상세 평가는 최종 리포트를 확인하세요."
             }
         else:
-            llm = get_exaone_llm()
-            result = llm.evaluate_answer(
-                question_text=question_text,
-                answer_text=answer_text,
-                rubric=rubric
-            )
+            # LangChain Parser 설정
+            parser = JsonOutputParser(pydantic_object=AnswerEvalSchema)
+            
+            # 엔진 가져오기
+            llm_engine = get_exaone_llm()
+            
+            # 프롬프트 구성
+            system_msg = "귀하는 전문 면접관이며, 지원자의 답변을 기술력과 의사소통 관점에서 평가합니다."
+            user_msg = f"""다음 질문에 대한 지원자의 답변을 루브릭 기준에 맞춰 평가하십시오.
+            
+[질문]
+{question_text}
+
+[답변]
+{answer_text}
+
+[평가 루브릭]
+{json.dumps(rubric, ensure_ascii=False) if rubric else "표준 면접 평가 기준"}
+
+{parser.get_format_instructions()}"""
+            
+            # 생성 및 파싱
+            prompt = llm_engine._create_prompt(system_msg, user_msg)
+            raw_output = llm_engine.invoke(prompt, temperature=0.2)
+            
+            try:
+                result = parser.parse(raw_output)
+            except Exception as parse_err:
+                logger.error(f"Failed to parse LLM output: {parse_err}")
+                # 폴백: 정규표현식 시도 또는 기본값
+                json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    result = {"technical_score": 3, "communication_score": 3, "feedback": "평가 데이터를 파싱할 수 없습니다."}
         
         tech_score = result.get("technical_score", 3)
         comm_score = result.get("communication_score", 3)
@@ -104,7 +157,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         logger.error(f"Evaluation Failed: {e}")
         return {"error": str(e)}
 
-@shared_task(name="tasks.evaluator.generate_final_report")
+@shared_task(name="tasks.evaluator.generate_final_report", queue='gpu_queue')
 def generate_final_report(interview_id: int):
     """
     최종 평가 보고서 생성
@@ -139,32 +192,31 @@ def generate_final_report(interview_id: int):
         conversation = "\n".join([f"{t.speaker}: {t.text}" for t in transcripts])
 
         try:
-            exaone = get_exaone_llm()
-            system_msg = "귀하는 면접 분석 전문가입니다. 면접 전체 요약과 점수를 산출하십시오."
-            user_msg = f"""다음 면접 대화를 분석하여 JSON으로 만드세요.
+            # LangChain Parser 설정
+            parser = JsonOutputParser(pydantic_object=FinalReportSchema)
             
-[대화]
+            exaone = get_exaone_llm()
+            system_msg = "귀하는 인사 전략 전문가이자 면접 분석관입니다. 전체 대화 흐름을 분석하여 리포트를 작성하십시오."
+            user_msg = f"""다음 면접 대화 내용을 기반으로 최종 평가를 내리십시오.
+            
+[면접 대화]
 {conversation}
 
- 반드시 JSON 형식으로만 응답:
-{{
-    "technical_score": 0~100,
-    "communication_score": 0~100,
-    "cultural_fit_score": 0~100,
-    "summary_text": "3문장 이내 요약",
-    "strengths": ["강점1", "강점2"],
-    "weaknesses": ["약점1", "약점2"]
-}}"""
+{parser.get_format_instructions()}"""
             
+            # 생성 및 파싱
             prompt = exaone._create_prompt(system_msg, user_msg)
-            output = exaone.llm(prompt, max_tokens=1024, temperature=0.3)
-            raw_result = output['choices'][0]['text'].strip()
+            raw_output = exaone.invoke(prompt, temperature=0.3)
             
-            json_match = re.search(r'\{.*\}', raw_result, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-            else:
-                raise ValueError("No JSON in response")
+            try:
+                result = parser.parse(raw_output)
+            except Exception as parse_err:
+                logger.error(f"Final report parsing failed: {parse_err}")
+                json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    raise parse_err
                 
         except Exception as llm_err:
             logger.error(f"LLM Summary failed: {llm_err}")

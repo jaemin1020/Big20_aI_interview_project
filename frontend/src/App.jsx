@@ -80,16 +80,7 @@ function App() {
   // Users selected interview for result view
   const [selectedInterview, setSelectedInterview] = useState(null);
 
-  // Persistence Effect
-  useEffect(() => {
-    sessionStorage.setItem('current_step', step);
-    sessionStorage.setItem('current_interview', JSON.stringify(interview));
-    sessionStorage.setItem('current_questions', JSON.stringify(questions));
-    sessionStorage.setItem('current_idx', currentIdx);
-    sessionStorage.setItem('current_report', JSON.stringify(report));
-    sessionStorage.setItem('current_position', position);
-    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
-  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
+
 
 
   const videoRef = useRef(null);
@@ -114,27 +105,32 @@ function App() {
           const savedPosition = sessionStorage.getItem('app_position');
           const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
-          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
-          if (savedStep === 'auth') {
+          // 상태 복구 (Hydration)
+          if (savedInterview) {
+            try { setInterview(JSON.parse(savedInterview)); } catch (e) { console.error(e); }
+          }
+          if (savedQuestions) {
+            try { setQuestions(JSON.parse(savedQuestions)); } catch (e) { console.error(e); }
+          }
+          if (savedCurrentIdx) setCurrentIdx(Number(savedCurrentIdx));
+          if (savedReport) {
+            try { setReport(JSON.parse(savedReport)); } catch (e) { console.error(e); }
+          }
+          if (savedPosition) setPosition(savedPosition);
+          if (savedParsedResume) {
+            try { setParsedResumeData(JSON.parse(savedParsedResume)); } catch (e) { console.error(e); }
+          }
+
+          if (savedStep) {
+            setStep(savedStep);
+          } else {
             setStep('main');
           }
-          else {
-            const hasInterviewData = sessionStorage.getItem('current_interview');
-            const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
 
-            if (savedStep) {
-              setStep(savedStep);
-              if (savedStep === 'complete' && !savedReport && savedInterview) {
-                const interviewData = JSON.parse(savedInterview);
-                pollReport(interviewData.id);
-              }
-            } else {
-              setStep('main');
-            }
-          }
           isInitialized.current = true;
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Session restore failed:", err);
           localStorage.removeItem('token');
           sessionStorage.clear();
           setStep('main');
@@ -247,6 +243,7 @@ function App() {
 
   const initInterviewSession = async () => {
     setIsLoading(true);
+    setCurrentIdx(0); // 새로운 면접 시작 시 질문 인덱스 초기화
     try {
       // 1. Create Interview with Parsed Position & Resume ID
       const structuredBase = parsedResumeData?.structured_data;
@@ -545,7 +542,7 @@ function App() {
             transition: 'all 0.3s ease'
           }}
         >
-          {isDarkMode ? '☀️' : '🌙'}
+          {isDarkMode ? '☀️' : '🌑'}
         </button>
       </div>
 
@@ -653,6 +650,7 @@ function App() {
             onCheckResult={() => setStep('result')}
             onExit={() => {
               setStep('main');
+              setCurrentIdx(0); // 메인으로 돌아갈 때 질문 인덱스 초기화
               setReport(null);
               setIsReportLoading(false);
             }}
