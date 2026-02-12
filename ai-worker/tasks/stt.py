@@ -96,8 +96,8 @@ def recognize_audio_task(audio_b64: str):
             output_path, 
             beam_size=1, 
             language="ko",
-            vad_filter=True, # Try keeping VAD on now that audio is clean 16kHz
-            vad_parameters=dict(min_silence_duration_ms=500)
+            vad_filter=False, # [DEBUG] VAD temporarily disabled to check raw audio
+            # vad_parameters=dict(min_silence_duration_ms=500)
         )
         
         full_text = ""
