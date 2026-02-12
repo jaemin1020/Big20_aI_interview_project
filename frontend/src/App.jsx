@@ -28,6 +28,8 @@ import ResultPage from './pages/result/ResultPage';
 import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
+import AboutPage from './pages/about/AboutPage';
+
 
 function App() {
   const [step, setStep] = useState('main');
@@ -488,7 +490,7 @@ function App() {
   }, []);
 
   return (
-    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
+    <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
@@ -543,7 +545,23 @@ function App() {
         </button>
       </div>
 
-      <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        flex: 1,
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        // 면접, 프로필, 설정 페이지를 제외한 모든 페이지에 전체 화면 강제 적용
+        ...(!['interview', 'profile', 'settings'].includes(step) ? {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          minHeight: '100vh',
+          paddingTop: '72px',
+          boxSizing: 'border-box',
+          zIndex: 0
+        } : {})
+      }}>
         {step === 'main' && (
           <MainPage
             onStartInterview={() => {
@@ -560,6 +578,13 @@ function App() {
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
             onLogout={handleLogout}
+            onAbout={() => setStep('about')}
+          />
+        )}
+
+        {step === 'about' && (
+          <AboutPage
+            onBack={() => setStep('main')}
           />
         )}
 
