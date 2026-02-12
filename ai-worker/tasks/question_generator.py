@@ -4,28 +4,13 @@ import time
 import gc 
 import logging
 import torch
-<<<<<<< HEAD
-<<<<<<< HEAD
 from datetime import datetime
-=======
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-from datetime import datetime
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from celery import shared_task
 from langchain_community.llms import LlamaCpp
 from langchain_core.callbacks import CallbackManager
 from langchain_core.prompts import PromptTemplate
-<<<<<<< HEAD
-<<<<<<< HEAD
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
-=======
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
 if "/app" not in sys.path:
@@ -39,20 +24,10 @@ logger = logging.getLogger("AI-Worker-QuestionGen")
 local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 if os.path.exists(local_path):
     model_path = local_path
 else:
     model_path = docker_path
-<<<<<<< HEAD
-=======
-model_path = local_path if os.path.exists(local_path) else docker_path
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # 🚨 DB 조회를 위해 추가
 try:
@@ -100,95 +75,7 @@ PROMPT_TEMPLATE = """[|system|]
 # -----------------------------------------------------------
 # -----------------------------------------------------------
 # [3. 질문 생성 핵심 함수]
-<<<<<<< HEAD
-<<<<<<< HEAD
 # [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
-=======
-# -----------------------------------------------------------
-def generate_human_like_question(exaone, name, position, stage, guide, context_list):
-    """
-    ExaoneLLM 인스턴스를 사용하여 질문 생성
-    """
-    if not context_list:
-        return f"❌ (관련 내용을 찾지 못해 질문을 생성할 수 없습니다)"
-
-    texts = [item['text'] for item in context_list] if isinstance(context_list[0], dict) else context_list
-    context_text = "\n".join([f"- {txt}" for txt in texts])
-    
-    try:
-        # ExaoneLLM의 generate_questions 메서드 활용 (단일 질문 생성을 위해 count=1)
-        # 보다 정교한 프롬프트를 위해 직접 generate 호출 가능하나, 여기서는 일관성을 위해 랩핑
-        system_msg = f"당신은 15년 차 베테랑 {position} 전문 면접관이다. 지금은 면접이 한창 진행 중인 상황이다."
-        user_msg = f"""지원자 {name}님에게 {stage} 단계의 면접 질문을 던지세요.
-
-[평가 의도 - 반드시 이 관점으로 질문할 것]
-{guide}
-
-[지원자 이력서 근거]
-{context_text}
-
-[요구사항]
-1. 시작은 반드시 "{name}님," 으로 부를 것.
-2. **이력서에 나온 구체적인 프로젝트명/회사명/기술명을 반드시 언급**할 것.
-   예: "{name}님, 이력서를 보니 오픈소스 기반 침입 탐지 프로젝트를 하셨네요~"
-3. **평가 의도(guide)에 맞는 질문**을 할 것.
-   - 예: guide가 "구체적인 역할과 기여도"라면 → "이 프로젝트에서 달성한 구체적인 역할과 기여도가 어떻게 되나요?"
-4. 반드시 **150자 이내(두 문장 이내)**로 짧고 명확하게 물어볼 것.
-5. [프로젝트], [회사명] 같은 자리표시자를 절대 사용하지 말 것.
-"""
-
-        prompt = exaone._create_prompt(system_msg, user_msg)
-        output = exaone.llm(
-            prompt,
-            max_tokens=512,
-            stop=["[|endofturn|]", "[|user|]"],
-            temperature=0.4,
-            echo=False
-        )
-        return output['choices'][0]['text'].strip()
-    except Exception as e:
-        logger.error(f"질문 생성 실패: {e}")
-        return f"면접을 이어가겠습니다. {name}님, 다음 질문입니다."
-
-# -----------------------------------------------------------
-# [4. Celery Task] - 기존 일괄 생성 태스크 (필요 시 유지)
-# -----------------------------------------------------------
-@shared_task(name="tasks.question_generation.generate_questions")
-def generate_questions_task(interview_id, count=5, resume_id=None):
-    from db import engine, Session, Resume, Interview
-    from utils.exaone_llm import get_exaone_llm
-    
-    exaone = get_exaone_llm()
-    
-    with Session(engine) as session:
-        # 1. 인터뷰 정보 로드 (명시적인 resume_id가 없으면 인터뷰 레코드에서 가져옴)
-        if not resume_id:
-            interview = session.get(Interview, interview_id)
-            if interview: resume_id = interview.resume_id
-            
-        if not resume_id:
-            logger.error(f"Resume ID not found for interview {interview_id}")
-            return exaone.generate_questions("일반", count=count)
-
-        resume = session.get(Resume, resume_id)
-        if not resume:
-            return exaone.generate_questions("일반", count=count)
-
-        # 2. 이력서 파싱 데이터(header -> target_role) 추출 (데이터의 유일한 원천)
-        s_data = resume.structured_data or {}
-        header = s_data.get("header", {})
-        target_role = header.get("target_role") or "일반"
-        
-        # 3. 이력서 전문(extracted_text) 가져오기
-        resume_context = resume.extracted_text or ""
-        
-        logger.info(f"🚀 [Core Data] Name: {header.get('name')}, Target Role: {target_role}")
-        
-    return exaone.generate_questions(target_role, context=resume_context, count=count)
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-# [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
@@ -211,10 +98,6 @@ def generate_next_question_task(interview_id: int):
             logger.error(f"Interview {interview_id} not found.")
             return {"status": "error", "message": "Interview not found"}
             
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
         # 마지막 AI 발화가 너무 최근(10초 이내)이면 중복 생성 요청으로 간주
@@ -230,11 +113,6 @@ def generate_next_question_task(interview_id: int):
                 return {"status": "skipped", "reason": "ai_just_spoke"}
 
 
-<<<<<<< HEAD
-=======
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # 🔍 마지막 단계 탐지 최적화 (순서 기반이 아닌 ID 기반 최신 데이터 조회)
         stmt = select(Transcript).where(
             Transcript.interview_id == interview_id,
@@ -297,10 +175,6 @@ def generate_next_question_task(interview_id: int):
             save_generated_question(interview_id, content, "behavioral", stage_name, "")
             return {"status": "success", "stage": stage_name}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         # [LangChain LCEL] AI 생성 파이프라인
         try:
             # 1. 모델 및 파서 준비
@@ -384,78 +258,6 @@ def generate_next_question_task(interview_id: int):
             db_category = category_map.get(category_raw, "technical")
             
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
-<<<<<<< HEAD
-=======
-        # AI 생성 루틴
-        try:
-            exaone = get_exaone_llm()
-            
-            # 컨텍스트 준비: 꼬리질문 vs 일반 AI 질문 명확히 분리
-            contexts = []
-            if stage_type == "followup":
-                # 꼬리질문: 오직 이전 답변만 사용 (RAG 검색 안 함)
-                user_stmt = select(Transcript).where(
-                    Transcript.interview_id == interview_id,
-                    Transcript.speaker == Speaker.USER # Enum 값이 "User"이므로 일치함
-                ).order_by(Transcript.id.desc())
-                last_user_ans = session.exec(user_stmt).first()
-                if last_user_ans:
-                    contexts = [{"text": f"이전 답변: {last_user_ans.text}", "meta": {"category": "followup"}}]
-                    logger.info(f"📌 Follow-up context prepared from last answer.")
-                else:
-                    logger.warning("⚠️ No previous answer found for followup question!")
-                    contexts = [{"text": "이전 답변을 찾을 수 없습니다.", "meta": {}}]
-            else:
-                # 일반 AI 질문: 이력서 RAG 검색
-                from .rag_retrieval import retrieve_context
-                query_tmpl = next_stage_data.get("query_template", "{target_role}")
-                query = query_tmpl.format(target_role=interview.position)
-                contexts = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
-
-            
-            # 지원자 정보 및 직무 정보 가져오기 보강 (JSON header/metadata 우선)
-            resume = session.get(Resume, interview.resume_id)
-            candidate_name = "지원자"
-            target_role = interview.position # 기본값 (인터뷰 세션 설정값)
-            
-            if resume and resume.structured_data:
-                s_data = resume.structured_data
-                header_data = s_data.get("header", {})
-                
-                # 1. 이름 추출 (header -> User 테이블 순)
-                candidate_name = header_data.get("name") or header_data.get("candidate_name")
-                if not candidate_name and resume.candidate_id:
-                    from db import User
-                    user = session.get(User, resume.candidate_id)
-                    if user: candidate_name = user.full_name or user.username
-                
-                # 2. 직무 추출 (header에 있으면 최우선)
-                target_role = header_data.get("target_role") or target_role
-
-            logger.info(f"Target Candidate Name: {candidate_name}, Role: {target_role}")
-            
-            # AI 질문 생성 실행
-            content = exaone.generate_human_like_question(
-                name=candidate_name,
-                position=target_role,
-                stage=stage_name,
-                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                context_list=contexts
-            )
-            
-            # 시나리오의 카테고리를 DB Enum에 맞게 매핑
-            category_raw = next_stage_data.get("category", "technical")
-            category_map = {
-                "certification": "technical",
-                "project": "technical",
-                "narrative": "behavioral",
-                "problem_solving": "situational"
-            }
-            db_category = category_map.get(category_raw, "technical")
-            
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
             return {"status": "success", "stage": stage_name, "question": content}
         except Exception as e:

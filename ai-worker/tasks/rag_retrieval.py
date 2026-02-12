@@ -59,10 +59,6 @@ def get_embedder():
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (하이브리드 검색 적용)
 # -----------------------------------------------------------
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from langchain_community.vectorstores import PGVector
 
 # -----------------------------------------------------------
@@ -75,31 +71,11 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
     print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_category})")
     
     # 1. 임베딩 모델 및 연결 설정
-<<<<<<< HEAD
-=======
-def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
-    """
-    Args:
-        query (str): 검색할 질문 내용
-        resume_id (int): 대상 지원자 ID
-        top_k (int): 가져올 개수
-        filter_category (str): 'project', 'narrative', 'activity' 등 (없으면 전체 검색)
-    """
-    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (필터: {filter_category})")
-    
-    # 임베딩 모델 가져오기 (지연 로딩)
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     embedder = get_embedder()
     if not embedder:
         print("❌ 임베딩 모델을 사용할 수 없습니다.")
         return []
     
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
     
     try:
@@ -171,67 +147,6 @@ def get_retriever(resume_id=1, top_k=3, filter_category=None):
             "filter": search_filter
         }
     )
-<<<<<<< HEAD
-=======
-    # 1. 검색어(Query)를 벡터로 변환
-    try:
-        query_vector = embedder.embed_query(query)
-    except Exception as e:
-        print(f"❌ 쿼리 임베딩 실패: {e}")
-        return []
-    
-    results = []
-    
-    try:
-        with engine.connect() as conn:
-            # 2. 동적 SQL 생성 (필터링 조건 추가)
-            # 기본 쿼리
-            base_sql = """
-                SELECT chunk_text, metadata, (embedding <=> :qv) as distance
-                FROM resume_embeddings
-                WHERE resume_id = :rid
-            """
-            
-            # ★ 메타데이터 필터링 추가 (이게 핵심!)
-            # DB에 저장된 metadata JSON의 'category' 키를 확인합니다.
-            if filter_category:
-                base_sql += f" AND metadata->>'category' = '{filter_category}'"
-            
-            # 정렬 및 제한
-            final_sql = base_sql + " ORDER BY distance ASC LIMIT :k"
-            
-            # 3. 쿼리 실행
-            rows = conn.execute(text(final_sql), {
-                "qv": str(query_vector),
-                "rid": int(resume_id),
-                "k": top_k
-            }).fetchall()
-
-            # 4. 결과 가공
-            for row in rows:
-                chunk_text = row[0]
-                meta_data = row[1] # DB에서 꺼낸 메타데이터 (dict)
-                
-                # 결과 리스트에 텍스트와 메타데이터를 함께 담음
-                results.append({
-                    'text': chunk_text,
-                    'meta': meta_data  # Step 8에서 활용 가능
-                })
-
-            print(f"   👉 {len(results)}개의 관련 내용을 찾았습니다.")
-            for i, res in enumerate(results):
-                # 텍스트가 너무 길 수 있으므로 앞부분 80자만 출력
-                preview = res['text'].replace('\n', ' ')[:80]
-                category = res['meta'].get('category', 'N/A')
-                print(f"      [{i+1}] ({category}): {preview}...")
-
-    except Exception as e:
-        print(f"❌ DB 검색 실패: {e}")
-        
-    return results
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 # -----------------------------------------------------------
 # 테스트 코드

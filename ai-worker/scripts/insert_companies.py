@@ -14,15 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sentence_transformers import SentenceTransformer
 from sqlmodel import Session, create_engine
-<<<<<<< HEAD
-<<<<<<< HEAD
 from db_models import Company
-=======
-from models import Company
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-from db_models import Company
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from datetime import datetime
 
 # 환경 변수에서 DB URL 가져오기
