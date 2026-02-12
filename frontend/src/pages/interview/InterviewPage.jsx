@@ -17,7 +17,18 @@ const InterviewPage = ({
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
+  // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
+  const [prevIdx, setPrevIdx] = React.useState(currentIdx);
+
   const audioRef = React.useRef(null);
+  const isTimeOverRef = React.useRef(false); // 타이머 종료 처리 중복 방지용 Ref
+
+  // 질문이 변경되면 렌더링 도중 즉시 상태 리셋
+  if (currentIdx !== prevIdx) {
+    setPrevIdx(currentIdx);
+    setTimeLeft(60);
+    isTimeOverRef.current = false;
+  }
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
@@ -63,7 +74,14 @@ const InterviewPage = ({
   React.useEffect(() => {
     // 타이머 기능 활성화
     if (timeLeft <= 0) {
-      if (!isRecording) nextQuestion();
+      // 이미 타이머 종료 처리를 했다면 중복 호출 방지
+      if (isTimeOverRef.current) return;
+
+      if (!isRecording) {
+        console.log("Time over, moving to next question.");
+        isTimeOverRef.current = true; // 처리 완료 플래그 설정
+        nextQuestion();
+      }
       return;
     }
 
