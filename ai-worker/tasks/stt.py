@@ -1,6 +1,7 @@
 import os
 import base64
 import tempfile
+import logging # [NEW] Added missing import
 from celery import shared_task
 from faster_whisper import WhisperModel
 
@@ -45,7 +46,22 @@ def recognize_audio_task(audio_b64: str):
     Args:
         audio_b64 (str): Base64 인코딩된 오디오 데이터 (헤더 포함될 수 있음)
     """
-    global stt_pipeline
+[
+  {
+    "StartLine": 49,
+    "EndLine": 49,
+    "TargetContent": "    global stt_pipeline",
+    "ReplacementContent": "    global stt_model",
+    "AllowMultiple": false
+  },
+  {
+    "StartLine": 115,
+    "EndLine": 117,
+    "TargetContent": "        if temp_path and os.path.exists(temp_path):\n            try:\n                os.remove(temp_path)",
+    "ReplacementContent": "        if input_path and os.path.exists(input_path):\n            try:\n                os.remove(input_path)",
+    "AllowMultiple": false
+  }
+]
     
     # 모델 로드 (지연 로딩)
     if stt_model is None:
@@ -83,13 +99,16 @@ def recognize_audio_task(audio_b64: str):
             output_path
         ]
         
-        # Inference
-        # segments는 generator이므로 순회해야 실제 추론이 수행됨
+        # [변경] Faster-Whisper 사용 (stt_model.transcribe)
+        logger.info(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})")
+        
+        # segments, info = stt_model.transcribe(temp_filename, beam_size=5, language="ko")
+        # beam_size=1 (Greedy search) for speed
         segments, info = stt_model.transcribe(
-            temp_path, 
-            beam_size=5, 
-            language="ko", 
-            vad_filter=True, # 음성 구간 감지 활성화 (무음 제거)
+            input_path, 
+            beam_size=1, 
+            language="ko",
+            vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500)
         )
         

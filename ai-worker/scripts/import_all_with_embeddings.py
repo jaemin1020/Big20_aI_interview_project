@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 # ai-worker 및 backend-core 경로 설정
-# 이를 통해 backend-core의 models.py를 직접 임포트하여 스키마 중복 정의를 방지합니다.
+# 이를 통해 backend-core의 models_db.py를 직접 임포트하여 스키마 중복 정의를 방지합니다.
 current_dir = Path(__file__).parent
 backend_core_path = current_dir.parent.parent / "backend-core"
 ai_worker_path = current_dir.parent
@@ -15,8 +15,8 @@ sys.path.append(str(ai_worker_path))
 
 from abc import ABC
 from sqlmodel import Session, create_engine, select
-# backend-core/models.py 에서 임포트
-from models import Question, AnswerBank, QuestionCategory, QuestionDifficulty, Company
+# backend-core/db_models.py 에서 임포트
+from db_models import Question, AnswerBank, QuestionCategory, QuestionDifficulty, Company
 # vector_utils에서 중앙 관리형 EmbeddingGenerator 사용
 from utils.vector_utils import get_embedding_generator
 from datetime import datetime

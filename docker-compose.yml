@@ -12,7 +12,7 @@ services:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
     ports:
-      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+      - "15432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
     networks:
       - interview_network
 
@@ -43,6 +43,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
@@ -113,6 +114,7 @@ services:
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - N_GPU_LAYERS=0
+      - USE_GPU=false
       - USE_GPU=false
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - HF_HOME=/app/models/.cache

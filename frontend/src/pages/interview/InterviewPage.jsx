@@ -13,15 +13,27 @@ const InterviewPage = ({
   nextQuestion,
   onFinish,
   videoRef,
-  isLoading
+  isLoading,
+  visionData // [NEW] Receive vision data
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
+  // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
+  const [prevIdx, setPrevIdx] = React.useState(currentIdx);
+
   const audioRef = React.useRef(null);
+  const isTimeOverRef = React.useRef(false); // 타이머 종료 처리 중복 방지용 Ref
+
+  // 질문이 변경되면 렌더링 도중 즉시 상태 리셋
+  if (currentIdx !== prevIdx) {
+    setPrevIdx(currentIdx);
+    setTimeLeft(60);
+    isTimeOverRef.current = false;
+  }
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
-    
+
     // TTS 재생 로직
     const playTTS = () => {
       // 1. 서버 제공 오디오 URL이 있는 경우
@@ -33,14 +45,14 @@ const InterviewPage = ({
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
         audio.play().catch(e => console.error("Audio play failed:", e));
-      } 
+      }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
           const utterance = new SpeechSynthesisUtterance(question);
           utterance.lang = 'ko-KR';
-          utterance.rate = 1.0; 
+          utterance.rate = 1.0;
           utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }
@@ -63,7 +75,14 @@ const InterviewPage = ({
   React.useEffect(() => {
     // 타이머 기능 활성화
     if (timeLeft <= 0) {
-      if (!isRecording) nextQuestion();
+      // 이미 타이머 종료 처리를 했다면 중복 호출 방지
+      if (isTimeOverRef.current) return;
+
+      if (!isRecording) {
+        console.log("Time over, moving to next question.");
+        isTimeOverRef.current = true; // 처리 완료 플래그 설정
+        nextQuestion();
+      }
       return;
     }
 
@@ -166,6 +185,7 @@ const InterviewPage = ({
 
           {/* Right: Video Area */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Video Container to ensure absolute positioning works relative to this */}
             <div style={{ position: 'relative', width: '100%', paddingTop: '75%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
               <video
                 ref={videoRef}
@@ -174,6 +194,52 @@ const InterviewPage = ({
                 muted
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
+
+              {/* [NEW] Vision HUD Overlay */}
+              {visionData && (
+                <>
+                  {/* 1. Gaze Status (Top Left) */}
+                  <div style={{
+                    position: 'absolute', top: '1rem', left: '1rem',
+                    padding: '6px 12px', borderRadius: '12px',
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                    color: visionData.gaze === 'center' ? '#4ade80' : '#f87171',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.9rem', fontWeight: 'bold'
+                  }}>
+                    {visionData.gaze === 'center' ? '👀 정면 응시' : `👀 시선 이탈 (${visionData.gaze})`}
+                  </div>
+
+                  {/* 2. Emotion Score (Top Right) below recording lamp */}
+                  <div style={{
+                    position: 'absolute', top: '3.5rem', right: '0.8rem',
+                    padding: '6px 12px', borderRadius: '12px',
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                    color: visionData.emotion === 'anxious' ? '#f87171' : '#facc15',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.9rem', fontWeight: 'bold',
+                    textAlign: 'right'
+                  }}>
+                    <div>{visionData.emotion === 'happy' ? '😊 미소' : (visionData.emotion === 'anxious' ? '😟 긴장' : '😐 평온')}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>미소: {Math.round(visionData.scores.smile * 100)}%</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>긴장: {Math.round(visionData.scores.anxiety * 100)}%</div>
+                  </div>
+
+                  {/* 3. Posture/Head (Bottom Center) */}
+                  {visionData.head === 'unstable' && (
+                    <div style={{
+                      position: 'absolute', bottom: '1rem', left: '50%', transform: 'translateX(-50%)',
+                      padding: '6px 12px', borderRadius: '12px',
+                      background: 'rgba(239, 68, 68, 0.8)', color: 'white',
+                      fontSize: '0.9rem', fontWeight: 'bold'
+                    }}>
+                      🚫 고개 흔들림 감지
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Recording Status Lamp */}
               <div style={{
                 position: 'absolute',
                 top: '0.8rem',

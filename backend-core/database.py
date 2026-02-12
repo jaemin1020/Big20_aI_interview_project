@@ -4,7 +4,7 @@ import logging
 from sqlmodel import SQLModel, create_engine, Session, text
 from sqlalchemy.exc import OperationalError
 
-from models import User, Interview, Transcript, EvaluationReport, Question
+from db_models import User, Interview, Transcript, EvaluationReport, Question
 
 # 로깅 설정
 logger = logging.getLogger("Database")
@@ -84,7 +84,7 @@ def seed_initial_data():
     생성자: ejm
     생성일자: 2026-02-06
     """
-    from models import User, UserRole
+    from db_models import User, UserRole
     from utils.auth_utils import get_password_hash
     from sqlmodel import select
 

@@ -44,7 +44,31 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 # 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
 active_websockets: Dict[str, WebSocket] = {}
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+# 4. Local Whisper 설정
+WHISPER_MODEL = None
+LOCAL_MODEL_SIZE = "large-v3-turbo" # or small, medium, etc.
 
+def load_local_whisper():
+    global WHISPER_MODEL
+    try:
+        if WHISPER_MODEL is None:
+            logger.info(f"⏳ Loading Local Whisper Model ({LOCAL_MODEL_SIZE})...")
+            # GPU 사용 시 float16, CPU 사용 시 int8 권장
+            device = "cuda" if os.getenv("USE_GPU", "true").lower() == "true" else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+            
+            WHISPER_MODEL = WhisperModel(LOCAL_MODEL_SIZE, device=device, compute_type=compute_type)
+            logger.info(f"✅ Local Whisper Model Loaded on {device}")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Local Whisper: {e}")
+=======
+
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+
+>>>>>>> 린_phase4
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -325,6 +349,31 @@ async def root():
         "status": "running",
         "mode": "Video Analysis + Remote STT (via AI-Worker)"
     }
+
+# [복구: 2026-02-12]
+# EnvTestPage.jsx 테스트를 위한 필수 엔드포인트
+from fastapi import UploadFile, File, HTTPException
+
+@app.post("/stt/recognize")
+async def stt_recognize(file: UploadFile = File(...)):
+    """
+    STT 테스트용 엔드포인트 (EnvTestPage.jsx에서 호출)
+    """
+    try:
+        audio_bytes = await file.read()
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        task = celery_app.send_task(
+            "tasks.stt.recognize",
+            args=[audio_b64],
+            queue="gpu_queue"
+        )
+        # 테스트용이므로 결과 대기
+        result = task.get(timeout=30)
+        return result
+    except Exception as e:
+        logger.error(f"STT Test Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
