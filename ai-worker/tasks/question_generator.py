@@ -223,22 +223,9 @@ def generate_next_question_task(interview_id: int):
 
             # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
-            
-<<<<<<< HEAD
-            # AI 질문 생성 실행
-            content = exaone.generate_human_like_question(
-                name=candidate_name,
-<<<<<<< HEAD
-=======
-                position=target_role,
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-                stage=stage_name,
-                guide=next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                context_list=contexts
-            )
-=======
+
             chain = prompt | llm | output_parser
->>>>>>> 린_phase4
+
             
             logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
             content = chain.invoke({
