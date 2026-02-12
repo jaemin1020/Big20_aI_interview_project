@@ -96,10 +96,10 @@ const MainPage = ({
               onClick={onStartInterview}
               style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}
             >
-              무료로 시작하기
+              면접 시작하기
             </PremiumButton>
             <button className="secondary-button" onClick={onAbout}>
-              <span>작동 원리 보기</span>
+              <span>브랜드 소개</span>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
