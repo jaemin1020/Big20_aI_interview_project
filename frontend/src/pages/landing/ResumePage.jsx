@@ -132,11 +132,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600', padding: '4px 0' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>이름</dt>
               <dd>
                 <input
@@ -147,10 +142,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 회사</dt>
               <dd>
                 <input
@@ -172,26 +163,12 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력 요약</dt>
-=======
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력</dt>
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력</dt>
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ minHeight: '60px', whiteSpace: 'pre-wrap', lineHeight: '1.5', padding: '4px 0' }}
                 >
-<<<<<<< HEAD
-<<<<<<< HEAD
-                  {uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'}
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
                   {(uploadResult?.structured_data?.activities || uploadResult?.activities)?.length > 0 ? (
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       {(uploadResult?.structured_data?.activities || uploadResult?.activities)
@@ -216,10 +193,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                   ) : (
                     uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'
                   )}
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
                 </div>
               </dd>
 
@@ -233,26 +206,12 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>관련 기술</dt>
-=======
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>보유 자격증</dt>
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>보유 자격증</dt>
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ padding: '4px 0', lineHeight: '1.5' }}
                 >
-<<<<<<< HEAD
-<<<<<<< HEAD
-                  {Array.isArray(uploadResult?.skills) ? uploadResult.skills.join(', ') : (uploadResult?.skills || '정보 없음')}
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
                   {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)?.length > 0 ? (
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)
@@ -265,10 +224,6 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                         ))}
                     </ul>
                   ) : '정보 없음'}
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
                 </div>
               </dd>
             </dl>

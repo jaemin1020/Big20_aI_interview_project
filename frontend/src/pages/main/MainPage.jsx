@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PremiumButton from '../../components/ui/PremiumButton';
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 const CountUp = ({ end, duration = 2000, suffix = '', decimals = 0, delay = 0 }) => {
   const [count, setCount] = useState(0);
 
@@ -42,26 +37,13 @@ const CountUp = ({ end, duration = 2000, suffix = '', decimals = 0, delay = 0 })
   return <>{count.toFixed(decimals)}{suffix}</>;
 };
 
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 const MainPage = ({
   onStartInterview,
   onLogin,
   onRegister,
   user,
-<<<<<<< HEAD
-<<<<<<< HEAD
-  onLogout
-=======
   onLogout,
   onAbout
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-  onLogout,
-  onAbout
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 }) => {
   const [scrollY, setScrollY] = useState(0);
 
@@ -72,14 +54,6 @@ const MainPage = ({
   }, []);
 
   return (
-<<<<<<< HEAD
-<<<<<<< HEAD
-    <div className="main-container animate-fade-in" style={{
-      flex: 1,
-      width: '100%',
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     <div className="main-container" style={{
       position: 'absolute',
       top: 0,
@@ -88,84 +62,11 @@ const MainPage = ({
       height: '100vh',
       paddingTop: '72px',
       boxSizing: 'border-box',
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
       zIndex: 0,
     }}>
-<<<<<<< HEAD
-<<<<<<< HEAD
-      {/* Auth Buttons removed - handled by Header */}
-
-      <div style={{ textAlign: 'center', padding: '4rem 3rem', maxWidth: '800px' }}>
-        {/* Step 1: Branding */}
-        <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div className="logo-wrapper" style={{ width: '320px', marginBottom: '1rem' }}>
-            <img
-              src="/logo.png"
-              alt="BIGVIEW Logo"
-              className="theme-logo"
-            />
-          </div>
-        </div>
-
-        {/* Step 2: Welcome Message */}
-        <div style={{ marginBottom: '3rem' }}>
-          <h2 style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '1rem', opacity: 0.9 }}>
-            환영합니다!
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', lineHeight: '1.8' }}>
-            소개문구<br />
-          </p>
-        </div>
-
-        {/* Step 3, 4: Action Buttons */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
-          <PremiumButton
-            onClick={onStartInterview}
-            style={{ padding: '18px 48px', fontSize: '1.2rem' }}
-          >
-            면접 시작
-          </PremiumButton>
-          <PremiumButton
-            variant="secondary"
-            style={{ padding: '18px 48px', fontSize: '1.2rem' }}
-          >
-            더 알아보기
-          </PremiumButton>
-        </div>
-      </div>
-
-      {/* Decorative Blur Circles */}
-      <div style={{
-        position: 'absolute',
-        top: '10%',
-        left: '5%',
-        width: '300px',
-        height: '300px',
-        background: 'var(--primary)',
-        filter: 'blur(150px)',
-        opacity: 0.15,
-        zIndex: -1
-      }}></div>
-      <div style={{
-        position: 'absolute',
-        bottom: '10%',
-        right: '5%',
-        width: '300px',
-        height: '300px',
-        background: 'var(--secondary)',
-        filter: 'blur(150px)',
-        opacity: 0.1,
-        zIndex: -1
-      }}></div>
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       {/* Abstract Background Shapes */}
       <div className="bg-shape shape-1" />
       <div className="bg-shape shape-2" />
@@ -687,10 +588,6 @@ const MainPage = ({
           color: #fff;
         }
       `}</style>
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     </div>
   );
 };

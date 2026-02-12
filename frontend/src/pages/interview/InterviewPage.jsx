@@ -17,14 +17,6 @@ const InterviewPage = ({
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
-<<<<<<< HEAD
-  const audioRef = React.useRef(null);
-
-  React.useEffect(() => {
-    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
-<<<<<<< HEAD
-    
-=======
   // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
   const [prevIdx, setPrevIdx] = React.useState(currentIdx);
 
@@ -39,10 +31,8 @@ const InterviewPage = ({
   }
 
   React.useEffect(() => {
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
+    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
 
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
     // TTS 재생 로직
     const playTTS = () => {
       // 1. 서버 제공 오디오 URL이 있는 경우
@@ -54,30 +44,14 @@ const InterviewPage = ({
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
         audio.play().catch(e => console.error("Audio play failed:", e));
-<<<<<<< HEAD
-<<<<<<< HEAD
-      } 
-=======
       }
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-      }
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
           const utterance = new SpeechSynthesisUtterance(question);
           utterance.lang = 'ko-KR';
-<<<<<<< HEAD
-<<<<<<< HEAD
-          utterance.rate = 1.0; 
-=======
           utterance.rate = 1.0;
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-          utterance.rate = 1.0;
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
           utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }
@@ -100,9 +74,6 @@ const InterviewPage = ({
   React.useEffect(() => {
     // 타이머 기능 활성화
     if (timeLeft <= 0) {
-<<<<<<< HEAD
-      if (!isRecording) nextQuestion();
-=======
       // 이미 타이머 종료 처리를 했다면 중복 호출 방지
       if (isTimeOverRef.current) return;
 
@@ -111,7 +82,6 @@ const InterviewPage = ({
         isTimeOverRef.current = true; // 처리 완료 플래그 설정
         nextQuestion();
       }
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
       return;
     }
 

@@ -28,16 +28,8 @@ import ResultPage from './pages/result/ResultPage';
 import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 import AboutPage from './pages/about/AboutPage';
 
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-import AboutPage from './pages/about/AboutPage';
-
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 
 function App() {
   const [step, setStep] = useState('main');
@@ -87,20 +79,7 @@ function App() {
   // Users selected interview for result view
   const [selectedInterview, setSelectedInterview] = useState(null);
 
-<<<<<<< HEAD
-  // Persistence Effect
-  useEffect(() => {
-    sessionStorage.setItem('current_step', step);
-    sessionStorage.setItem('current_interview', JSON.stringify(interview));
-    sessionStorage.setItem('current_questions', JSON.stringify(questions));
-    sessionStorage.setItem('current_idx', currentIdx);
-    sessionStorage.setItem('current_report', JSON.stringify(report));
-    sessionStorage.setItem('current_position', position);
-    sessionStorage.setItem('current_parsed_resume', JSON.stringify(parsedResumeData));
-  }, [step, interview, questions, currentIdx, report, position, parsedResumeData]);
-=======
 
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
 
 
   const videoRef = useRef(null);
@@ -125,26 +104,6 @@ function App() {
           const savedPosition = sessionStorage.getItem('app_position');
           const savedParsedResume = sessionStorage.getItem('app_parsedResume');
 
-<<<<<<< HEAD
-          // 1. 이미 로그인했는데 로그인/회원가입 페이지면 -> 랜딩으로
-          if (savedStep === 'auth') {
-            setStep('main');
-          }
-          else {
-            const hasInterviewData = sessionStorage.getItem('current_interview');
-            const stepsRequiringInterview = ['env_test', 'final_guide', 'loading_questions', 'interview', 'loading', 'result'];
-
-            if (savedStep) {
-              setStep(savedStep);
-              if (savedStep === 'complete' && !savedReport && savedInterview) {
-                const interviewData = JSON.parse(savedInterview);
-                pollReport(interviewData.id);
-              }
-            } else {
-              setStep('main');
-            }
-          }
-=======
           // 상태 복구 (Hydration)
           if (savedInterview) {
             try { setInterview(JSON.parse(savedInterview)); } catch (e) { console.error(e); }
@@ -167,7 +126,6 @@ function App() {
             setStep('main');
           }
 
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
           isInitialized.current = true;
         })
         .catch((err) => {
@@ -284,10 +242,7 @@ function App() {
 
   const initInterviewSession = async () => {
     setIsLoading(true);
-<<<<<<< HEAD
-=======
     setCurrentIdx(0); // 새로운 면접 시작 시 질문 인덱스 초기화
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
     try {
       // 1. Create Interview with Parsed Position & Resume ID
       const structuredBase = parsedResumeData?.structured_data;
@@ -477,26 +432,6 @@ function App() {
         setTranscript('');
         setIsLoading(false);
       } else {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링
-        console.log('[nextQuestion] Polling for next AI-generated question...');
-        let foundNew = false;
-        const lastQId = questions[questions.length - 1]?.id;
-
-        for (let i = 0; i < 150; i++) {
-          await new Promise(r => setTimeout(r, 2000));
-          const updatedQs = await getInterviewQuestions(interview.id);
-
-          // 조건: 전체 개수가 늘었거나, 마지막 질문의 ID가 바뀌었을 때
-          if (updatedQs.length > questions.length ||
-            (updatedQs.length > 0 && updatedQs[updatedQs.length - 1].id !== lastQId)) {
-            console.log('[nextQuestion] New question detected!', updatedQs[updatedQs.length - 1]);
-            setQuestions(updatedQs);
-            setCurrentIdx(updatedQs.length - 1); // 항상 가장 마지막 질문으로 인덱스 이동
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
@@ -507,23 +442,12 @@ function App() {
           if (updatedQs.length > questions.length) {
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             setTranscript('');
             foundNew = true;
             break;
           }
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-=======
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         if (!foundNew) {
           // 더 이상 질문이 없으면 면접 종료
           console.log('[nextQuestion] No more questions found. Finishing interview.');
@@ -563,15 +487,7 @@ function App() {
   }, []);
 
   return (
-<<<<<<< HEAD
-<<<<<<< HEAD
-    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
-=======
     <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-    <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
@@ -659,43 +575,16 @@ function App() {
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
             onLogout={handleLogout}
-<<<<<<< HEAD
-<<<<<<< HEAD
-          />
-        )}
-
-        {step === 'auth' && (
-          <AuthPage
-            authMode={authMode}
-            setAuthMode={setAuthMode}
-            account={account}
-            setAccount={setAccount}
-            handleAuth={handleAuth}
-            authError={authError}
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             onAbout={() => setStep('about')}
           />
         )}
 
         {step === 'about' && (
           <AboutPage
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
             onBack={() => setStep('main')}
           />
         )}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-
-=======
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         {step === 'auth' && (
           <AuthPage
             authMode={authMode}
@@ -710,10 +599,6 @@ function App() {
 
 
 
-<<<<<<< HEAD
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         {step === 'landing' && (
           <LandingPage
             startInterview={startInterviewFlow}
@@ -760,10 +645,7 @@ function App() {
             onCheckResult={() => setStep('result')}
             onExit={() => {
               setStep('main');
-<<<<<<< HEAD
-=======
               setCurrentIdx(0); // 메인으로 돌아갈 때 질문 인덱스 초기화
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
               setReport(null);
               setIsReportLoading(false);
             }}

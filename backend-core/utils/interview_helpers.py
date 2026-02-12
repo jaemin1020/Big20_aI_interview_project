@@ -28,15 +28,7 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
     """
     try:
         # Resume 모델 임포트 (순환 참조 방지를 위해 함수 내부에서 임포트)
-<<<<<<< HEAD
-<<<<<<< HEAD
         from db_models import Resume
-=======
-        from models import Resume
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-        from db_models import Resume
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         
         resume = db.query(Resume).filter(Resume.id == resume_id).first()
         

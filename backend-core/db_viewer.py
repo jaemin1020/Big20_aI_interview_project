@@ -1,21 +1,8 @@
 from sqlmodel import Session, create_engine, select
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 from db_models import ResumeChunk, Resume
 import os
 
 DATABASE_URL = "postgresql://interview_user:interview_password@interview_postgres:15432/interview_db"
-<<<<<<< HEAD
-=======
-from models import ResumeChunk, Resume
-import os
-
-DATABASE_URL = "postgresql://interview_user:interview_password@interview_postgres:5432/interview_db"
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 engine = create_engine(DATABASE_URL)
 
 def save_chunks_to_file():
