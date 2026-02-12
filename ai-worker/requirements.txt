@@ -59,6 +59,3 @@ ipykernel>=6.29.0
 
 # STT Optimization
 faster-whisper>=1.1.0
-
-
-

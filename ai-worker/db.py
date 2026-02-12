@@ -386,4 +386,3 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
         
         logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) saved for Interview {interview_id}")
         return question.id
-
