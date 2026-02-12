@@ -30,15 +30,21 @@ class VisionAnalyzer:
         if not os.path.exists(self.model_path):
             logger.warning(f"⚠️ 모델 파일 없음: {self.model_path}")
             try:
-                logger.info("-> Google 서버에서 모델 다운로드 시도...")
+                logger.info("-> 모델 다운로드 시도 (urllib)...")
                 os.makedirs("model_repository", exist_ok=True)
-                os.system(f"curl -L -o {self.model_path} https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task")
+                import urllib.request
+                url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+                urllib.request.urlretrieve(url, self.model_path)
+                logger.info("✅ 모델 다운로드 완료")
             except Exception as e:
-                logger.error(f"모델 다운로드 실패: {e}")
+                logger.error(f"❌ 모델 다운로드 실패: {e}")
                 return
             
         try:
-            base_options = python.BaseOptions(model_asset_path=self.model_path)
+            base_options = python.BaseOptions(
+                model_asset_path=self.model_path,
+                delegate=python.BaseOptions.Delegate.CPU # Docker 환경에서는 CPU 권장
+            )
             options = vision.FaceLandmarkerOptions(
                 base_options=base_options,
                 output_face_blendshapes=True, # 표정 분석 활성화
