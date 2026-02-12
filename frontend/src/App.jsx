@@ -11,8 +11,7 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
-  getCurrentUser,
-  recognizeAudio
+  getCurrentUser
 } from './api/interview';
 
 // Layout & UI
@@ -29,11 +28,8 @@ import ResultPage from './pages/result/ResultPage';
 import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
-<<<<<<< HEAD
-=======
 import AboutPage from './pages/about/AboutPage';
 
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 
 function App() {
   const [step, setStep] = useState('main');
@@ -99,18 +95,8 @@ function App() {
   const pcRef = useRef(null);
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-<<<<<<< HEAD
-<<<<<<< HEAD
-  const deepgramConnectionRef = useRef(null);
-=======
->>>>>>> 린_phase4
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
-=======
-  const isRecordingRef = useRef(false);
-  const isInitialized = useRef(false);
-  const audioChunksRef = useRef([]);
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -325,67 +311,8 @@ function App() {
 
     ws.onerror = (error) => console.error('[WebSocket] Error:', error);
     ws.onclose = () => console.log('[WebSocket] Closed');
-<<<<<<< HEAD
   };
 
-<<<<<<< HEAD
-  const setupDeepgram = (stream) => {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.warn("Deepgram API Key not found");
-      return;
-    }
-
-    const deepgram = createClient(apiKey);
-    const connection = deepgram.listen.live({
-      model: "nova-2",
-      language: "ko",
-      smart_format: true,
-      encoding: "linear16",
-      sample_rate: 16000,
-    });
-
-    connection.on("Open", () => {
-      console.log("Deepgram WebSocket Connected");
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0 && connection.getReadyState() === 1) {
-          connection.send(event.data);
-        }
-      });
-      mediaRecorder.start(250);
-      mediaRecorderRef.current = mediaRecorder;
-    });
-
-    connection.on("Results", (result) => {
-      const channel = result.channel;
-      if (channel && channel.alternatives && channel.alternatives[0]) {
-        const transcriptText = channel.alternatives[0].transcript;
-        const isFinal = result.is_final;
-
-        if (transcriptText) {
-          if (isFinal) {
-            setTranscript(prev => prev + ' ' + transcriptText);
-            setSubtitle('');
-          } else {
-            setSubtitle(transcriptText);
-          }
-        }
-      }
-    });
-
-    connection.on("Error", (err) => {
-      console.error("Deepgram Error:", err);
-    });
-
-    deepgramConnectionRef.current = connection;
-=======
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-  };
-
-=======
->>>>>>> 린_phase4
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
@@ -398,14 +325,6 @@ function App() {
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
       videoRef.current.srcObject = stream;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-      setupDeepgram(stream);
-
-=======
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track:', track.kind, track.label);
@@ -445,88 +364,14 @@ function App() {
     console.log('[WebRTC] Connection established successfully');
   };
 
-  const toggleRecording = async () => {
+  const toggleRecording = () => {
     if (isRecording) {
-      // 녹음 중지 및 STT 처리
-      console.log('[STT] Stopping recording...');
       setIsRecording(false);
       isRecordingRef.current = false;
-<<<<<<< HEAD
-=======
-      
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
     } else {
-      // 녹음 시작
-      console.log('[STT] Starting recording...');
       setTranscript('');
-      audioChunksRef.current = [];
       setIsRecording(true);
       isRecordingRef.current = true;
-<<<<<<< HEAD
-=======
-
-      try {
-        // 비디오 스트림에서 오디오 트랙 가져오기
-        const stream = videoRef.current?.srcObject;
-        if (!stream) {
-          throw new Error('No media stream available');
-        }
-
-        const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          throw new Error('No audio track found');
-        }
-
-        // 오디오만 포함하는 새 스트림 생성
-        const audioStream = new MediaStream(audioTracks);
-        
-        const mediaRecorder = new MediaRecorder(audioStream, { 
-          mimeType: 'audio/webm' 
-        });
-        mediaRecorderRef.current = mediaRecorder;
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.onstop = async () => {
-          console.log('[STT] Processing audio...');
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          
-          try {
-            setIsLoading(true);
-            const result = await recognizeAudio(audioBlob);
-            console.log('[STT] Recognition result:', result);
-            
-            if (result.text && result.text.trim()) {
-              setTranscript(result.text);
-            } else {
-              setTranscript('음성이 인식되지 않았습니다.');
-            }
-          } catch (error) {
-            console.error('[STT] Recognition error:', error);
-            setTranscript('음성 인식 중 오류가 발생했습니다.');
-          } finally {
-            setIsLoading(false);
-            audioChunksRef.current = [];
-          }
-        };
-
-        mediaRecorder.start();
-        console.log('[STT] MediaRecorder started');
-        
-      } catch (error) {
-        console.error('[STT] Failed to start recording:', error);
-        alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
-        setIsRecording(false);
-        isRecordingRef.current = false;
-      }
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
     }
   };
 
@@ -590,27 +435,21 @@ function App() {
         setTranscript('');
         setIsLoading(false);
       } else {
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
-        const lastQId = questions[questions.length - 1]?.id;
-
-        for (let i = 0; i < 150; i++) {
+        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
           await new Promise(r => setTimeout(r, 2000));
           const updatedQs = await getInterviewQuestions(interview.id);
 
-          // 조건: 전체 개수가 늘었거나, 마지막 질문의 ID가 바뀌었을 때
-          if (updatedQs.length > questions.length ||
-            (updatedQs.length > 0 && updatedQs[updatedQs.length - 1].id !== lastQId)) {
-            console.log('[nextQuestion] New question detected!', updatedQs[updatedQs.length - 1]);
+          if (updatedQs.length > questions.length) {
             setQuestions(updatedQs);
-            setCurrentIdx(updatedQs.length - 1); // 항상 가장 마지막 질문으로 인덱스 이동
+            setCurrentIdx(prev => prev + 1);
             setTranscript('');
             foundNew = true;
             break;
           }
         }
-
 
         if (!foundNew) {
           // 더 이상 질문이 없으면 면접 종료
@@ -647,22 +486,11 @@ function App() {
       if (wsRef.current) wsRef.current.close();
       if (pcRef.current) pcRef.current.close();
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-<<<<<<< HEAD
-<<<<<<< HEAD
-      if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
-=======
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
     };
   }, []);
 
   return (
-<<<<<<< HEAD
-    <div className={`container ${step !== 'auth' ? 'has-header' : ''}`}>
-=======
     <div className={['interview', 'profile', 'settings'].includes(step) ? `container ${step !== 'auth' ? 'has-header' : ''}` : 'full-screen-layout'}>
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
@@ -750,34 +578,16 @@ function App() {
             onRegister={() => { setAuthMode('register'); setStep('auth'); }}
             user={user}
             onLogout={handleLogout}
-<<<<<<< HEAD
-          />
-        )}
-
-        {step === 'auth' && (
-          <AuthPage
-            authMode={authMode}
-            setAuthMode={setAuthMode}
-            account={account}
-            setAccount={setAccount}
-            handleAuth={handleAuth}
-            authError={authError}
-=======
             onAbout={() => setStep('about')}
           />
         )}
 
         {step === 'about' && (
           <AboutPage
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
             onBack={() => setStep('main')}
           />
         )}
 
-<<<<<<< HEAD
-
-
-=======
         {step === 'auth' && (
           <AuthPage
             authMode={authMode}
@@ -792,7 +602,6 @@ function App() {
 
 
 
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
         {step === 'landing' && (
           <LandingPage
             startInterview={startInterviewFlow}

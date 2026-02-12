@@ -1,74 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
-<<<<<<< HEAD
-<<<<<<< HEAD
-import { createClient } from "@deepgram/sdk";
-=======
 import { recognizeAudio } from '../../api/interview';
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
-import { recognizeAudio } from '../../api/interview';
->>>>>>> 린_phase4
 
 const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const step = envTestStep;
   const setStep = setEnvTestStep;
-<<<<<<< HEAD
-<<<<<<< HEAD
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [isRecognitionOk, setIsRecognitionOk] = useState(false);
-  const [transcript, setTranscript] = useState('');
-=======
-  
+
   // Audio Test States
   const [audioLevel, setAudioLevel] = useState(0);
   const [isRecognitionOk, setIsRecognitionOk] = useState(false);
   const [transcript, setTranscript] = useState('');
-=======
-  
-  // Audio Test States
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [isRecognitionOk, setIsRecognitionOk] = useState(false);
-  const [transcript, setTranscript] = useState('');
->>>>>>> 린_phase4
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioStream, setAudioStream] = useState(null);
 
   // Video Test States
-<<<<<<< HEAD
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
   const [videoStream, setVideoStream] = useState(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
 
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-<<<<<<< HEAD
-<<<<<<< HEAD
-  const deepgramConnectionRef = useRef(null);
 
-  // Real Audio Level Visualization & Deepgram STT
-=======
-  
   // 1. Audio Stream & Visualization Setup
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
-  
-  // 1. Audio Stream & Visualization Setup
->>>>>>> 린_phase4
   useEffect(() => {
     let audioContext;
     let analyser;
     let microphone;
     let javascriptNode;
-<<<<<<< HEAD
-<<<<<<< HEAD
-    let stream;
-=======
->>>>>>> 린_phase4
 
     const initAudio = async () => {
       if (step !== 'audio') return;
@@ -95,7 +54,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
           analyser.getByteFrequencyData(array);
           let values = 0;
           for (let i = 0; i < array.length; i++) values += array[i];
-          
+
           const average = values / array.length;
           setAudioLevel(Math.min(100, Math.max(0, average * 2)));
         };
@@ -116,133 +75,71 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
       if (microphone) microphone.disconnect();
       if (analyser) analyser.disconnect();
       if (audioContext) audioContext.close();
-      
+
       // Stop stream tracks only when leaving the step completely or unmounting
       // but here we might urge to stop it to release mic
       if (step !== 'audio' && audioStream) {
-         audioStream.getTracks().forEach(track => track.stop());
-      }
-    };
-<<<<<<< HEAD
-  }, [step]);
-=======
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-
-    const initAudio = async () => {
-      if (step !== 'audio') return;
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setAudioStream(stream); // Save for recording
-
-        // Visualization Setup
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-
-        analyser.smoothingTimeConstant = 0.8;
-        analyser.fftSize = 1024;
-
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
-
-        javascriptNode.onaudioprocess = () => {
-          const array = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(array);
-          let values = 0;
-          for (let i = 0; i < array.length; i++) values += array[i];
-          
-          const average = values / array.length;
-          setAudioLevel(Math.min(100, Math.max(0, average * 2)));
-        };
-
-      } catch (err) {
-        console.error("Microphone access failed:", err);
-        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
-      }
-    };
-
-    if (step === 'audio') {
-      initAudio();
-    }
-
-    return () => {
-      // Cleanup
-      if (javascriptNode) javascriptNode.disconnect();
-      if (microphone) microphone.disconnect();
-      if (analyser) analyser.disconnect();
-      if (audioContext) audioContext.close();
-      
-      // Stop stream tracks only when leaving the step completely or unmounting
-      // but here we might urge to stop it to release mic
-      if (step !== 'audio' && audioStream) {
-         audioStream.getTracks().forEach(track => track.stop());
+        audioStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [step]); // Dependency on step
 
-=======
-  }, [step]); // Dependency on step
-
->>>>>>> 린_phase4
   // Cleanup stream on component unmount
   useEffect(() => {
-      return () => {
-          if (audioStream) {
-              audioStream.getTracks().forEach(track => track.stop());
-          }
-      };
+    return () => {
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   // 2. Recording & STT Logic
   const handleStartTest = () => {
     if (!audioStream) return;
-    
+
     setTranscript('');
     setIsRecognitionOk(false);
     setIsRecording(true);
-    
+
     const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
     mediaRecorderRef.current = mediaRecorder;
-    
+
     const chunks = [];
     mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
+      if (e.data.size > 0) chunks.push(e.data);
     };
 
     mediaRecorder.onstop = async () => {
-        setIsProcessing(true);
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        try {
-            console.log("Sending audio for recognition...");
-            const result = await recognizeAudio(blob);
-            console.log("Recognition Result:", result);
-            
-            if (result.text && result.text.trim()) {
-                setTranscript(result.text);
-                setIsRecognitionOk(true);
-            } else {
-                setTranscript("음성이 인식되지 않았습니다. 다시 시도해주세요.");
-            }
-        } catch (err) {
-            console.error("STT Error:", err);
-            setTranscript("인식 오류가 발생했습니다. (서버 연결 확인 필요)");
-        } finally {
-            setIsProcessing(false);
-            setIsRecording(false); // Ensure reset
+      setIsProcessing(true);
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      try {
+        console.log("Sending audio for recognition...");
+        const result = await recognizeAudio(blob);
+        console.log("Recognition Result:", result);
+
+        if (result.text && result.text.trim()) {
+          setTranscript(result.text);
+          setIsRecognitionOk(true);
+        } else {
+          setTranscript("음성이 인식되지 않았습니다. 다시 시도해주세요.");
         }
+      } catch (err) {
+        console.error("STT Error:", err);
+        setTranscript("인식 오류가 발생했습니다. (서버 연결 확인 필요)");
+      } finally {
+        setIsProcessing(false);
+        setIsRecording(false); // Ensure reset
+      }
     };
 
     mediaRecorder.start();
-    
+
     // Auto-stop after 4 seconds
     setTimeout(() => {
-        if (mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            setIsRecording(false);
-        }
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        setIsRecording(false);
+      }
     }, 4000);
   };
 
@@ -276,27 +173,6 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const handleRetry = () => {
     setTranscript('');
     setIsRecognitionOk(false);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    setAudioLevel(0);
->>>>>>> 린_phase4
-  };
-
-  const handleVideoPass = () => {
-    if (isFaceDetected) sessionStorage.setItem('env_video_ok', 'true');
-    else sessionStorage.setItem('env_video_ok', 'false');
-    onNext();
-  };
-
-  const handleAudioPass = () => {
-<<<<<<< HEAD
-    if (isRecognitionOk) {
-      sessionStorage.setItem('env_audio_ok', 'true');
-    } else {
-      sessionStorage.setItem('env_audio_ok', 'false');
-    }
-=======
     setAudioLevel(0);
   };
 
@@ -307,17 +183,11 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   };
 
   const handleAudioPass = () => {
-=======
->>>>>>> 린_phase4
     if (isRecognitionOk) sessionStorage.setItem('env_audio_ok', 'true');
     else sessionStorage.setItem('env_audio_ok', 'false');
-    
+
     // Stop audio stream before moving to video
     if (audioStream) audioStream.getTracks().forEach(track => track.stop());
-<<<<<<< HEAD
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
     setStep('video');
   };
 
@@ -330,113 +200,52 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
               <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
             </div>
           </div>
-<<<<<<< HEAD
-<<<<<<< HEAD
-          <h1 className="text-gradient">음성테스트를 시작합니다.</h1>
-          <p style={{ marginBottom: '2rem' }}>마이크가 정상적으로 작동하는지 확인합니다. 아래 문장을 읽어주세요.</p>
-=======
-=======
->>>>>>> 린_phase4
           <h1 className="text-gradient">음성 인식 테스트</h1>
           <p style={{ marginBottom: '2rem' }}>
-            마이크가 정상 작동하는지 확인합니다.<br/>
+            마이크가 정상 작동하는지 확인합니다.<br />
             <b>[음성 인식 시작]</b> 버튼을 누르고 <b>"안녕하세요"</b>라고 말씀해보세요.
           </p>
-<<<<<<< HEAD
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
 
           <div style={{ margin: '2rem 0' }}>
             <div style={{
               width: '80px',
               height: '80px',
               borderRadius: '50%',
-<<<<<<< HEAD
-<<<<<<< HEAD
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-=======
-=======
->>>>>>> 린_phase4
               background: isRecording
                 ? 'rgba(239, 68, 68, 0.2)' // Red pulse when recording
-                : (isRecognitionOk 
-                    ? 'rgba(16, 185, 129, 0.2)' 
-                    : 'rgba(255,255,255,0.05)'),
-<<<<<<< HEAD
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
+                : (isRecognitionOk
+                  ? 'rgba(16, 185, 129, 0.2)'
+                  : 'rgba(255,255,255,0.05)'),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 1.5rem auto',
-<<<<<<< HEAD
-<<<<<<< HEAD
-              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-=======
               boxShadow: isRecording ? '0 0 15px rgba(239, 68, 68, 0.5)' : (isRecognitionOk ? '0 0 15px rgba(16, 185, 129, 0.5)' : 'none'),
               border: isRecording ? '2px solid #ef4444' : (isRecognitionOk ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.2)'),
               transition: 'all 0.3s ease'
-              
->>>>>>> 린_phase4
+
             }}>
               {isProcessing ? (
-                 <div className="spinner" style={{width: '30px', height: '30px', borderTopColor: 'var(--primary)'}}></div>
+                <div className="spinner" style={{ width: '30px', height: '30px', borderTopColor: 'var(--primary)' }}></div>
               ) : (
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isRecording ? "#ef4444" : (isRecognitionOk ? "#10b981" : "var(--primary)")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
                 </svg>
               )}
             </div>
-            
+
             <div style={{ marginBottom: '1rem' }}>
-                <PremiumButton 
-                    onClick={handleStartTest} 
-                    disabled={isRecording || isProcessing}
-                    style={{ minWidth: '180px' }}
-                >
-                    {isRecording ? "녹음 중... (4초)" : (isProcessing ? "분석 중..." : (transcript ? "다시 테스트하기" : "음성 인식 시작"))}
-                </PremiumButton>
+              <PremiumButton
+                onClick={handleStartTest}
+                disabled={isRecording || isProcessing}
+                style={{ minWidth: '180px' }}
+              >
+                {isRecording ? "녹음 중... (4초)" : (isProcessing ? "분석 중..." : (transcript ? "다시 테스트하기" : "음성 인식 시작"))}
+              </PremiumButton>
             </div>
-<<<<<<< HEAD
-            <p style={{ fontSize: '1.4rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '12px' }}>
-              "AI 모의면접 진행할 준비가 되었습니다. "
-            </p>
-=======
-              boxShadow: isRecording ? '0 0 15px rgba(239, 68, 68, 0.5)' : (isRecognitionOk ? '0 0 15px rgba(16, 185, 129, 0.5)' : 'none'),
-              border: isRecording ? '2px solid #ef4444' : (isRecognitionOk ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.2)'),
-              transition: 'all 0.3s ease'
-              
-            }}>
-              {isProcessing ? (
-                 <div className="spinner" style={{width: '30px', height: '30px', borderTopColor: 'var(--primary)'}}></div>
-              ) : (
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isRecording ? "#ef4444" : (isRecognitionOk ? "#10b981" : "var(--primary)")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-              )}
-            </div>
-            
-            <div style={{ marginBottom: '1rem' }}>
-                <PremiumButton 
-                    onClick={handleStartTest} 
-                    disabled={isRecording || isProcessing}
-                    style={{ minWidth: '180px' }}
-                >
-                    {isRecording ? "녹음 중... (4초)" : (isProcessing ? "분석 중..." : (transcript ? "다시 테스트하기" : "음성 인식 시작"))}
-                </PremiumButton>
-            </div>
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
@@ -449,74 +258,33 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             </div>
           </div>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-          {/* Transcript Box */}
-=======
->>>>>>> 린_phase4
           <div style={{
-             minHeight: '60px',
-             background: 'var(--bg-darker)',
-             borderRadius: '12px',
-             padding: '1rem',
-             marginBottom: '2rem',
-             border: isRecognitionOk ? '1px solid #10b981' : '1px solid var(--glass-border)',
-             textAlign: 'center',
-             display: 'flex',
-             flexDirection: 'column',
-             alignItems: 'center',
-             justifyContent: 'center'
+            minHeight: '60px',
+            background: 'var(--bg-darker)',
+            borderRadius: '12px',
+            padding: '1rem',
+            marginBottom: '2rem',
+            border: isRecognitionOk ? '1px solid #10b981' : '1px solid var(--glass-border)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>인식된 결과:</span>
-             <span style={{ color: isRecognitionOk ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: isRecognitionOk ? 'bold' : 'normal', fontSize: '1.1rem' }}>
-               {transcript || "버튼을 누르고 말씀을 하시면 텍스트로 변환됩니다."}
-             </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-<<<<<<< HEAD
-            <PremiumButton onClick={handleRetry} variant="secondary" style={{ flex: 1 }}>
-              테스트 다시 진행
-=======
-          <div style={{
-             minHeight: '60px',
-             background: 'var(--bg-darker)',
-             borderRadius: '12px',
-             padding: '1rem',
-             marginBottom: '2rem',
-             border: isRecognitionOk ? '1px solid #10b981' : '1px solid var(--glass-border)',
-             textAlign: 'center',
-             display: 'flex',
-             flexDirection: 'column',
-             alignItems: 'center',
-             justifyContent: 'center'
-          }}>
-             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>인식된 결과:</span>
-             <span style={{ color: isRecognitionOk ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: isRecognitionOk ? 'bold' : 'normal', fontSize: '1.1rem' }}>
-               {transcript || "버튼을 누르고 말씀을 하시면 텍스트로 변환됩니다."}
-             </span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>인식된 결과:</span>
+            <span style={{ color: isRecognitionOk ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: isRecognitionOk ? 'bold' : 'normal', fontSize: '1.1rem' }}>
+              {transcript || "버튼을 누르고 말씀을 하시면 텍스트로 변환됩니다."}
+            </span>
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
             <PremiumButton onClick={() => onNext()} variant="secondary" style={{ flex: 1, opacity: 0.7 }}>
               건너뛰기
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
-            <PremiumButton onClick={() => onNext()} variant="secondary" style={{ flex: 1, opacity: 0.7 }}>
-              건너뛰기
->>>>>>> 린_phase4
             </PremiumButton>
             <PremiumButton
               onClick={handleAudioPass}
               style={{ flex: 1 }}
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-              disabled={!isRecognitionOk} 
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
-              disabled={!isRecognitionOk} 
->>>>>>> 린_phase4
+              disabled={!isRecognitionOk}
             >
               다음 진행
             </PremiumButton>

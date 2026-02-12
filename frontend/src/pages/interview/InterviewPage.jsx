@@ -6,14 +6,7 @@ const InterviewPage = ({
   currentIdx,
   totalQuestions,
   question,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
   audioUrl,
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
-  audioUrl,
->>>>>>> 린_phase4
   isRecording,
   transcript,
   toggleRecording,
@@ -24,24 +17,11 @@ const InterviewPage = ({
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-  React.useEffect(() => {
-    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
-  }, [currentIdx]);
-=======
   const audioRef = React.useRef(null);
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
-=======
-  const audioRef = React.useRef(null);
 
-  React.useEffect(() => {
-    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
->>>>>>> 린_phase4
-    
     // TTS 재생 로직
     const playTTS = () => {
       // 1. 서버 제공 오디오 URL이 있는 경우
@@ -53,14 +33,14 @@ const InterviewPage = ({
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
         audio.play().catch(e => console.error("Audio play failed:", e));
-      } 
+      }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
           const utterance = new SpeechSynthesisUtterance(question);
           utterance.lang = 'ko-KR';
-          utterance.rate = 1.0; 
+          utterance.rate = 1.0;
           utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }
@@ -79,10 +59,6 @@ const InterviewPage = ({
       }
     };
   }, [currentIdx, audioUrl, question]);
-<<<<<<< HEAD
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-=======
->>>>>>> 린_phase4
 
   React.useEffect(() => {
     // 타이머 기능 활성화
@@ -91,10 +67,6 @@ const InterviewPage = ({
       return;
     }
 
-<<<<<<< HEAD
-=======
-    // 타이머 설정
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
     const timer = setInterval(() => {
       setTimeLeft(prev => prev - 1);
     }, 1000);

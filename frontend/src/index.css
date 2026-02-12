@@ -22,12 +22,9 @@
 
   --bg-darker: #e2e8f0;
   --header-height: 72px;
-<<<<<<< HEAD
-=======
 
   /* Gradient Text - Light Mode */
   --text-gradient-bg: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 }
 
 body.dark-theme {
@@ -42,13 +39,10 @@ body.dark-theme {
 
   --bg-darker: #020617;
 
-<<<<<<< HEAD
-=======
   /* Gradient Text - Dark Mode */
   --text-gradient-bg: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
 }
 
->>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 body {
   margin: 0;
   min-height: 100vh;
