@@ -56,35 +56,16 @@ app.conf.update(
     task_default_queue='cpu_queue',
     task_routes={
         # GPU 사용 태스크 (질문 생성, 임베딩)
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
-<<<<<<< HEAD
-=======
-        'tasks.question_generator.*': {'queue': 'gpu_queue'},
-        'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         
         # CPU 사용 태스크 (답변 분석, STT, 비전, 기타)
         'tasks.evaluator.*': {'queue': 'cpu_queue'},
         'tasks.stt.*': {'queue': 'cpu_queue'}, # Whisper Heavy Model이면 GPU 권장
         'tasks.vision.*': {'queue': 'cpu_queue'},
-<<<<<<< HEAD
-<<<<<<< HEAD
         'tasks.resume_parser.*': {'queue': 'gpu_queue'},
-=======
-        'tasks.resume_parser.*': {'queue': 'cpu_queue'},
->>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
-=======
-        'tasks.resume_parser.*': {'queue': 'gpu_queue'},
->>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
         'tasks.tts.*': {'queue': 'cpu_queue'},
     }
 )
