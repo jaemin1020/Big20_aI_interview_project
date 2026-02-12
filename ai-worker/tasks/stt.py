@@ -52,34 +52,19 @@ def recognize_audio_task(audio_b64: str):
     Args:
         audio_b64 (str): Base64 인코딩된 오디오 데이터 (헤더 포함될 수 있음)
     """
-[
-  {
-    "StartLine": 49,
-    "EndLine": 49,
-    "TargetContent": "    global stt_pipeline",
-    "ReplacementContent": "    global stt_model",
-    "AllowMultiple": false
-  },
-  {
-    "StartLine": 115,
-    "EndLine": 117,
-    "TargetContent": "        if temp_path and os.path.exists(temp_path):\n            try:\n                os.remove(temp_path)",
-    "ReplacementContent": "        if input_path and os.path.exists(input_path):\n            try:\n                os.remove(input_path)",
-    "AllowMultiple": false
-  }
-]
     
     logger.info(f"[STT] Task received. Model status: {'Loaded' if stt_model else 'Not loaded'}")
     
     # 모델 로드 (지연 로딩)
     if stt_model is None:
         logger.info("[STT] Model not loaded. Attempting to load...")
-        success = load_stt_model()
+        success = load_stt_pipeline() # 함수명 수정: load_stt_model -> load_stt_pipeline
         if not success or stt_model is None:
             error_msg = f"STT Model loading failed. Model: {MODEL_SIZE}"
             logger.error(f"[STT] {error_msg}")
             return {"status": "error", "message": error_msg}
 
+    input_path = None
     try:
         if not audio_b64:
             return {"status": "error", "message": "Empty audio data"}
@@ -94,27 +79,13 @@ def recognize_audio_task(audio_b64: str):
             return {"status": "error", "message": f"Base64 decode failed: {e}"}
         
         # 임시 파일 저장 (faster-whisper는 파일 경로 입력 권장)
-        # suffix는 webm으로 가정하나, ffmpeg가 알아서 처리함
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             input_path = tmp.name
 
-        # 3. Convert to WAV (16kHz, Mono) using ffmpeg
-        output_path = input_path + ".wav"
-        cmd = [
-            "ffmpeg", "-y", "-v", "error",
-            "-i", input_path,
-            "-ar", "16000",
-            "-ac", "1",
-            "-c:a", "pcm_s16le",
-            output_path
-        ]
-        
-        # [변경] Faster-Whisper 사용 (stt_model.transcribe)
+        # Faster-Whisper 사용 (stt_model.transcribe)
         logger.info(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})")
         
-        # segments, info = stt_model.transcribe(temp_filename, beam_size=5, language="ko")
-        # beam_size=1 (Greedy search) for speed
         segments, info = stt_model.transcribe(
             input_path, 
             beam_size=1, 
@@ -133,13 +104,13 @@ def recognize_audio_task(audio_b64: str):
         return {"status": "success", "text": full_text}
         
     except Exception as e:
-        logger.error(f"[{task_id}] Error: {e}")
+        logger.error(f"STT Task Error: {e}")
         return {"status": "error", "message": str(e)}
         
     finally:
         # 임시 파일 정리
-        if temp_path and os.path.exists(temp_path):
+        if input_path and os.path.exists(input_path):
             try:
-                os.remove(temp_path)
+                os.remove(input_path)
             except OSError:
                 pass
