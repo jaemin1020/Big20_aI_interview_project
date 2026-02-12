@@ -14,7 +14,6 @@ import {
   getCurrentUser,
   recognizeAudio
 } from './api/interview';
-import { createClient } from "@deepgram/sdk";
 
 // Layout & UI
 import Header from './components/layout/Header';
@@ -101,7 +100,10 @@ function App() {
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
 <<<<<<< HEAD
+<<<<<<< HEAD
   const deepgramConnectionRef = useRef(null);
+=======
+>>>>>>> 린_phase4
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
 =======
@@ -326,6 +328,7 @@ function App() {
 <<<<<<< HEAD
   };
 
+<<<<<<< HEAD
   const setupDeepgram = (stream) => {
     const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
     if (!apiKey) {
@@ -381,6 +384,8 @@ function App() {
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
   };
 
+=======
+>>>>>>> 린_phase4
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
@@ -394,10 +399,13 @@ function App() {
       videoRef.current.srcObject = stream;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
       setupDeepgram(stream);
 
 =======
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+>>>>>>> 린_phase4
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track:', track.kind, track.label);
@@ -582,21 +590,27 @@ function App() {
         setTranscript('');
         setIsLoading(false);
       } else {
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
-        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
+        const lastQId = questions[questions.length - 1]?.id;
+
+        for (let i = 0; i < 150; i++) {
           await new Promise(r => setTimeout(r, 2000));
           const updatedQs = await getInterviewQuestions(interview.id);
 
-          if (updatedQs.length > questions.length) {
+          // 조건: 전체 개수가 늘었거나, 마지막 질문의 ID가 바뀌었을 때
+          if (updatedQs.length > questions.length ||
+            (updatedQs.length > 0 && updatedQs[updatedQs.length - 1].id !== lastQId)) {
+            console.log('[nextQuestion] New question detected!', updatedQs[updatedQs.length - 1]);
             setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1);
+            setCurrentIdx(updatedQs.length - 1); // 항상 가장 마지막 질문으로 인덱스 이동
             setTranscript('');
             foundNew = true;
             break;
           }
         }
+
 
         if (!foundNew) {
           // 더 이상 질문이 없으면 면접 종료
@@ -634,9 +648,12 @@ function App() {
       if (pcRef.current) pcRef.current.close();
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
 <<<<<<< HEAD
+<<<<<<< HEAD
       if (deepgramConnectionRef.current) deepgramConnectionRef.current.finish();
 =======
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+>>>>>>> 린_phase4
     };
   }, []);
 

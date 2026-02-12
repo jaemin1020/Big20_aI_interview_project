@@ -12,7 +12,7 @@ services:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
     ports:
-      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+      - "15432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
     networks:
       - interview_network
 
@@ -44,9 +44,13 @@ services:
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+>>>>>>> 린_phase4
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
@@ -83,9 +87,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - N_GPU_LAYERS=-1
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
       - USE_GPU=true
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+      - USE_GPU=true
+>>>>>>> 린_phase4
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - HF_HOME=/app/models/.cache
       - DEEPFACE_HOME=/app/models/.deepface
@@ -120,9 +128,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - N_GPU_LAYERS=0
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
       - USE_GPU=false
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+      - USE_GPU=false
+>>>>>>> 린_phase4
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - HF_HOME=/app/models/.cache
       - DEEPFACE_HOME=/app/models/.deepface

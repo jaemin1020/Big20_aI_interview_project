@@ -26,6 +26,7 @@ celery[redis]==5.4.0
 redis==5.2.1
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # STT Service (Latest v5+)
 deepgram-sdk>=5.0.0
 
@@ -38,3 +39,7 @@ faster-whisper
 # Data Processing
 numpy>=1.23.0,<2.0.0
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+# Data Processing
+numpy>=1.23.0,<2.0.0
+>>>>>>> 린_phase4

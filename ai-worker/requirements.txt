@@ -59,9 +59,13 @@ ipykernel>=6.29.0
 
 # STT Optimization
 <<<<<<< HEAD
+<<<<<<< HEAD
 faster-whisper>=1.0.3
 =======
 faster-whisper>=1.1.0
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+faster-whisper>=1.1.0
+>>>>>>> 린_phase4
 
 

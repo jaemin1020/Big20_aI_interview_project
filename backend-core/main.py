@@ -15,7 +15,7 @@ from pathlib import Path
 # DB 설정
 from database import init_db, get_session
 # DB 테이블 모듈 임포트
-from models import (
+from db_models import (
     User, UserCreate, UserLogin, Company,
     Interview, InterviewCreate, InterviewResponse, InterviewStatus,
     Question, QuestionCategory, QuestionDifficulty,
@@ -136,11 +136,10 @@ async def upload_resume(
         logger.info(f"Resume uploaded: ID={new_resume.id}, User={current_user.username}, File={file.filename}")
         
         # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
-        # tasks.resume_pipeline 대신 parse_resume_pdf 호출
         celery_app.send_task(
-            "parse_resume_pdf", 
+            "tasks.resume_pipeline.process_resume_pipeline", 
             args=[new_resume.id, str(file_path)],
-            queue='cpu_queue' 
+            queue='gpu_queue' 
         )
         logger.info(f"Resume parsing task sent for ID={new_resume.id}")
         

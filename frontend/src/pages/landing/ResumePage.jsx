@@ -83,16 +83,22 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             setIsUploading(false);
           } else if (result.processing_status === 'failed') {
 <<<<<<< HEAD
+<<<<<<< HEAD
              setIsUploading(false);
              alert("이력서 분석에 실패했습니다.");
 =======
             setIsUploading(false);
             alert("이력서 분석에 실패했습니다.");
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+            setIsUploading(false);
+            alert("이력서 분석에 실패했습니다.");
+>>>>>>> 린_phase4
           } else if (pollCount < maxPolls) {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
+<<<<<<< HEAD
 <<<<<<< HEAD
              setIsUploading(false);
              alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
@@ -100,6 +106,10 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             setIsUploading(false);
             alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+            setIsUploading(false);
+            alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
+>>>>>>> 린_phase4
           }
         } catch (err) {
           console.error('Polling error:', err);
@@ -139,62 +149,38 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             border: '1px solid var(--glass-border)'
           }}>
 <<<<<<< HEAD
+<<<<<<< HEAD
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
               <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
+=======
+            <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0, alignItems: 'start' }}>
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>파일 분석</dt>
+              <dd style={{ fontWeight: '600', padding: '4px 0' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
+>>>>>>> 린_phase4
 
-              <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
-              <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 회사</dt>
+              <dd>
                 <input
                   type="text"
-                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
-                  onChange={(e) => {
-                    const newRole = e.target.value;
-                    setUploadResult(prev => ({
-                      ...prev,
-                      position: newRole,
-                      structured_data: {
-                        ...prev.structured_data,
-                        header: {
-                          ...prev.structured_data.header,
-                          target_role: newRole
-                        }
-                      }
-                    }));
-                    // 부모 컴포넌트의 position 상태를 업데이트하여 면접 생성 시 사용되도록 함
-                    if (onParsedData) {
-                      onParsedData({
-                        ...uploadResult,
-                        position: newRole,
-                        structured_data: {
-                          ...uploadResult.structured_data,
-                          header: { ...uploadResult.structured_data.header, target_role: newRole }
-                        }
-                      });
-                    }
-                  }}
-                  placeholder="지원 직무를 직접 입력해주세요"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: '1px solid var(--primary)',
-                    color: 'var(--primary)',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    width: '100%',
-                    padding: '4px 0',
-                    outline: 'none'
-                  }}
+                  value={uploadResult?.structured_data?.header?.target_company || uploadResult?.target_company || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
                 />
               </dd>
 
-              {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
-                <>
-                  <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
-                  <dd>{uploadResult.skills.join(', ')}</dd>
-                </>
-              )}
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>지원 직무</dt>
+              <dd>
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || '정보 없음'}
+                  readOnly
+                  className="confirm-input readonly"
+                  style={{ color: 'var(--primary)', fontWeight: '600' }}
+                />
+              </dd>
 
+<<<<<<< HEAD
               {/* If additional parsed info exists, add here */}
 =======
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0, alignItems: 'start' }}>
@@ -233,11 +219,15 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
               </dd>
 
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력</dt>
+=======
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>경력 요약</dt>
+>>>>>>> 린_phase4
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ minHeight: '60px', whiteSpace: 'pre-wrap', lineHeight: '1.5', padding: '4px 0' }}
                 >
+<<<<<<< HEAD
                   {(uploadResult?.structured_data?.activities || uploadResult?.activities)?.length > 0 ? (
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       {(uploadResult?.structured_data?.activities || uploadResult?.activities)
@@ -262,6 +252,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                   ) : (
                     uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'
                   )}
+=======
+                  {uploadResult?.structured_data?.experience_summary || uploadResult?.summary || '정보 없음'}
+>>>>>>> 린_phase4
                 </div>
               </dd>
 
@@ -275,12 +268,17 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 />
               </dd>
 
+<<<<<<< HEAD
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>보유 자격증</dt>
+=======
+              <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>관련 기술</dt>
+>>>>>>> 린_phase4
               <dd>
                 <div
                   className="confirm-input readonly"
                   style={{ padding: '4px 0', lineHeight: '1.5' }}
                 >
+<<<<<<< HEAD
                   {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)?.length > 0 ? (
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       {(uploadResult?.structured_data?.certifications || uploadResult?.certifications)
@@ -296,6 +294,11 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                 </div>
               </dd>
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+                  {Array.isArray(uploadResult?.skills) ? uploadResult.skills.join(', ') : (uploadResult?.skills || '정보 없음')}
+                </div>
+              </dd>
+>>>>>>> 린_phase4
             </dl>
           </div>
 
@@ -331,8 +334,11 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
   return (
     <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 1rem' }}>
 <<<<<<< HEAD
+<<<<<<< HEAD
       <GlassCard style={{ maxWidth: file ? '900px' : '600px', width: '100%', textAlign: 'center', transition: 'max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}>
 =======
+=======
+>>>>>>> 린_phase4
       <GlassCard style={{
         maxWidth: file ? '1000px' : '600px',
         width: '100%',
@@ -340,7 +346,10 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
         padding: '2.5rem'
       }}>
+<<<<<<< HEAD
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+>>>>>>> 린_phase4
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '240px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
@@ -350,37 +359,35 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         <h2 className="text-gradient" style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>이력서를 업로드 해주세요.</h2>
         <p style={{ marginBottom: '2rem', color: 'var(--text-muted)' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
-        <div
-          style={{
-            border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
-            borderRadius: '20px',
-            padding: '4rem 2rem',
-            marginBottom: '2rem',
-            cursor: 'pointer',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-            transform: isDragging ? 'scale(1.02)' : 'scale(1)'
-          }}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
-          onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
-          onClick={() => document.getElementById('resume-input').click()}
-        >
-          {file ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📄</span>
-              <span style={{ fontWeight: '600', fontSize: '1.2rem' }}>{file.name}</span>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+        <div style={{
+          display: 'flex',
+          flexDirection: file ? 'row' : 'column',
+          gap: '2rem',
+          alignItems: 'stretch',
+          minHeight: file ? '550px' : '300px',
+          transition: 'all 0.5s ease'
+        }}>
+
+          {/* PDF 미리보기 영역 */}
+          {file && previewUrl && (
+            <div style={{
+              flex: 1.2,
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid var(--glass-border)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
+              position: 'relative',
+              minHeight: '500px'
+            }}>
+              <iframe
+                src={`${previewUrl}#toolbar=0&navpanes=0`}
+                title="Resume Preview"
+                style={{ width: '100%', height: '100%', border: 'none', borderRadius: '16px' }}
+              />
             </div>
-          ) : (
-            <>
-              <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📁</div>
-              <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
-              <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
-            </>
           )}
+<<<<<<< HEAD
           <input
             id="resume-input"
             type="file"
@@ -506,8 +513,76 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
           </div>
         </div>
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
-      </GlassCard>
+=======
 
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div
+              style={{
+                flex: 1,
+                border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+                borderRadius: '20px',
+                padding: file ? '2rem' : '4rem 2rem',
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: '1.5rem',
+                minHeight: file ? 'auto' : '300px'
+              }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+              onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+              onClick={() => document.getElementById('resume-input').click()}
+            >
+              {file ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+                  <h4 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>선택된 파일</h4>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.4rem', wordBreak: 'break-all' }}>{file.name}</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                  <p style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '20px' }}>
+                    파일을 변경하려면 클릭하거나 드래그하세요.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📁</div>
+                  <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
+                  <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
+                </>
+              )}
+              <input
+                id="resume-input"
+                type="file"
+                accept=".pdf"
+                hidden
+                onChange={handleFileChange}
+              />
+            </div>
+
+            <PremiumButton
+              disabled={!file || isUploading}
+              onClick={handleUpload}
+              style={{ width: '100%', padding: '18px', fontSize: '1.1rem' }}
+            >
+              {isUploading ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
+                  <span>이력서 분석 중...</span>
+                </div>
+              ) : (
+                "이력서 분석 시작"
+              )}
+            </PremiumButton>
+          </div>
+        </div>
+>>>>>>> 린_phase4
+      </GlassCard>
     </div>
   );
 };

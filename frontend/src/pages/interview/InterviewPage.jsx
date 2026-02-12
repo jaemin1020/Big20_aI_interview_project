@@ -7,9 +7,13 @@ const InterviewPage = ({
   totalQuestions,
   question,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   audioUrl,
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+  audioUrl,
+>>>>>>> 린_phase4
   isRecording,
   transcript,
   toggleRecording,
@@ -21,6 +25,7 @@ const InterviewPage = ({
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
 <<<<<<< HEAD
+<<<<<<< HEAD
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
@@ -30,6 +35,12 @@ const InterviewPage = ({
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+=======
+  const audioRef = React.useRef(null);
+
+  React.useEffect(() => {
+    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+>>>>>>> 린_phase4
     
     // TTS 재생 로직
     const playTTS = () => {
@@ -68,7 +79,10 @@ const InterviewPage = ({
       }
     };
   }, [currentIdx, audioUrl, question]);
+<<<<<<< HEAD
 >>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+=======
+>>>>>>> 린_phase4
 
   React.useEffect(() => {
     // 타이머 기능 활성화
