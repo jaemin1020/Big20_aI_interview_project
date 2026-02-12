@@ -245,7 +245,7 @@ def generate_next_question_task(interview_id: int):
             db_category = category_map.get(category_raw, "technical")
             
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
-            save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
+            save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
             return {"status": "success", "stage": stage_name, "question": content}
         except Exception as e:
             logger.error(f"실시간 질문 생성 실패: {e}")

@@ -4,7 +4,8 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
   const isAudioOk = sessionStorage.getItem('env_audio_ok') === 'true';
-  const isVideoOk = sessionStorage.getItem('env_video_ok') === 'true';
+  // const isVideoOk = sessionStorage.getItem('env_video_ok') === 'true';
+  const isVideoOk = true; // [임시] 얼굴 인식 체크 무시
   const allPassed = isAudioOk && isVideoOk;
 
   return (

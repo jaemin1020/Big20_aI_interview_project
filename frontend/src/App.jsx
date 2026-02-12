@@ -449,9 +449,12 @@ function App() {
           await new Promise(r => setTimeout(r, 2000));
           const updatedQs = await getInterviewQuestions(interview.id);
 
-          if (updatedQs.length > questions.length) {
+          const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
+          const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
+
+          if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1);
+            setCurrentIdx(updatedQs.length - 1);
             setTranscript('');
             foundNew = true;
             break;

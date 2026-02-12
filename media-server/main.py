@@ -199,22 +199,27 @@ async def start_remote_stt(track, session_id):
                         from celery.result import AsyncResult
                         res = AsyncResult(task_id, app=celery_app)
                         
-                        # 최대 5초 대기
+                        # 최대 30초 대기 (안정성 확보)
                         start_wait = time.time()
                         while not res.ready():
-                            await asyncio.sleep(0.1)
-                            if time.time() - start_wait > 5.0:
+                            await asyncio.sleep(0.2)
+                            if time.time() - start_wait > 30.0:
+                                logger.warning(f"[{sid}] STT Task {task_id} timed out after 30s")
                                 return
                         
-                        text_result = res.result
-                        if text_result and text_result.strip():
-                            ws = active_websockets.get(sid)
-                            if ws:
-                                await send_to_websocket(ws, {
-                                    "type": "stt_result",
-                                    "text": text_result
-                                })
-                                logger.info(f"[{sid}] 🎤 STT Result Sent: {text_result[:30]}...")
+                        result_data = res.result
+                        if result_data and result_data.get("status") == "success":
+                            text_result = result_data.get("text", "")
+                            if text_result.strip():
+                                ws = active_websockets.get(sid)
+                                if ws:
+                                    await send_to_websocket(ws, {
+                                        "type": "stt_result",
+                                        "text": text_result
+                                    })
+                                    logger.info(f"[{sid}] 🎤 STT Result Sent: {text_result[:30]}...")
+                        else:
+                            logger.error(f"[{sid}] STT Task failed or error: {result_data}")
                     except Exception as ex:
                         logger.error(f"[{sid}] Error waiting for STT result: {ex}")
 
