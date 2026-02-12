@@ -41,8 +41,9 @@ relay = MediaRelay()
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 
-# 3. WebSocket 연결 관리 (세션별 WebSocket 저장)
+# 3. 연결 관리 (세션별 WebSocket 및 PeerConnection 저장)
 active_websockets: Dict[str, WebSocket] = {}
+active_pcs: Dict[str, RTCPeerConnection] = {} # [추가] 세션별 PeerConnection 저장
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -52,55 +53,132 @@ class VideoAnalysisTrack(MediaStreamTrack):
         super().__init__()
         self.track = track
         self.session_id = session_id
-        self.last_frame_time = 0
-
-        self.last_frame_time = 0
-
-        # [변경 내역: 2026-02-11]
-        # 이전 코드 (Legacy):
-        # self.face_cascade = cv2.CascadeClassifier(...) -> OpenCV Haar Cascade 사용 (구형, CPU 부하 높음)
-        # self.eye_cascade = cv2.CascadeClassifier(...)
-        #
-        # 변경 코드 (New):
-        # self.analyzer = VisionAnalyzer() -> MediaPipe 기반 최신 분석기 사용
-        #
-        # 변경 이유:
-        # 1. 3D Face Landmark (478개 점) 추적으로 정밀도 향상
-        # 2. 감정(Blendshapes), 시선, 자세 분석을 한 번의 추론으로 통합 (효율성)
-        # 3. GPU/CPU 최적화된 MediaPipe 사용으로 실시간성 확보
+        
+        # [데이터 누적용] POC 세션 데이터 구조 이식
         self.analyzer = VisionAnalyzer()
-        logger.info(f"[{session_id}] VideoAnalysisTrack initialized with MediaPipe")
+        self.session_started_at = time.time()
+        self.total_frames = 0
+        
+        # 질문별 데이터 (전체 합산을 위해 리스트로 관리)
+        self.questions_history = [] 
+        self.current_q_index = 0
+        self.current_q_data = self._get_empty_q_data()
+        
+        # 실시간 로그 쿨타임
+        self.last_log_time = 0
+        self.last_tracking_time = 0
+        
+        logger.info(f"[{session_id}] VideoAnalysisTrack initialized with MediaPipe (CV-V2-TASK Logic)")
 
+    def _get_empty_q_data(self):
+        """새 질문을 위한 빈 데이터 구조 생성"""
+        return {
+            "smile_scores": [],
+            "anxiety_scores": [],
+            "gaze_center_frames": 0,
+            "posture_stable_frames": 0,
+            "total_frames": 0,
+            "start_time": time.time()
+        }
+
+    def switch_question(self, new_index):
+        """질문이 바뀔 때 호출 (from WebSocket)"""
+        if self.current_q_data["total_frames"] > 0:
+            # 이전 질문 결과 요약 로그 출력
+            self._log_question_summary()
+            self.questions_history.append(self.current_q_data)
+        
+        self.current_q_index = new_index
+        self.current_q_data = self._get_empty_q_data()
+        logger.info(f"[{self.session_id}] ➡️ Switched to Question {new_index}")
+
+    def _log_question_summary(self):
+        """질문별 중간 결과 로그 출력"""
+        q = self.current_q_data
+        total = q["total_frames"]
+        if total == 0: return
+        
+        avg_smile = (sum(q["smile_scores"]) / total) * 100
+        avg_anxiety = (sum(q["anxiety_scores"]) / total) * 100
+        gaze_ratio = (q["gaze_center_frames"] / total) * 100
+        posture_ratio = (q["posture_stable_frames"] / total) * 100
+        
+        logger.info(f"\n[{self.session_id}] 📝 Question {self.current_q_index} 중간 결과:")
+        logger.info(f"   - 미소(자신감): {avg_smile:.1f}% | 긴장도: {avg_anxiety:.1f}%")
+        logger.info(f"   - 시선 집중: {gaze_ratio:.1f}% | 자세 안정: {posture_ratio:.1f}%")
+
+    def generate_final_report(self):
+        """면접 종료 시 전체 합산 리포트 로그 출력 (POC 형식)"""
+        if self.current_q_data["total_frames"] > 0:
+            self.questions_history.append(self.current_q_data)
+            
+        if not self.questions_history:
+            return
+
+        total_frames = sum(q["total_frames"] for q in self.questions_history)
+        if total_frames == 0: return
+
+        all_smiles = []
+        all_anxiety = []
+        total_gaze_center = 0
+        total_posture_stable = 0
+        
+        for q in self.questions_history:
+            all_smiles.extend(q["smile_scores"])
+            all_anxiety.extend(q["anxiety_scores"])
+            total_gaze_center += q["gaze_center_frames"]
+            total_posture_stable += q["posture_stable_frames"]
+
+        avg_smile = (sum(all_smiles) / total_frames) * 100
+        avg_anxiety = (sum(all_anxiety) / total_frames) * 100
+        gaze_ratio = (total_gaze_center / total_frames) * 100
+        posture_ratio = (total_posture_stable / total_frames) * 100
+        
+        score_conf = avg_smile * 0.3
+        score_focus = gaze_ratio * 0.3
+        score_posture = posture_ratio * 0.2
+        score_emotion = (100 - avg_anxiety) * 0.2
+        overall_score = score_conf + score_focus + score_posture + score_emotion
+
+        print("\n" + "="*50)
+        print(f"🎓 AI 면접 최종 분석 리포트 [{self.session_id}]")
+        print("="*50)
+        print(f"⏱️ 총 질문 수: {len(self.questions_history)}개")
+        print(f"⏱️ 분석 시간: {int(time.time() - self.session_started_at)}초")
+        print("-" * 50)
+        print("🧮 상세 채점 내역 (Score Breakdown):")
+        print(f"   1. 자신감(미소) : {avg_smile:5.1f}점 x 0.3 = {score_conf:4.1f}점")
+        print(f"   2. 시선집중     : {gaze_ratio:5.1f}점 x 0.3 = {score_focus:4.1f}점")
+        print(f"   3. 자세안정     : {posture_ratio:5.1f}점 x 0.2 = {score_posture:4.1f}점")
+        print(f"   4. 정서안정     : {100-avg_anxiety:5.1f}점 x 0.2 = {score_emotion:4.1f}점")
+        print(f"   -------------------------------------------")
+        print(f"   ∑ 최종 합계: {overall_score:.1f}점")
+        print("="*50 + "\n")
 
     async def process_vision(self, frame, timestamp_ms):
-        """WebRTC 프레임 -> MediaPipe 분석 -> WebSocket 전송"""
-        # [변경 내역: 2026-02-11]
-        # 이전 함수명: process_eye_tracking
-        # 이전 로직: OpenCV로 얼굴/눈 사각형만 찾아서 좌표 보냄. 감정 분석은 별도로 Celery 태스크로 보냄.
-        #
-        # 변경 로직:
-        # 1. process_vision으로 통합.
-        # 2. MediaPipe가 얼굴+눈+감정+자세를 한 번에 분석.
-        # 3. WebSocket으로 'vision_analysis'라는 통합된 데이터 전송.
         try:
-            # OpenCV 포맷 변환
             img = frame.to_ndarray(format="bgr24")
-            
-            # [NEW] MediaPipe 분석 실행
             result = self.analyzer.process_frame(img, timestamp_ms)
             
-            if result:
-                # 1. 터미널 로그 (디버깅용, 2초마다)
-                current_time = time.time()
-                if current_time - getattr(self, 'last_log_time', 0) > 2.0:
-                    self.last_log_time = current_time
-                    logger.info(f"[{self.session_id}] Vision: {result['emotion']} / {result['gaze']} (Smile: {result['scores']['smile']})")
+            if result and result.get("status") == "detected":
+                self.total_frames += 1
+                q = self.current_q_data
+                q["total_frames"] += 1
+                q["smile_scores"].append(result["scores"]["smile"])
+                q["anxiety_scores"].append(result["scores"]["anxiety"])
+                if result["flags"]["is_center"]: q["gaze_center_frames"] += 1
+                if result["flags"]["is_stable"]: q["posture_stable_frames"] += 1
 
-                # 2. WebSocket 전송 (프론트엔드 시각화용)
+                current_time = time.time()
+                if current_time - self.last_log_time > 1.5:
+                    self.last_log_time = current_time
+                    labels = result["labels"]
+                    logger.info(f"[{self.session_id}] Q{self.current_q_index} | 👀 시선: {labels['gaze']} | 👤 자세: {labels['posture']} | 😊 미소: {int(result['scores']['smile']*100)}%")
+
                 ws = active_websockets.get(self.session_id)
                 if ws:
                     await send_to_websocket(ws, {
-                        "type": "vision_analysis", # 통합된 비전 데이터 타입
+                        "type": "vision_analysis",
                         "data": result,
                         "timestamp": current_time
                     })
@@ -108,21 +186,16 @@ class VideoAnalysisTrack(MediaStreamTrack):
             logger.error(f"Vision analysis failed: {e}")
 
     async def recv(self):
-        frame = await self.track.recv()
-        current_time = time.time()
-
-        # 1. 비전 분석 (실시간성 중요 - 0.1초마다 수행)
-        if current_time - getattr(self, 'last_tracking_time', 0) > 0.1:
-            self.last_tracking_time = current_time
-            # 비동기로 실행하여 메인 스트림 지연 방지
-            # timestamp용으로 time.time() * 1000 사용
-            asyncio.create_task(self.process_vision(frame, int(current_time * 1000)))
-
-        # 2. (구버전) 감정 분석 태스크 호출 제거
-        # MediaPipe가 감정까지 다 하므로 더 이상 필요 없음.
-        # if current_time - self.last_frame_time > 2.0: ...
-
-        return frame
+        try:
+            frame = await self.track.recv()
+            current_time = time.time()
+            if current_time - self.last_tracking_time > 0.1:
+                self.last_tracking_time = current_time
+                asyncio.create_task(self.process_vision(frame, int(current_time * 1000)))
+            return frame
+        except Exception:
+            self.generate_final_report()
+            raise
 
 async def start_remote_stt(track, session_id):
     """
@@ -255,18 +328,37 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     
     try:
         while True:
-            # 클라이언트로부터 메시지 수신 대기 (현재는 특별한 처리 없음)
-            await websocket.receive_text()
+            # 클라이언트로부터 메시지 수신 대기
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                # [추가] 질문 전환 신호 처리
+                if msg.get("type") == "next_question":
+                    new_idx = msg.get("index", 0)
+                    # 해당 세션의 비디오 트랙을 찾아서 switch_question 호출
+                    pc = active_pcs.get(session_id)
+                    if pc:
+                        for sender in pc.getSenders():
+                            if isinstance(sender.track, VideoAnalysisTrack):
+                                sender.track.switch_question(new_idx)
+                                break
+            except json.JSONDecodeError:
+                pass
             
     except WebSocketDisconnect:
         logger.info(f"[{session_id}] ❌ WebSocket 연결 종료")
     except Exception as e:
         logger.error(f"[{session_id}] WebSocket 에러: {e}")
     finally:
-        # 연결 종료 시 세션 제거
         if session_id in active_websockets:
             del active_websockets[session_id]
-            logger.info(f"[{session_id}] WebSocket 세션 정리 완료")
+        if session_id in active_pcs:
+            # PC는 별도로 닫히지 않았을 경우를 위해 유지하거나 종료 처리 고민
+            # 여기서는 WebSocket 종료 시 PC도 정리하도록 구현
+            pc = active_pcs.pop(session_id, None)
+            if pc:
+                await pc.close()
+            logger.info(f"[{session_id}] 세션 리소스 정리 완료")
 
 # ============== WebRTC 엔드포인트 ==============
 @app.post("/offer")
@@ -281,6 +373,7 @@ async def offer(request: Request):
             iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
         )
     )
+    active_pcs[session_id] = pc # [추가] 세션별 PC 저장
     @pc.on("track")
     def on_track(track):
         logger.info(f"[{session_id}] Received track: {track.kind}")

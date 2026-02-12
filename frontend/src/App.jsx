@@ -113,7 +113,14 @@ function App() {
           if (savedQuestions) {
             try { setQuestions(JSON.parse(savedQuestions)); } catch (e) { console.error(e); }
           }
-          if (savedCurrentIdx) setCurrentIdx(Number(savedCurrentIdx));
+          if (savedCurrentIdx) {
+            const idx = Number(savedCurrentIdx);
+            setCurrentIdx(idx);
+            // 초기 복구 시에도 필요하다면 서버에 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: idx }));
+            }
+          }
           if (savedReport) {
             try { setReport(JSON.parse(savedReport)); } catch (e) { console.error(e); }
           }
@@ -396,9 +403,9 @@ function App() {
 
         // 오디오만 포함하는 새 스트림 생성
         const audioStream = new MediaStream(audioTracks);
-        
-        const mediaRecorder = new MediaRecorder(audioStream, { 
-          mimeType: 'audio/webm' 
+
+        const mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: 'audio/webm'
         });
         mediaRecorderRef.current = mediaRecorder;
 
@@ -412,27 +419,27 @@ function App() {
         mediaRecorder.onstop = async () => {
           console.log('[STT] Processing audio...');
           setIsLoading(true);
-          
+
           const blob = new Blob(chunks, { type: 'audio/webm' });
-          
+
           try {
             console.log('[STT] Sending audio for recognition...');
             const result = await recognizeAudio(blob);
             console.log('[STT] Recognition result:', result);
-            
+
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
               setTranscript(recognizedText);
               console.log('[STT] ✅ Success:', recognizedText);
-              
+
               // 자동 저장: DB에 transcript 저장
               if (interview && questions && questions[currentIdx]) {
                 try {
                   console.log('[STT] Auto-saving transcript to DB...');
                   await createTranscript(
-                    interview.id, 
-                    'User', 
-                    recognizedText, 
+                    interview.id,
+                    'User',
+                    recognizedText,
                     questions[currentIdx].id
                   );
                   console.log('[STT] ✅ Transcript saved to DB');
@@ -455,7 +462,7 @@ function App() {
 
         mediaRecorder.start();
         console.log('[STT] MediaRecorder started');
-        
+
       } catch (error) {
         console.error('[STT] Failed to start recording:', error);
         alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
@@ -463,7 +470,7 @@ function App() {
         isRecordingRef.current = false;
       }
     }
-    
+
     console.log('[toggleRecording] New state will be:', {
       isRecording: !isRecording,
       transcript: isRecording ? transcript : ''
@@ -526,9 +533,15 @@ function App() {
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
-        setCurrentIdx(prev => prev + 1);
+        const nextIdx = currentIdx + 1;
+        setCurrentIdx(nextIdx);
         setTranscript('');
         setIsLoading(false);
+
+        // [추가] WebSocket으로 질문 전환 알림
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+        }
       } else {
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
         console.log('[nextQuestion] Polling for next AI-generated question...');
@@ -538,10 +551,16 @@ function App() {
           const updatedQs = await getInterviewQuestions(interview.id);
 
           if (updatedQs.length > questions.length) {
+            const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
             setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1);
+            setCurrentIdx(nextIdx);
             setTranscript('');
             foundNew = true;
+
+            // [추가] WebSocket으로 신규 질문 전환 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+            }
             break;
           }
         }

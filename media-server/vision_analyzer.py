@@ -20,18 +20,15 @@ class VisionAnalyzer:
     (화면 그리기 기능 제거, 순수 데이터 분석용)
     """
     def __init__(self):
-        # 모델 경로 (Docker 환경에 맞게 수정 필요)
-        # 현재 경로: /app (media-server root)
-        # 모델은 미리 다운로드 되어 있어야 함
+        # 모델 경로
         self.model_path = 'model_repository/face_landmarker.task'
         
         self.detector = None
         self.is_ready = False
 
-        # 모델 파일 존재 확인
+        # 모델 파일 존재 확인 및 다운로드
         if not os.path.exists(self.model_path):
             logger.warning(f"⚠️ 모델 파일 없음: {self.model_path}")
-            # 컨테이너 내에서 모델 다운로드 시도 (curl)
             try:
                 logger.info("-> Google 서버에서 모델 다운로드 시도...")
                 os.makedirs("model_repository", exist_ok=True)
@@ -48,7 +45,6 @@ class VisionAnalyzer:
                 running_mode=vision.RunningMode.VIDEO, # 비디오 스트림 모드
                 num_faces=1 # 면접자 1명만 분석
             )
-            # 모델 로드
             self.detector = vision.FaceLandmarker.create_from_options(options)
             logger.info("✅ MediaPipe FaceLandmarker 로드 완료")
             self.is_ready = True
@@ -60,6 +56,8 @@ class VisionAnalyzer:
         self.calibrated_gaze_x = 0.43
         self.calibrated_gaze_y = 0.36
         self.calibrated_pitch = 0.05
+        self.calibrated_eye_diff = 0.0
+        self.calibrated_tilt_diff = 0.0
         
     def process_frame(self, frame_bgr, timestamp_ms):
         """
@@ -80,47 +78,62 @@ class VisionAnalyzer:
                 return {"status": "not_detected"}
                 
             landmarks = result.face_landmarks[0]
-            blendshapes = result.face_blendshapes[0]
+            blendshapes_list = result.face_blendshapes[0]
             
             # 1. 시선 분석 (Gaze)
             left_iris = landmarks[468] # 왼쪽 눈동자
             diff_x = left_iris.x - self.calibrated_gaze_x
             diff_y = left_iris.y - self.calibrated_gaze_y
             
-            gaze_status = "center"
-            if diff_x < -GAZE_TOLERANCE_X: gaze_status = "left"
-            elif diff_x > GAZE_TOLERANCE_X: gaze_status = "right"
-            elif diff_y < -GAZE_TOLERANCE_Y: gaze_status = "up"
-            elif diff_y > GAZE_TOLERANCE_Y: gaze_status = "down"
+            gaze_label = "정면 응시"
+            if diff_x < -GAZE_TOLERANCE_X: gaze_label = "왼쪽 주시"
+            elif diff_x > GAZE_TOLERANCE_X: gaze_label = "오른쪽 주시"
+            elif diff_y < -GAZE_TOLERANCE_Y: gaze_label = "위쪽 주시"
+            elif diff_y > GAZE_TOLERANCE_Y: gaze_label = "아래쪽 주시"
             
-            # 2. 자세 분석 (Head Pose)
+            # 2. 자세 분석 (Posture) - CV-V2-TASK.py 로직 보강
+            # 눈 깊이 차이 (몸 비틀림), 눈 높이 차이 (갸우뚱)
+            eye_diff = abs(landmarks[33].z - landmarks[263].z)
+            tilt_diff = abs(landmarks[33].y - landmarks[263].y)
             nose_tip = landmarks[1]
             chin = landmarks[152]
-            pitch_val = chin.z - nose_tip.z # 고개 끄덕임
-            head_status = "stable" if abs(pitch_val - self.calibrated_pitch) < HEAD_SENSITIVITY else "unstable"
+            pitch_val = chin.z - nose_tip.z 
             
+            # 영점 대비 오차 확인 (PoC 임계값 적용)
+            is_posture_stable = abs(eye_diff - self.calibrated_eye_diff) < 0.04 and \
+                               abs(tilt_diff - self.calibrated_tilt_diff) < 0.03
+            is_head_straight = abs(pitch_val - self.calibrated_pitch) < HEAD_SENSITIVITY
+            
+            posture_label = "안정"
+            if not is_posture_stable: posture_label = "자세 불균형"
+            elif not is_head_straight: posture_label = "고개 각도 이탈"
+
             # 3. 감정 분석 (Blendshapes)
-            # 결과를 딕셔너리로 변환
-            bs_map = {b.category_name: b.score for b in blendshapes}
-            
-            # 주요 지표 추출
+            bs_map = {b.category_name: b.score for b in blendshapes_list}
             smile_score = (bs_map.get('mouthSmileLeft', 0) + bs_map.get('mouthSmileRight', 0)) / 2
             brow_down_score = (bs_map.get('browDownLeft', 0) + bs_map.get('browDownRight', 0)) / 2
             
-            emotion_label = "neutral"
-            if smile_score > 0.4: emotion_label = "happy"
-            if brow_down_score > 0.4: emotion_label = "anxious" # 긴장/찌푸림
+            emotion_label = "평온"
+            if brow_down_score > 0.35: emotion_label = "긴장"
+            elif smile_score > 0.4: emotion_label = "자신감"
             
             return {
                 "status": "detected",
-                "gaze": gaze_status,       # center, left, right...
-                "head": head_status,       # stable, unstable
-                "emotion": emotion_label,  # neutral, happy, anxious
+                "labels": {
+                    "gaze": gaze_label,
+                    "posture": posture_label,
+                    "emotion": emotion_label
+                },
                 "scores": {
                     "smile": round(smile_score, 3),
                     "anxiety": round(brow_down_score, 3),
-                    "gaze_x": round(diff_x, 3),
-                    "gaze_y": round(diff_y, 3)
+                    "pitch": round(pitch_val, 4),
+                    "eye_diff": round(eye_diff, 4),
+                    "tilt_diff": round(tilt_diff, 4)
+                },
+                "flags": {
+                    "is_center": gaze_label == "정면 응시",
+                    "is_stable": posture_label == "안정"
                 }
             }
             
