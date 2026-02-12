@@ -153,3 +153,36 @@
     4. [추가] `target_position` 필드가 문자열("Unknown")로 들어올 때 `.get()` 호출로 인한 `AttributeError` 해결 (타입 체크 로직 추가).
 
 ---
+#### 🔴 Issue: MediaPipe 라이브러리 누락 (Web 통합 단계) (NEW 2026-02-12)
+
+* **발생일**: 2026-02-12
+* **위치**: `media-server/main.py`
+* **증상**: `ModuleNotFoundError: No module named 'mediapipe'`
+* **원인**: PoC 로직을 `media-server`에 이식했으나, Docker 빌드 설정 파일(`requirements.txt`)에 `mediapipe` 패키지가 누락됨.
+* **해결**: `media-server/requirements.txt`에 `mediapipe==0.10.11` 추가 후 Docker 재빌드.
+
+---
+
+### 2.3. 👂 STT (음성 인식 - 듣기) (보강)
+
+#### 🔴 Issue: STT 코드 파손 및 IndentationError (NEW 2026-02-12)
+
+* **발생일**: 2026-02-12
+* **위치**: `ai-worker/tasks/stt.py`
+* **증상**: `IndentationError: unexpected indent` 및 서버 기동 실패.
+* **원인**: 코드 수정 과정에서 AI 에이전트의 실수로 파일 중간에 JSON 형식의 메타데이터 조각이 삽입되어 파이썬 문법이 파손됨.
+* **해결**: 파손된 코드 조각을 제거하고, `load_stt_pipeline` 등 함수명 불일치 및 정의되지 않은 변수 오류를 수정하여 복구 완료.
+
+---
+
+### 2.5. 🎨 Frontend (사용자 화면) (NEW 2026-02-12)
+
+#### 🔴 Issue: 마이크 권한 차단 오인 에러 (JS Runtime Error)
+
+* **발생일**: 2026-02-12
+* **위치**: `frontend/src/pages/setup/EnvTestPage.jsx` (initAudio 함수)
+* **증상**: `TypeError: Cannot set properties of undefined (setting 'onaudioprocess')`. 마이크 권한을 허용했음에도 "마이크 접근이 차단됨" 메시지 출력.
+* **원인**: 마이크 입력 시각화를 위한 `javascriptNode`가 선언만 되고 `createScriptProcessor`로 생성되지 않은 상태에서 속성을 설정하려다 에러 발생. `try...catch`문이 이 에러를 마이크 권한 실패로 오인하여 사용자에게 잘못된 안내를 함.
+* **해결**: `audioContext.createScriptProcessor`를 통해 노드를 정상 생성하고 `destination`에 연결하는 로직 추가.
+
+---

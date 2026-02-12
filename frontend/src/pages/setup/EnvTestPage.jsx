@@ -52,6 +52,11 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
 
         microphone.connect(analyser); // Source -> Analyser
 
+        // ScriptProcessor 초기화 (audioLevel 갱신용)
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+        analyser.connect(javascriptNode); // Analyser -> Node
+        javascriptNode.connect(audioContext.destination); // Node -> Destination (필수)
+
         javascriptNode.onaudioprocess = () => {
           const array = new Uint8Array(analyser.frequencyBinCount);
           analyser.getByteFrequencyData(array);
