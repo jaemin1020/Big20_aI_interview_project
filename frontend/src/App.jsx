@@ -362,14 +362,27 @@ function App() {
   };
 
   const toggleRecording = () => {
+    console.log('[toggleRecording] Called. Current state:', {
+      isRecording,
+      transcript,
+      currentIdx: questions[currentIdx]?.id
+    });
+    
     if (isRecording) {
+      console.log('[toggleRecording] Stopping recording...');
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
+      console.log('[toggleRecording] Starting recording...');
       setTranscript('');
       setIsRecording(true);
       isRecordingRef.current = true;
     }
+    
+    console.log('[toggleRecording] New state will be:', {
+      isRecording: !isRecording,
+      transcript: isRecording ? transcript : ''
+    });
   };
 
   const pollReport = async (interviewId) => {
