@@ -3,6 +3,59 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
+<<<<<<< HEAD
+  return (
+    <div className="final-guide animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+      <GlassCard style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div className="logo-wrapper" style={{ width: '180px' }}>
+            <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
+          </div>
+        </div>
+        <h1 className="text-gradient">환경 테스트 완료</h1>
+        <p style={{ marginBottom: '2rem' }}>모든 준비가 완료되었습니다. 이제 면접을 시작합니다.</p>
+
+        <div style={{ 
+          background: 'rgba(255, 255, 255, 0.03)', 
+          padding: '2rem', 
+          borderRadius: '16px', 
+          marginBottom: '2rem',
+          border: '1px solid var(--glass-border)'
+        }}>
+          <div style={{ color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: '600', marginBottom: '1rem' }}>
+            ✅ 면접 준비가 완료되었습니다.
+          </div>
+          <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0, margin: 0, color: 'var(--text-muted)' }}>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_audio_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>음성 입력 테스트 {sessionStorage.getItem('env_audio_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
+            <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sessionStorage.getItem('env_video_ok') === 'true' ? (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
+              ) : (
+                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</span>
+              )}
+              <span>영상 인식 테스트 {sessionStorage.getItem('env_video_ok') === 'true' ? '완료' : '실패'}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <PremiumButton onClick={onNext} disabled={isLoading} style={{ flex: 1, padding: '16px' }}>
+            {isLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
+                <span>준비 중...</span>
+              </div>
+            ) : '면접 시작'}
+          </PremiumButton>
+          <PremiumButton variant="secondary" onClick={onPrev} disabled={isLoading}>이전 단계</PremiumButton>
+=======
   const isAudioOk = sessionStorage.getItem('env_audio_ok') === 'true';
   const isVideoOk = sessionStorage.getItem('env_video_ok') === 'true';
   const allPassed = isAudioOk && isVideoOk;
@@ -103,6 +156,7 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
               </div>
             </div>
           </div>
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
         </div>
 
         {/* Buttons */}

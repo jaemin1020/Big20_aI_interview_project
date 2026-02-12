@@ -82,14 +82,24 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             setStep('confirm');
             setIsUploading(false);
           } else if (result.processing_status === 'failed') {
+<<<<<<< HEAD
+             setIsUploading(false);
+             alert("이력서 분석에 실패했습니다.");
+=======
             setIsUploading(false);
             alert("이력서 분석에 실패했습니다.");
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
           } else if (pollCount < maxPolls) {
             pollCount++;
             setTimeout(poll, 2000); // 2초 뒤 다시 확인
           } else {
+<<<<<<< HEAD
+             setIsUploading(false);
+             alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
+=======
             setIsUploading(false);
             alert("분석 시간이 초과되었습니다. (AI 모델 로딩 지연 가능성)");
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
           }
         } catch (err) {
           console.error('Polling error:', err);
@@ -128,6 +138,65 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             marginBottom: '2rem',
             border: '1px solid var(--glass-border)'
           }}>
+<<<<<<< HEAD
+            <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0 }}>
+              <dt style={{ color: 'var(--text-muted)' }}>파일 분석</dt>
+              <dd style={{ fontWeight: '600' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
+
+              <dt style={{ color: 'var(--text-muted)' }}>지원 직무</dt>
+              <dd style={{ fontWeight: '600', color: 'var(--primary)' }}>
+                <input
+                  type="text"
+                  value={uploadResult?.structured_data?.header?.target_role || uploadResult?.structured_data?.target_position || uploadResult?.position || ''}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    setUploadResult(prev => ({
+                      ...prev,
+                      position: newRole,
+                      structured_data: {
+                        ...prev.structured_data,
+                        header: {
+                          ...prev.structured_data.header,
+                          target_role: newRole
+                        }
+                      }
+                    }));
+                    // 부모 컴포넌트의 position 상태를 업데이트하여 면접 생성 시 사용되도록 함
+                    if (onParsedData) {
+                      onParsedData({
+                        ...uploadResult,
+                        position: newRole,
+                        structured_data: {
+                          ...uploadResult.structured_data,
+                          header: { ...uploadResult.structured_data.header, target_role: newRole }
+                        }
+                      });
+                    }
+                  }}
+                  placeholder="지원 직무를 직접 입력해주세요"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--primary)',
+                    color: 'var(--primary)',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    width: '100%',
+                    padding: '4px 0',
+                    outline: 'none'
+                  }}
+                />
+              </dd>
+
+              {uploadResult?.structured_data?.skills && uploadResult.structured_data.skills.length > 0 && (
+                <>
+                  <dt style={{ color: 'var(--text-muted)' }}>추출 기술</dt>
+                  <dd>{uploadResult.skills.join(', ')}</dd>
+                </>
+              )}
+
+              {/* If additional parsed info exists, add here */}
+=======
             <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1.2rem', margin: 0, alignItems: 'start' }}>
               <dt style={{ color: 'var(--text-muted)', paddingTop: '4px' }}>파일 분석</dt>
               <dd style={{ fontWeight: '600', padding: '4px 0' }}>성공 ({(file.size / 1024).toFixed(1)} KB)</dd>
@@ -226,6 +295,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
                   ) : '정보 없음'}
                 </div>
               </dd>
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
             </dl>
           </div>
 
@@ -260,6 +330,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
 
   return (
     <div className="resume-upload animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '2rem 1rem' }}>
+<<<<<<< HEAD
+      <GlassCard style={{ maxWidth: file ? '900px' : '600px', width: '100%', textAlign: 'center', transition: 'max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+=======
       <GlassCard style={{
         maxWidth: file ? '1000px' : '600px',
         width: '100%',
@@ -267,14 +340,76 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
         padding: '2.5rem'
       }}>
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <div className="logo-wrapper" style={{ width: '240px' }}>
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
+<<<<<<< HEAD
         </div>
         <h2 className="text-gradient" style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>이력서를 업로드 해주세요.</h2>
         <p style={{ marginBottom: '2rem', color: 'var(--text-muted)' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
 
+        <div
+          style={{
+            border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--glass-border)'}`,
+            borderRadius: '20px',
+            padding: '4rem 2rem',
+            marginBottom: '2rem',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: isDragging ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+            transform: isDragging ? 'scale(1.02)' : 'scale(1)'
+          }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onMouseOver={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+          onMouseOut={(e) => { if (!isDragging) e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+          onClick={() => document.getElementById('resume-input').click()}
+        >
+          {file ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📄</span>
+              <span style={{ fontWeight: '600', fontSize: '1.2rem' }}>{file.name}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📁</div>
+              <p style={{ margin: 0, fontWeight: '500', fontSize: '1.2rem' }}>클릭하거나 파일을 이곳에 드래그하세요</p>
+              <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>PDF 형식만 지원합니다.</p>
+            </>
+          )}
+          <input
+            id="resume-input"
+            type="file"
+            accept=".pdf"
+            hidden
+            onChange={handleFileChange}
+          />
+=======
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
+        </div>
+        <h2 className="text-gradient" style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>이력서를 업로드 해주세요.</h2>
+        <p style={{ marginBottom: '2rem', color: 'var(--text-muted)' }}>면접 질문 생성을 위해 PDF 형식의 이력서를 업로드해주세요.</p>
+
+<<<<<<< HEAD
+        <PremiumButton
+          disabled={!file || isUploading}
+          onClick={handleUpload}
+          style={{ width: '100%', padding: '16px' }}
+        >
+          {isUploading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <div className="spinner" style={{ width: '20px', height: '20px', margin: 0 }}></div>
+              <span>분석 중...</span>
+            </div>
+          ) : (
+            "이력서 분석 시작"
+          )}
+        </PremiumButton>
+=======
         <div style={{
           display: 'flex',
           flexDirection: file ? 'row' : 'column',
@@ -370,7 +505,9 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
             </PremiumButton>
           </div>
         </div>
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
       </GlassCard>
+
     </div>
   );
 };

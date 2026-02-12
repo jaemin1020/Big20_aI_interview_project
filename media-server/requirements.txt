@@ -25,5 +25,16 @@ websockets==14.1
 celery[redis]==5.4.0
 redis==5.2.1
 
+<<<<<<< HEAD
+# STT Service (Latest v5+)
+deepgram-sdk>=5.0.0
+
 # Data Processing
 numpy>=1.23.0,<2.0.0
+
+# Local STT
+faster-whisper
+=======
+# Data Processing
+numpy>=1.23.0,<2.0.0
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d

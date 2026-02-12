@@ -6,7 +6,10 @@ const InterviewPage = ({
   currentIdx,
   totalQuestions,
   question,
+<<<<<<< HEAD
+=======
   audioUrl,
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
   isRecording,
   transcript,
   toggleRecording,
@@ -17,6 +20,12 @@ const InterviewPage = ({
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
+<<<<<<< HEAD
+
+  React.useEffect(() => {
+    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+  }, [currentIdx]);
+=======
   const audioRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -59,6 +68,7 @@ const InterviewPage = ({
       }
     };
   }, [currentIdx, audioUrl, question]);
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
 
   React.useEffect(() => {
     // 타이머 기능 활성화
@@ -67,6 +77,10 @@ const InterviewPage = ({
       return;
     }
 
+<<<<<<< HEAD
+=======
+    // 타이머 설정
+>>>>>>> 3c3c7ad852cb791ad6eea3c101528407d064e29d
     const timer = setInterval(() => {
       setTimeLeft(prev => prev - 1);
     }, 1000);
