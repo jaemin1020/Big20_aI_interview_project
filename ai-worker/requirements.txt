@@ -58,4 +58,4 @@ pydantic>=2.7.0
 ipykernel>=6.29.0
 
 # STT Optimization
-faster-whisper>=1.1.0
+faster-whisper>=1.2.1

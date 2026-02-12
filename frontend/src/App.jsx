@@ -441,6 +441,11 @@ function App() {
         isRecordingRef.current = false;
       }
     }
+    
+    console.log('[toggleRecording] New state will be:', {
+      isRecording: !isRecording,
+      transcript: isRecording ? transcript : ''
+    });
   };
 
   const pollReport = async (interviewId) => {

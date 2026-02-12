@@ -10,8 +10,9 @@ logger = logging.getLogger("STT-Task")
 
 # 전역 모델 변수
 stt_model = None
-# 모델 사이즈: tiny, base, small, medium, large-v3-turbo. 
-# CPU 환경을 위해 기본값은 'medium' 또는 'small' 권장.
+# 모델 사이즈: tiny, base, small, medium, large-v1, large-v2, large-v3, large-v3-turbo
+# CPU 환경: small 또는 medium 권장 (정확도 80-85%, 속도 5-15초)
+# GPU 환경: large-v3-turbo 권장 (정확도 90%, 속도 2-5초)
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 
 def load_stt_model():
@@ -21,7 +22,8 @@ def load_stt_model():
     global stt_model
     
     if stt_model is not None:
-        return
+        logger.info(f"✅ STT Model already loaded: {MODEL_SIZE}")
+        return True
 
     try:
         # GPU 사용 가능 여부 확인
@@ -40,10 +42,14 @@ def load_stt_model():
         # 모델 로드
         stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
         
-        logger.info("✅ Faster-Whisper loaded successfully.")
+        logger.info(f"✅ Faster-Whisper loaded successfully: {MODEL_SIZE}")
+        return True
     except Exception as e:
-        logger.error(f"❌ Failed to load Faster-Whisper: {e}", exc_info=True)
+        logger.error(f"❌ Failed to load Faster-Whisper ({MODEL_SIZE}): {e}", exc_info=True)
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
         stt_model = None
+        return False
 
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
@@ -54,11 +60,16 @@ def recognize_audio_task(audio_b64: str):
     """
     global stt_model
     
+    logger.info(f"[STT] Task received. Model status: {'Loaded' if stt_model else 'Not loaded'}")
+    
     # 모델 로드 (지연 로딩)
     if stt_model is None:
-        load_stt_model()
-        if stt_model is None:
-             return {"status": "error", "message": "STT Model loading failed"}
+        logger.info("[STT] Model not loaded. Attempting to load...")
+        success = load_stt_model()
+        if not success or stt_model is None:
+            error_msg = f"STT Model loading failed. Model: {MODEL_SIZE}"
+            logger.error(f"[STT] {error_msg}")
+            return {"status": "error", "message": error_msg}
 
     temp_path = None
     try:
