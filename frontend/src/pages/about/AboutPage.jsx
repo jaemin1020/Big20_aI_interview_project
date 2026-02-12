@@ -1,6 +1,7 @@
 import React from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import PersonalizedInterviewSystemImage from '../../assets/PersonalizedInterviewSystem.png';
 
 const AboutPage = ({ onBack }) => {
     return (
@@ -54,11 +55,17 @@ const AboutPage = ({ onBack }) => {
                                 ))}
                             </ul>
                         </div>
-                        <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: '24px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                                <span style={{ fontSize: '3rem' }}>📁</span>
-                                <p>개인 맞춤 면접 관련 이미지</p>
-                            </div>
+                        <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: '24px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            <img
+                                src={PersonalizedInterviewSystemImage}
+                                alt="개인 맞춤형 면접 시스템"
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain',
+                                    padding: '1rem'
+                                }}
+                            />
                         </div>
                     </GlassCard>
                 </section>
