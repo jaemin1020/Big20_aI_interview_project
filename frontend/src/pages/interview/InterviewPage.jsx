@@ -24,6 +24,16 @@ const InterviewPage = ({
   const audioRef = React.useRef(null);
   const isTimeOverRef = React.useRef(false); // 타이머 종료 처리 중복 방지용 Ref
 
+  // 데이터 전송 테스트: transcript와 isRecording 변경 감지
+  React.useEffect(() => {
+    console.log('[InterviewPage] Props updated:', {
+      isRecording,
+      transcript,
+      transcriptLength: transcript?.length || 0,
+      currentQuestion: question?.substring(0, 50)
+    });
+  }, [isRecording, transcript]);
+
   // 질문이 변경되면 렌더링 도중 즉시 상태 리셋
   if (currentIdx !== prevIdx) {
     setPrevIdx(currentIdx);
@@ -347,7 +357,10 @@ const InterviewPage = ({
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', paddingBottom: '1rem' }}>
           <PremiumButton
             variant={isRecording ? 'danger' : 'success'}
-            onClick={toggleRecording}
+            onClick={() => {
+              console.log('[InterviewPage] 답변 버튼 클릭:', isRecording ? '종료' : '시작');
+              toggleRecording();
+            }}
             style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
           >
             {isRecording ? '⏸ 답변 종료' : '답변 시작'}

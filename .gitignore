@@ -237,6 +237,7 @@ docs/QUALITY_FINAL_SUMMARY.md
 *.pt
 
 .agent/
+
 lsj/
 
 C:\big20\Big20_aI_interview_project\lyn
@@ -244,4 +245,6 @@ C:\big20\Big20_aI_interview_project\lyn
 C:\big20\Big20_aI_interview_project\ai-worker\models
 
 *.gguf
+lsj/
 ai-worker/ai_models/
+

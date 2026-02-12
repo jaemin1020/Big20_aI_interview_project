@@ -11,7 +11,8 @@ import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
-  getCurrentUser
+  getCurrentUser,
+  recognizeAudio
 } from './api/interview';
 
 // Layout & UI
@@ -365,15 +366,108 @@ function App() {
     console.log('[WebRTC] Connection established successfully');
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
+      // 녹음 중지
+      console.log('[STT] Stopping recording...');
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
+      // 녹음 시작
+      console.log('[STT] Starting recording...');
       setTranscript('');
       setIsRecording(true);
       isRecordingRef.current = true;
+
+      try {
+        // 비디오 스트림에서 오디오 트랙 가져오기
+        const stream = videoRef.current?.srcObject;
+        if (!stream) {
+          throw new Error('No media stream available');
+        }
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          throw new Error('No audio track found');
+        }
+
+        // 오디오만 포함하는 새 스트림 생성
+        const audioStream = new MediaStream(audioTracks);
+        
+        const mediaRecorder = new MediaRecorder(audioStream, { 
+          mimeType: 'audio/webm' 
+        });
+        mediaRecorderRef.current = mediaRecorder;
+
+        const chunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          console.log('[STT] Processing audio...');
+          setIsLoading(true);
+          
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          
+          try {
+            console.log('[STT] Sending audio for recognition...');
+            const result = await recognizeAudio(blob);
+            console.log('[STT] Recognition result:', result);
+            
+            if (result.text && result.text.trim()) {
+              const recognizedText = result.text.trim();
+              setTranscript(recognizedText);
+              console.log('[STT] ✅ Success:', recognizedText);
+              
+              // 자동 저장: DB에 transcript 저장
+              if (interview && questions && questions[currentIdx]) {
+                try {
+                  console.log('[STT] Auto-saving transcript to DB...');
+                  await createTranscript(
+                    interview.id, 
+                    'User', 
+                    recognizedText, 
+                    questions[currentIdx].id
+                  );
+                  console.log('[STT] ✅ Transcript saved to DB');
+                } catch (saveError) {
+                  console.error('[STT] ❌ Failed to save transcript:', saveError);
+                  // 저장 실패해도 transcript는 화면에 표시
+                }
+              }
+            } else {
+              setTranscript('음성이 인식되지 않았습니다.');
+              console.warn('[STT] ⚠️ Empty result');
+            }
+          } catch (error) {
+            console.error('[STT] ❌ Error:', error);
+            setTranscript('음성 인식 중 오류가 발생했습니다.');
+          } finally {
+            setIsLoading(false);
+          }
+        };
+
+        mediaRecorder.start();
+        console.log('[STT] MediaRecorder started');
+        
+      } catch (error) {
+        console.error('[STT] Failed to start recording:', error);
+        alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
+        setIsRecording(false);
+        isRecordingRef.current = false;
+      }
     }
+    
+    console.log('[toggleRecording] New state will be:', {
+      isRecording: !isRecording,
+      transcript: isRecording ? transcript : ''
+    });
   };
 
   const pollReport = async (interviewId) => {
@@ -523,7 +617,7 @@ function App() {
       )}
 
       {/* Theme Toggle Button */}
-      <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
           style={{
