@@ -6,6 +6,11 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 import os
+import logging
+
+# Configure logging
+logger = logging.getLogger("AI-Worker-DB")
+
 
 # Database Connection
 # ==========================================
