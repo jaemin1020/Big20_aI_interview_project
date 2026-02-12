@@ -611,7 +611,7 @@ function App() {
             transition: 'all 0.3s ease'
           }}
         >
-          {isDarkMode ? '☀️' : '🌙'}
+          {isDarkMode ? '☀️' : '🌑'}
         </button>
       </div>
 
