@@ -32,19 +32,61 @@ const ResultPage = ({ results, report, interview, onReset }) => {
     if (!resultRef.current) return;
 
     try {
+      // 캡처 정확도를 높이기 위해 스크롤을 맨 위로 이동
+      window.scrollTo(0, 0);
+
       const canvas = await html2canvas(resultRef.current, {
-        scale: 2,
+        scale: 2, // 고해상도 캡처
         useCORS: true,
-        backgroundColor: '#111827' // Dark mode background
+        allowTaint: true,
+        backgroundColor: '#111827', // PDF 배경색 (다크모드)
+        scrollY: 0, // 스크롤 위치 보정
+        onclone: (clonedDoc) => {
+          // 캡처 시 Glassmorphism 효과(backdrop-filter) 제거 (검은 화면 방지)
+          const glassCards = clonedDoc.querySelectorAll('.premium-card, .glass-effect');
+          glassCards.forEach((card) => {
+            card.style.backdropFilter = 'none';
+            card.style.webkitBackdropFilter = 'none';
+            card.style.background = '#1e293b'; // 불투명한 다크 그레이 배경
+            card.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+            card.style.boxShadow = 'none';
+          });
+
+          // 텍스트 가독성 확보
+          const texts = clonedDoc.querySelectorAll('*');
+          texts.forEach(el => {
+            const style = getComputedStyle(el);
+            if (style.color === 'rgba(0, 0, 0, 0)') { // 투명 텍스트 방지
+              el.style.color = '#e2e8f0';
+            }
+          });
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`interview_report_${interview?.id || 'result'}.pdf`);
+      const imgWidth = 210; // A4 가로 (mm)
+      const pageHeight = 297; // A4 세로 (mm)
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // 첫 페이지 렌더링
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // 내용이 한 페이지를 넘어가면 추가 페이지 생성
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const fileName = `Interview_Report_${interview?.company_name || 'Interview'}.pdf`;
+      pdf.save(fileName);
     } catch (err) {
       console.error("PDF Download failed:", err);
       alert("PDF 저장 중 오류가 발생했습니다.");
