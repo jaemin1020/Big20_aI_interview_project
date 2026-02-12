@@ -27,3 +27,9 @@ redis==5.2.1
 
 # Data Processing
 numpy>=1.23.0,<2.0.0
+
+# Vision
+mediapipe
+
+# Form Data (FastAPI)
+python-multipart
