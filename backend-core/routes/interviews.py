@@ -205,7 +205,8 @@ async def get_interview_questions(
     stmt = select(Transcript, Question).join(Question, Transcript.question_id == Question.id).where(
         Transcript.interview_id == interview_id,
         Transcript.speaker == Speaker.AI
-    ).order_by(Transcript.timestamp)
+    ).order_by(Transcript.id)
+
     
     results = db.exec(stmt).all()
     

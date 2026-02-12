@@ -360,10 +360,9 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
             is_active=True
         )
         session.add(question)
-        session.commit()
-        session.refresh(question)
+        session.flush() # ID 생성을 위해 즉시 플러시
         
-        # 2. Transcript 테이블에 AI 질문으로 저장 (이게 되어야 프론트에서 보임)
+        # 2. Transcript 테이블에 AI 질문으로 저장
         # 현재 면접의 마지막 순서를 파악
         stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
         last_transcript = session.exec(stmt).first()
@@ -378,6 +377,8 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
             timestamp=datetime.utcnow()
         )
         session.add(new_transcript)
-        session.commit()
+        session.commit() # 전체 확정
         
+        logger.info(f"✅ [DB_SAVE] Question(id={question.id}) & Transcript(id={new_transcript.id}) saved for Interview {interview_id}")
         return question.id
+
