@@ -64,7 +64,7 @@ class ExaoneLLM(LLM):
             logger.error(f"❌ 엔진 로드 실패: {e}")
             raise e
         
-        self._initialized = True
+        ExaoneLLM._initialized = True
 
     def _call(
         self,
@@ -98,9 +98,6 @@ class ExaoneLLM(LLM):
         """EXAONE 3.5 전용 Chat Template 포맷팅 (하위 호환성 유지)"""
         return f"[|system|]{system_msg}[|endofturn|]\n[|user|]{user_msg}[|endofturn|]\n[|assistant|]"
 
-    def invoke(self, prompt: str, **kwargs: Any) -> str:
-        """기존 invoke 인터페이스 유지 (하위 호환용)"""
-        return self._call(prompt, **kwargs)
 
 def get_exaone_llm() -> ExaoneLLM:
     """엔진 싱글톤 인스턴스 반환"""

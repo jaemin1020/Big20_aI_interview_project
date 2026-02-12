@@ -216,6 +216,7 @@ def generate_next_question_task(interview_id: int):
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
+            logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
             save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""))
             return {"status": "success", "stage": stage_name, "question": content}
         except Exception as e:
