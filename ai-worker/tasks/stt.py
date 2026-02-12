@@ -2,6 +2,7 @@ import os
 import base64
 import tempfile
 import logging # [NEW] Added missing import
+
 from celery import shared_task
 from faster_whisper import WhisperModel
 

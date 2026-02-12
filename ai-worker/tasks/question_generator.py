@@ -243,7 +243,6 @@ def generate_next_question_task(interview_id: int):
 
             # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
-            
             # LCEL 체인 정의 (Prompt | LLM | Parser)
             chain = prompt | llm | output_parser
             

@@ -1,6 +1,14 @@
 models/
+<<<<<<< HEAD
+<<<<<<< HEAD
 ai_models/
 
+=======
+>>>>>>> bcab0a98e56e154aae50f9fad3ffa7ac7d936acf
+=======
+ai_models/
+
+>>>>>>> d4e80d6d076861616e2c5afc84a50bbc841db3ea
 __pycache__/
 *.pyc
 *.pyo
