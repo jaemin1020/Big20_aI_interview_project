@@ -401,9 +401,9 @@ function App() {
 
         // 오디오만 포함하는 새 스트림 생성
         const audioStream = new MediaStream(audioTracks);
-        
-        const mediaRecorder = new MediaRecorder(audioStream, { 
-          mimeType: 'audio/webm' 
+
+        const mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: 'audio/webm'
         });
         mediaRecorderRef.current = mediaRecorder;
 
@@ -417,14 +417,14 @@ function App() {
         mediaRecorder.onstop = async () => {
           console.log('[STT] Processing audio...');
           setIsLoading(true);
-          
+
           const blob = new Blob(chunks, { type: 'audio/webm' });
-          
+
           try {
             console.log('[STT] Sending audio for recognition...');
             const result = await recognizeAudio(blob);
             console.log('[STT] Recognition result:', result);
-            
+
             if (result.text && result.text.trim()) {
               setTranscript(result.text);
               console.log('[STT] ✅ Success:', result.text);
@@ -442,7 +442,7 @@ function App() {
 
         mediaRecorder.start();
         console.log('[STT] MediaRecorder started');
-        
+
       } catch (error) {
         console.error('[STT] Failed to start recording:', error);
         alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
@@ -450,7 +450,7 @@ function App() {
         isRecordingRef.current = false;
       }
     }
-    
+
     console.log('[toggleRecording] New state will be:', {
       isRecording: !isRecording,
       transcript: isRecording ? transcript : ''
@@ -745,7 +745,11 @@ function App() {
         {step === 'complete' && (
           <InterviewCompletePage
             isReportLoading={isReportLoading}
-            onCheckResult={() => setStep('result')}
+            onCheckResult={() => {
+              // 면접 완료 후 바로 결과 확인: 이력에서 온 것이 아님 -> flag 제거
+              sessionStorage.removeItem('from_history');
+              setStep('result');
+            }}
             onExit={() => {
               setStep('main');
               setCurrentIdx(0); // 메인으로 돌아갈 때 질문 인덱스 초기화
@@ -773,7 +777,15 @@ function App() {
               setCurrentIdx(0);
               setReport(null);
               setSelectedInterview(null);
+              // reset flag
+              sessionStorage.removeItem('from_history');
             }}
+            onBack={
+              // history에서 왔을 때만 함수를 전달 -> ResultPage에서 버튼 표시 여부 결정
+              sessionStorage.getItem('from_history') === 'true'
+                ? () => setStep('history')
+                : null
+            }
           />
         )}
 
@@ -783,6 +795,8 @@ function App() {
             onViewResult={(reportData, interviewData) => {
               setReport(reportData);
               setSelectedInterview(interviewData);
+              // flag 설정: 이력 페이지에서 왔다
+              sessionStorage.setItem('from_history', 'true');
               setStep('result');
             }}
           />
