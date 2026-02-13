@@ -13,7 +13,8 @@ const InterviewPage = ({
   nextQuestion,
   onFinish,
   videoRef,
-  isLoading
+  isLoading,
+  isMediaReady
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
@@ -224,9 +225,28 @@ const InterviewPage = ({
                   boxShadow: isRecording ? '0 0 8px #ef4444' : 'none'
                 }}></div>
                 <span style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white', letterSpacing: '0.05em' }}>
-                  {isRecording ? 'LIVE REC' : 'READY'}
+                  {isRecording ? 'LIVE REC' : (isMediaReady ? 'READY' : 'CONNECTING...')}
                 </span>
               </div>
+              {!isMediaReady && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'rgba(0,0,0,0.6)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  gap: '10px'
+                }}>
+                  <div className="spinner" style={{ width: '30px', height: '30px', borderTopColor: 'var(--primary)' }}></div>
+                  <span style={{ fontSize: '0.9rem' }}>장비 연결 중...</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -310,13 +330,21 @@ const InterviewPage = ({
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', paddingBottom: '1rem' }}>
           <PremiumButton
             variant={isRecording ? 'danger' : 'success'}
+            disabled={!isMediaReady}
             onClick={() => {
               console.log('[InterviewPage] 답변 버튼 클릭:', isRecording ? '종료' : '시작');
               toggleRecording();
             }}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            style={{
+              flex: 1,
+              minWidth: '140px',
+              padding: '1rem',
+              fontSize: '1rem',
+              fontWeight: '700',
+              opacity: isMediaReady ? 1 : 0.6
+            }}
           >
-            {isRecording ? '⏸ 답변 종료' : '답변 시작'}
+            {!isMediaReady ? '⏳ 준비 중' : (isRecording ? '⏸ 답변 종료' : '답변 시작')}
           </PremiumButton>
           <PremiumButton
             onClick={nextQuestion}

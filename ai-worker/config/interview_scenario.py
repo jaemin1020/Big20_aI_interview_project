@@ -27,9 +27,9 @@ INTERVIEW_STAGES = [
     {
         "stage": "skill",
         "type": "ai",
-        "category": "certification",
+        "category": None,
         "query_template": "{target_role} 기술 스킬 도구 활용 능력",
-        "guide": "지원자가 사용한 기술의 구체적인 설정법이나 기술적 원리를 물어볼 것.",
+        "guide": "이력서 기술 키워드 1개 인용. 실무 적용 원리 검증.",
         "order": 3
     },
     
@@ -38,7 +38,7 @@ INTERVIEW_STAGES = [
         "stage": "skill_followup",
         "type": "followup",
         "parent": "skill",
-        "guide": "이전 답변에서 부족하거나 모호한 부분을 구체적으로 파고들 것.",
+        "guide": "이전 답변 기술의 한계 및 예외 상황 검증.",
         "order": 4
     },
     
@@ -46,9 +46,9 @@ INTERVIEW_STAGES = [
     {
         "stage": "experience",
         "type": "ai",
-        "category": "project",
-        "query_template": "프로젝트 성과 달성 경험 결과",
-        "guide": "프로젝트에서 달성한 구체적인 역할과 기여도를 물어볼 것.",
+        "category": None,
+        "query_template": "프로젝트 성과 달성 경험 결과 활동 인턴 교육",
+        "guide": "이력서 활동 2개 연결. 활동 간 인과관계 및 성장 분석.",
         "order": 5
     },
     
@@ -57,7 +57,7 @@ INTERVIEW_STAGES = [
         "stage": "experience_followup",
         "type": "followup",
         "parent": "experience",
-        "guide": "프로젝트 경험에서 구체적인 수치나 기술적 디테일을 추가로 물어볼 것.",
+        "guide": "의사결정 근거 및 해결 논리 파악.",
         "order": 6
     },
     
@@ -65,9 +65,9 @@ INTERVIEW_STAGES = [
     {
         "stage": "problem_solving",
         "type": "ai",
-        "category": None,  # 전체 검색
+        "category": None,
         "query_template": "문제 해결 기술적 난관 극복",
-        "guide": "어려운 상황을 만났을 때 어떤 논리적 단계를 거쳐 해결했는지 물어볼 것.",
+        "guide": "고난도 프로젝트 인용. 제약 조건 및 극복 Action 질문.",
         "order": 7
     },
     
@@ -76,7 +76,7 @@ INTERVIEW_STAGES = [
         "stage": "problem_solving_followup",
         "type": "followup",
         "parent": "problem_solving",
-        "guide": "문제 해결 과정에서의 의사결정 근거나 대안 검토 과정을 물어볼 것.",
+        "guide": "실패/돌발 변수 대처 및 사후 학습 확인.",
         "order": 8
     },
     
@@ -85,8 +85,8 @@ INTERVIEW_STAGES = [
         "stage": "communication",
         "type": "ai",
         "category": "narrative",
-        "query_template": "협업 갈등 해결 설득",
-        "guide": "팀 내 의견 대립 시 어떻게 조율하고 성과를 냈는지 물어볼 것.",
+        "query_template": "자기소개서 3번 의사소통 협업 갈등 해결 사례",
+        "guide": "자소서 3번 인용. 조율 근거 및 객관적 데이터 확인.",
         "order": 9
     },
     
@@ -95,7 +95,7 @@ INTERVIEW_STAGES = [
         "stage": "communication_followup",
         "type": "followup",
         "parent": "communication",
-        "guide": "협업 과정에서 사용한 구체적인 커뮤니케이션 기법이나 도구를 물어볼 것.",
+        "guide": "반대 의견 설득 원칙 및 커뮤니케이션 스타일.",
         "order": 10
     },
     
@@ -104,8 +104,8 @@ INTERVIEW_STAGES = [
         "stage": "responsibility",
         "type": "ai",
         "category": "narrative",
-        "query_template": "직업 윤리 목표 가치관",
-        "guide": "전문가로서의 윤리 의식과 책임감 있는 태도를 물어볼 것.",
+        "query_template": "자기소개서 1번 지원동기 보안 전문가 윤리의식 사명감",
+        "guide": "자소서 1번 동기 인용. 윤리적 딜레마 상황 대처 질문.",
         "order": 11
     },
     
@@ -114,7 +114,7 @@ INTERVIEW_STAGES = [
         "stage": "responsibility_followup",
         "type": "followup",
         "parent": "responsibility",
-        "guide": "가치관이 실제 업무에서 어떻게 구현되었는지 구체적 사례를 물어볼 것.",
+        "guide": "개인 신념과 조직 문화 충돌 시 조화 방안.",
         "order": 12
     },
     
@@ -123,8 +123,8 @@ INTERVIEW_STAGES = [
         "stage": "growth",
         "type": "ai",
         "category": "narrative",
-        "query_template": "성장 계획 자기계발 미래",
-        "guide": "현재 기술 트렌드 변화에 맞춰 구체적으로 어떤 학습을 하고 있는지 물어볼 것.",
+        "query_template": "자기소개서 2번 기술 습득 과정 IDS 구축 시각화 자동화",
+        "guide": "자소서 2번 문항 인용. 기술 트렌드 시너지 및 학습 계획.",
         "order": 13
     },
     
@@ -133,7 +133,7 @@ INTERVIEW_STAGES = [
         "stage": "growth_followup",
         "type": "followup",
         "parent": "growth",
-        "guide": "학습 계획의 구체적인 실행 방법이나 타임라인을 물어볼 것.",
+        "guide": "최근 기술 한계 극복 시도 및 구체적 학습 활동.",
         "order": 14
     },
     
@@ -141,7 +141,7 @@ INTERVIEW_STAGES = [
     {
         "stage": "final_statement",
         "type": "template",
-        "template": "{candidate_name} 지원자님, 마지막으로 하고 싶으신 말씀이 있으신가요?",
+        "template": "{candidate_name} 지원자님, 지금까지 많은 답변 감사드립니다. 마지막으로 하고 싶으신 말씀이나 궁금한 점이 있으신가요?",
         "variables": ["candidate_name"],
         "order": 15
     }

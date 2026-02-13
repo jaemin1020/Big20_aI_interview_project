@@ -17,14 +17,14 @@ const ResultPage = ({ results, report, interview, onReset }) => {
   // Helper to safely get text content
   const getText = (data, defaultText) => data || defaultText;
 
-  // Chart Data Preparation (6 Axes)
+  // Chart Data Preparation (6 Axes) using actual AI scores from report and details_json
   const chartData = [
     { subject: '기술 이해도', A: report?.technical_score || 85, fullMark: 100 },
-    { subject: '직무 경험', A: report?.experience_score || 88, fullMark: 100 },
-    { subject: '문제 해결', A: report?.problem_solving_score || 92, fullMark: 100 },
+    { subject: '직무 경험', A: report?.details_json?.experience_score || 88, fullMark: 100 },
+    { subject: '문제 해결', A: report?.details_json?.problem_solving_score || 92, fullMark: 100 },
     { subject: '의사소통', A: report?.communication_score || 80, fullMark: 100 },
-    { subject: '책임감', A: report?.responsibility_score || 95, fullMark: 100 },
-    { subject: '성장 의지', A: report?.growth_score || 90, fullMark: 100 },
+    { subject: '책임감', A: report?.details_json?.responsibility_score || 95, fullMark: 100 },
+    { subject: '성장 의지', A: report?.details_json?.growth_score || 90, fullMark: 100 },
   ];
 
   const handleDownloadPDF = () => {
@@ -144,6 +144,18 @@ const ResultPage = ({ results, report, interview, onReset }) => {
           <p style={{ color: 'var(--text-muted)' }}>AI 면접관이 분석한 역량별 상세 평가 결과입니다.</p>
         </div>
 
+        {/* 0. AI Summary (위원장 총평) */}
+        {report?.summary_text && (
+          <GlassCard style={{ padding: '2rem', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <h3 style={{ color: 'var(--primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🎙️</span> 시니어 위원장 총평
+            </h3>
+            <p style={{ fontSize: '1.15rem', lineHeight: '1.8', color: 'var(--text-main)', fontWeight: '500', wordBreak: 'keep-all' }}>
+              "{report.summary_text}"
+            </p>
+          </GlassCard>
+        )}
+
         <div ref={resultRef} style={{ display: 'flex', flexDirection: 'column', gap: '2rem', background: 'var(--bg-color)', padding: '2rem', borderRadius: '16px' }}>
 
           {/* 1. Interview Info */}
@@ -151,18 +163,20 @@ const ResultPage = ({ results, report, interview, onReset }) => {
             <div style={{ display: 'flex', gap: '3rem', alignItems: 'center' }}>
               <div>
                 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 회사</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.company_name || '회사명 미상'}</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{report?.company_name || interview?.company_name || '회사명 미상'}</span>
               </div>
               <div style={{ width: '1px', height: '50px', background: 'var(--glass-border)' }}></div>
               <div>
                 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>지원 직무</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{interview?.position || '직무 미상'}</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{report?.position || interview?.position || '직무 미상'}</span>
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>면접 일자</span>
               <span style={{ fontSize: '1.1rem', fontWeight: '600' }}>
-                {interview?.created_at ? new Date(interview.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
+                {report?.interview_date
+                  ? new Date(report.interview_date).toLocaleDateString()
+                  : (interview?.created_at ? new Date(interview.created_at).toLocaleDateString() : new Date().toLocaleDateString())}
               </span>
             </div>
           </GlassCard>
@@ -184,15 +198,15 @@ const ResultPage = ({ results, report, interview, onReset }) => {
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               <FeedbackItem
                 title="기술 이해도"
-                content={getText(report?.technical_feedback, "지원자는 지원한 기술 스택(React, Node.js 등)에 대한 깊은 이해를 보여주었습니다. 특히 최신 트렌드와 라이브러리 활용에 대한 식견이 돋보이며, 이를 실제 프로젝트에 적용한 경험을 구체적으로 설명할 수 있습니다.")}
+                content={getText(report?.details_json?.technical_feedback || report?.technical_feedback, "지원하신 기술 스택에 대한 상세 분석이 진행 중입니다.")}
               />
               <FeedbackItem
                 title="직무 관련 경험"
-                content={getText(report?.experience_feedback, "과거 프로젝트 수행 경험을 통해 실무에서 발생할 수 있는 이슈들을 미리 파악하고 대비하는 능력이 우수합니다. 본인이 주도적으로 문제를 해결한 성과가 명확히 드러났습니다.")}
+                content={getText(report?.details_json?.experience_feedback, "수행하신 프로젝트 경험에 대한 AI 분석 결과입니다.")}
               />
               <FeedbackItem
                 title="문제 해결 능력"
-                content={getText(report?.problem_solving_feedback, "복잡한 문제 상황에서도 논리적이고 체계적으로 접근하는 사고방식을 가지고 있습니다. 원인 분석부터 해결책 도출까지의 과정이 매우 설득력 있게 전달되었습니다.")}
+                content={getText(report?.details_json?.problem_solving_feedback, "문제 상황 대처 및 해결 논리에 대한 AI 분석 결과입니다.")}
               />
             </div>
           </GlassCard>
@@ -213,15 +227,15 @@ const ResultPage = ({ results, report, interview, onReset }) => {
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               <FeedbackItem
                 title="의사소통 능력"
-                content={getText(report?.communication_feedback, "질문의 의도를 정확히 파악하고, 자신의 생각을 명료하게 전달하는 능력이 뛰어납니다. 상대방의 입장을 고려하며 대화를 이끌어가는 태도가 돋보입니다.")}
+                content={getText(report?.details_json?.communication_feedback || report?.communication_feedback, "답변 과정에서의 전달력과 의사소통 스타일에 대한 분석 결과입니다.")}
               />
               <FeedbackItem
                 title="책임감"
-                content={getText(report?.responsibility_feedback, "맡은 업무에 대해 끝까지 책임을 지려는 강한 의지를 보여주었습니다. 어려움에 직면했을 때 회피하지 않고 완수해내는 끈기가 인상적입니다.")}
+                content={getText(report?.details_json?.responsibility_feedback, "업무 임하는 태도와 책임감에 대한 AI 분석 결과입니다.")}
               />
               <FeedbackItem
                 title="성장 의지"
-                content={getText(report?.growth_feedback, "지속적인 자기 계발을 통해 역량을 강화하려는 의지가 뚜렷합니다. 실패로부터 배우고 더 나은 방향으로 나아가려는 긍정적인 마인드셋을 갖추고 있습니다.")}
+                content={getText(report?.details_json?.growth_feedback, "자기계발 의지와 발전 가능성에 대한 AI 분석 결과입니다.")}
               />
             </div>
           </GlassCard>

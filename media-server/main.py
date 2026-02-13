@@ -183,17 +183,37 @@ async def start_remote_stt(track, session_id):
                 # Base64 인코딩
                 b64_audio = base64.b64encode(full_audio).decode('utf-8')
                 
-                # 3. AI-Worker로 Task 전송
-                # Celery는 비동기이므로 여기서 결과를 기다리지 않고 Task만 큐에 넣음
-                # 필요 시 결과 처리를 위한 별도 메커니즘 필요 (예: Task가 결과 DB에 쓰고 Polling 등)
+                # 3. AI-Worker로 Task 전송 및 결과 전송
                 task = celery_app.send_task(
                     "tasks.stt.recognize",
                     args=[b64_audio]
                 )
                 logger.debug(f"[{session_id}] Sent STT chunk to AI-Worker. Task ID: {task.id}")
-                
-                # (Optional) 결과를 비동기로 기다리는 로직을 추가하려면 asyncio.to_thread 등 사용
-                # 하지만 실시간 스트리밍에서 Celery RTT는 지연이 발생할 수 있음.
+
+                # 결과를 비동기 쓰레드에서 기다려서 WebSocket으로 전송
+                def wait_and_send():
+                    try:
+                        result = task.get(timeout=10)
+                        if result and result.get("status") == "success":
+                            text = result.get("text")
+                            if text:
+                                logger.info(f"[{session_id}] STT Result: {text}")
+                                ws = active_websockets.get(session_id)
+                                if ws:
+                                    # asyncio 루프 밖이므로 별도의 메소드나 스케줄링 필요
+                                    asyncio.run_coroutine_threadsafe(
+                                        send_to_websocket(ws, {
+                                            "type": "stt_result",
+                                            "text": text
+                                        }),
+                                        loop
+                                    )
+                    except Exception as e:
+                        logger.error(f"[{session_id}] Failed to get STT result: {e}")
+
+                # 전역 이벤트 루프 참조 필요
+                loop = asyncio.get_event_loop()
+                asyncio.to_thread(wait_and_send)
                 
     except Exception as e:
         logger.error(f"[{session_id}] Remote STT Fail: {e}")
