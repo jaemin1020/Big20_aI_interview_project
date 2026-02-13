@@ -138,20 +138,6 @@ export const getResume = async (resumeId) => {
 };
 
 export const getAllInterviews = async () => {
-    // const response = await api.get('/interviews');
-    // return response.data;
-
-    // [Mock Data] 테스트를 위해 강제로 완료된 인터뷰 데이터를 반환합니다.
-    return [
-        {
-            id: 999,
-            company_name: "테스트 기업",
-            position: "프론트엔드 개발자",
-            status: "completed", // 중요: 상태를 completed로 설정
-            created_at: new Date().toISOString(),
-            score: 85
-        },
-        // 기존 API 호출이 필요하면 아래 주석을 해제하고 위 Mock 리턴을 지우세요.
-        // ...(await api.get('/interviews')).data
-    ];
+    const response = await api.get('/interviews');
+    return response.data;
 };

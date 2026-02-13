@@ -30,6 +30,8 @@ import InterviewHistoryPage from './pages/history/InterviewHistoryPage';
 import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 import AboutPage from './pages/about/AboutPage';
+import RecruiterMainPage from './pages/recruiter/RecruiterMainPage';
+import JobPostingCreatePage from './pages/recruiter/JobPostingCreatePage';
 
 
 function App() {
@@ -179,7 +181,14 @@ function App() {
         await apiLogin(account.username, account.password);
         const u = await getCurrentUser();
         setUser(u);
-        setStep('main');
+
+        // 사용자 권한에 따라 다른 페이지로 이동
+        if (u.role === 'recruiter' || u.role === 'admin') {
+          setStep('recruiter_main'); // 관리자 전용 페이지
+        } else {
+          setStep('main'); // 일반 사용자 페이지
+        }
+
         setAccount(prev => ({ ...prev, fullName: u.full_name || '' }));
       } else {
         // 회원가입 검증
@@ -574,6 +583,10 @@ function App() {
               alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
               return;
             }
+            // 관리자 페이지에서는 로고 클릭 시 현재 페이지 유지
+            if (step === 'recruiter_main') {
+              return;
+            }
             setStep('main');
           }}
           isInterviewing={step === 'interview'}
@@ -583,6 +596,7 @@ function App() {
           onProfileManagement={() => setStep('profile')}
           onLogin={() => { setAuthMode('login'); setStep('auth'); }}
           onRegister={() => { setAuthMode('register'); setStep('auth'); }}
+          hideMenuButtons={step === 'recruiter_main'}
           pageTitle={
             step === 'history' ? '면접 이력' :
               step === 'result' ? '면접 결과' :
@@ -594,29 +608,31 @@ function App() {
         />
       )}
 
-      {/* Theme Toggle Button */}
-      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '50%',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid var(--glass-border)',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-            cursor: 'pointer',
-            fontSize: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease'
-          }}
-        >
-          {isDarkMode ? '☀️' : '🌑'}
-        </button>
-      </div>
+      {/* Theme Toggle Button (관리자 페이지 제외) */}
+      {step !== 'recruiter_main' && (
+        <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            style={{
+              width: '50px',
+              height: '50px',
+              borderRadius: '50%',
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid var(--glass-border)',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+              cursor: 'pointer',
+              fontSize: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {isDarkMode ? '☀️' : '🌑'}
+          </button>
+        </div>
+      )}
 
       <div style={{
         flex: 1,
@@ -670,6 +686,17 @@ function App() {
             handleAuth={handleAuth}
             authError={authError}
             onBack={() => setStep('main')}
+          />
+        )}
+
+
+
+
+        {step === 'recruiter_main' && (
+          <RecruiterMainPage
+            user={user}
+            onLogout={handleLogout}
+            onNavigate={(page) => setStep(page)}
           />
         )}
 
