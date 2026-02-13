@@ -30,6 +30,7 @@ import AccountSettingsPage from './pages/settings/AccountSettingsPage';
 import ProfileManagementPage from './pages/profile/ProfileManagementPage';
 import AboutPage from './pages/about/AboutPage';
 import RecruiterMainPage from './pages/recruiter/RecruiterMainPage';
+import JobPostingCreatePage from './pages/recruiter/JobPostingCreatePage';
 
 
 function App() {
@@ -612,10 +613,14 @@ function App() {
           />
         )}
 
+
+
+
         {step === 'recruiter_main' && (
           <RecruiterMainPage
             user={user}
             onLogout={handleLogout}
+            onNavigate={(page) => setStep(page)}
           />
         )}
 

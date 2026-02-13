@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import './RecruiterMainPage.css';
+import JobPostingCreatePage from './JobPostingCreatePage';
 
-function RecruiterMainPage({ user, onLogout }) {
+function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
     const [currentCandidatePage, setCurrentCandidatePage] = useState(0);
@@ -51,6 +52,19 @@ function RecruiterMainPage({ user, onLogout }) {
 
     const maxValue = Math.max(...monthlyData.map(d => d.count));
 
+    // 페이지 제목 및 부제목 결정
+    const getPageTitle = () => {
+        switch (activeMenu) {
+            case 'job_posting_create':
+                return { title: '공고 등록', subtitle: '새로운 채용 공고를 등록하세요' };
+            case 'dashboard':
+            default:
+                return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
+        }
+    };
+
+    const pageInfo = getPageTitle();
+
     return (
         <div className="recruiter-main-container">
             {/* 사이드바 네비게이션 */}
@@ -77,7 +91,7 @@ function RecruiterMainPage({ user, onLogout }) {
                         </button>
                         {jobPostingMenuOpen && (
                             <div className="dropdown-menu">
-                                <button className="dropdown-item">공고 등록</button>
+                                <button className="dropdown-item" onClick={() => setActiveMenu('job_posting_create')}>공고 등록</button>
                                 <button className="dropdown-item">공고 목록</button>
                                 <button className="dropdown-item">공고 통계</button>
                             </div>
@@ -125,8 +139,8 @@ function RecruiterMainPage({ user, onLogout }) {
                 {/* 헤더 영역 */}
                 <header className="recruiter-header">
                     <div className="header-left">
-                        <h1 className="dashboard-title">면접 운영 대시보드</h1>
-                        <p className="dashboard-subtitle">실시간 면접 현황을 한눈에 확인하세요</p>
+                        <h1 className="dashboard-title">{pageInfo.title}</h1>
+                        <p className="dashboard-subtitle">{pageInfo.subtitle}</p>
                     </div>
 
                     <div className="header-right">
@@ -151,120 +165,132 @@ function RecruiterMainPage({ user, onLogout }) {
                             </div>
                         </div>
 
-
                     </div>
                 </header>
 
-                {/* 대시보드 콘텐츠 */}
-                <div className="dashboard-content">
-                    {/* 면접 현황 요약 카드 */}
-                    <div className="stats-grid">
-                        <div className="stat-card stat-card-primary">
-                            <div className="stat-icon">📅</div>
-                            <div className="stat-content">
-                                <p className="stat-label">당일 예정 면접</p>
-                                <h3 className="stat-value">{dashboardStats.todayInterviews}건</h3>
-                                <div className={`stat-change ${dashboardStats.todayChange >= 0 ? 'positive' : 'negative'}`}>
-                                    <span className="change-icon">{dashboardStats.todayChange >= 0 ? '↑' : '↓'}</span>
-                                    <span className="change-value">{Math.abs(dashboardStats.todayChange)}%</span>
-                                    <span className="change-label">전일 대비</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="stat-card stat-card-success">
-                            <div className="stat-icon">✅</div>
-                            <div className="stat-content">
-                                <p className="stat-label">누적 완료 면접</p>
-                                <h3 className="stat-value">{dashboardStats.completedInterviews}건</h3>
-                                <div className={`stat-change ${dashboardStats.completedChange >= 0 ? 'positive' : 'negative'}`}>
-                                    <span className="change-icon">{dashboardStats.completedChange >= 0 ? '↑' : '↓'}</span>
-                                    <span className="change-value">{Math.abs(dashboardStats.completedChange)}%</span>
-                                    <span className="change-label">전월 대비</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="stat-card stat-card-warning">
-                            <div className="stat-icon">⏳</div>
-                            <div className="stat-content">
-                                <p className="stat-label">대기 중인 지원자</p>
-                                <h3 className="stat-value">{dashboardStats.waitingCandidates}명</h3>
-                                <p className="stat-description">면접 대기 중</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 면접 진행 그래프 & 지원자 현황 */}
-                    <div className="content-grid">
-                        {/* 면접 진행 그래프 */}
-                        <div className="chart-card">
-                            <div className="card-header">
-                                <h3 className="card-title">월별 면접 진행 현황</h3>
-                                <select className="period-selector">
-                                    <option>최근 6개월</option>
-                                    <option>최근 1년</option>
-                                </select>
-                            </div>
-                            <div className="chart-container">
-                                <div className="bar-chart">
-                                    {monthlyData.map((data, index) => (
-                                        <div key={index} className="bar-item">
-                                            <div className="bar-wrapper">
-                                                <div
-                                                    className="bar-fill"
-                                                    style={{
-                                                        height: `${(data.count / maxValue) * 100}%`,
-                                                        animationDelay: `${index * 0.1}s`
-                                                    }}
-                                                >
-                                                    <span className="bar-value">{data.count}</span>
-                                                </div>
-                                            </div>
-                                            <span className="bar-label">{data.month}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 지원자 진행 상태 */}
-                        <div className="candidates-card">
-                            <div className="card-header">
-                                <h3 className="card-title">당일 면접 대상 지원자</h3>
-                                <div className="pagination-dots">
-                                    {Array.from({ length: totalPages }).map((_, index) => (
-                                        <span
-                                            key={index}
-                                            className={`dot ${index === currentCandidatePage ? 'active' : ''}`}
-                                            onClick={() => setCurrentCandidatePage(index)}
-                                        ></span>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="candidates-list">
-                                {currentCandidates.map((candidate) => (
-                                    <div key={candidate.id} className="candidate-item">
-                                        <div className="candidate-avatar">
-                                            {candidate.name[0]}
-                                        </div>
-                                        <div className="candidate-info">
-                                            <h4 className="candidate-name">{candidate.name}</h4>
-                                            <p className="candidate-position">{candidate.position}</p>
-                                        </div>
-                                        <div className="candidate-meta">
-                                            <span className="candidate-time">🕐 {candidate.time}</span>
-                                            <span className={`candidate-status status-${candidate.status}`}>
-                                                {candidate.status === 'waiting' ? '대기중' :
-                                                    candidate.status === 'in-progress' ? '진행중' : '완료'}
-                                            </span>
-                                        </div>
+                {/* 대시보드 콘텐츠 - activeMenu에 따라 다른 콘텐츠 표시 */}
+                {activeMenu === 'dashboard' && (
+                    <div className="dashboard-content">
+                        {/* 면접 현황 요약 카드 */}
+                        <div className="stats-grid">
+                            <div className="stat-card stat-card-primary">
+                                <div className="stat-icon">📅</div>
+                                <div className="stat-content">
+                                    <p className="stat-label">당일 예정 면접</p>
+                                    <h3 className="stat-value">{dashboardStats.todayInterviews}건</h3>
+                                    <div className={`stat-change ${dashboardStats.todayChange >= 0 ? 'positive' : 'negative'}`}>
+                                        <span className="change-icon">{dashboardStats.todayChange >= 0 ? '↑' : '↓'}</span>
+                                        <span className="change-value">{Math.abs(dashboardStats.todayChange)}%</span>
+                                        <span className="change-label">전일 대비</span>
                                     </div>
-                                ))}
+                                </div>
+                            </div>
+
+                            <div className="stat-card stat-card-success">
+                                <div className="stat-icon">✅</div>
+                                <div className="stat-content">
+                                    <p className="stat-label">누적 완료 면접</p>
+                                    <h3 className="stat-value">{dashboardStats.completedInterviews}건</h3>
+                                    <div className={`stat-change ${dashboardStats.completedChange >= 0 ? 'positive' : 'negative'}`}>
+                                        <span className="change-icon">{dashboardStats.completedChange >= 0 ? '↑' : '↓'}</span>
+                                        <span className="change-value">{Math.abs(dashboardStats.completedChange)}%</span>
+                                        <span className="change-label">전월 대비</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="stat-card stat-card-warning">
+                                <div className="stat-icon">⏳</div>
+                                <div className="stat-content">
+                                    <p className="stat-label">대기 중인 지원자</p>
+                                    <h3 className="stat-value">{dashboardStats.waitingCandidates}명</h3>
+                                    <p className="stat-description">면접 대기 중</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 면접 진행 그래프 & 지원자 현황 */}
+                        <div className="content-grid">
+                            {/* 면접 진행 그래프 */}
+                            <div className="chart-card">
+                                <div className="card-header">
+                                    <h3 className="card-title">월별 면접 진행 현황</h3>
+                                    <select className="period-selector">
+                                        <option>최근 6개월</option>
+                                        <option>최근 1년</option>
+                                    </select>
+                                </div>
+                                <div className="chart-container">
+                                    <div className="bar-chart">
+                                        {monthlyData.map((data, index) => (
+                                            <div key={index} className="bar-item">
+                                                <div className="bar-wrapper">
+                                                    <div
+                                                        className="bar-fill"
+                                                        style={{
+                                                            height: `${(data.count / maxValue) * 100}%`,
+                                                            animationDelay: `${index * 0.1}s`
+                                                        }}
+                                                    >
+                                                        <span className="bar-value">{data.count}</span>
+                                                    </div>
+                                                </div>
+                                                <span className="bar-label">{data.month}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 지원자 진행 상태 */}
+                            <div className="candidates-card">
+                                <div className="card-header">
+                                    <h3 className="card-title">당일 면접 대상 지원자</h3>
+                                    <div className="pagination-dots">
+                                        {Array.from({ length: totalPages }).map((_, index) => (
+                                            <span
+                                                key={index}
+                                                className={`dot ${index === currentCandidatePage ? 'active' : ''}`}
+                                                onClick={() => setCurrentCandidatePage(index)}
+                                            ></span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="candidates-list">
+                                    {currentCandidates.map((candidate) => (
+                                        <div key={candidate.id} className="candidate-item">
+                                            <div className="candidate-avatar">
+                                                {candidate.name[0]}
+                                            </div>
+                                            <div className="candidate-info">
+                                                <h4 className="candidate-name">{candidate.name}</h4>
+                                                <p className="candidate-position">{candidate.position}</p>
+                                            </div>
+                                            <div className="candidate-meta">
+                                                <span className="candidate-time">🕐 {candidate.time}</span>
+                                                <span className={`candidate-status status-${candidate.status}`}>
+                                                    {candidate.status === 'waiting' ? '대기중' :
+                                                        candidate.status === 'in-progress' ? '진행중' : '완료'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
+
+                {/* 공고 등록 콘텐츠 */}
+                {activeMenu === 'job_posting_create' && (
+                    <div className="dashboard-content">
+                        <JobPostingCreatePage
+                            user={user}
+                            onBack={() => setActiveMenu('dashboard')}
+                            embedded={true}
+                        />
+                    </div>
+                )}
             </main>
         </div>
     );
