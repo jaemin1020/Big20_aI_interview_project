@@ -293,7 +293,8 @@ async def complete_interview(
     
     celery_app.send_task(
         "tasks.evaluator.generate_final_report",
-        args=[interview_id]
+        args=[interview_id],
+        queue="gpu_queue"  # GPU 워커가 처리하도록 명시
     )
     return {"status": "completed", "interview_id": interview_id}
 

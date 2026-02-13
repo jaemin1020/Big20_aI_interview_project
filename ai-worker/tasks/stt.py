@@ -84,7 +84,7 @@ def recognize_audio_task(audio_b64: str):
             input_path = tmp.name
 
         # Faster-Whisper 사용 (stt_model.transcribe)
-        logger.info(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})")
+        # logger.debug(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})") # [Log Reduced]
         
         segments, info = stt_model.transcribe(
             input_path, 
