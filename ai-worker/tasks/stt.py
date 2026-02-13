@@ -17,7 +17,7 @@ MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 def load_stt_model():
     """
     Faster-Whisper 모델을 로드합니다. (싱글톤 패턴)
-    GPU 환경이면 CUDA + float16, CPU 환경이면 int8 양자화 사용
+    팀 프로젝트 결정 사항: STT는 CPU 리소스만 사용 (int8 양자화 적용)
     """
     global stt_model
     
@@ -26,22 +26,16 @@ def load_stt_model():
         return True
 
     try:
-        # [GPU 가속] 환경 변수 확인 (개인 브랜치 방식 채택)
-        use_gpu = os.getenv("USE_GPU", "false").lower() == "true"
+        # 팀 공통 설정: CPU 및 int8 양자화 사용
+        device = "cpu"
+        compute_type = "int8"
         
-        if use_gpu:
-            device = "cuda"
-            compute_type = "float16"  # GPU에서는 float16이 최적
-        else:
-            device = "cpu"
-            compute_type = "int8"     # CPU에서는 int8이 최적
-        
-        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device.upper()} (compute_type={compute_type})...")
+        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on CPU (compute_type=int8)...")
         
         # 모델 로드
         stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
         
-        logger.info(f"✅ Faster-Whisper loaded successfully: {MODEL_SIZE}")
+        logger.info(f"✅ Faster-Whisper loaded successfully on CPU: {MODEL_SIZE}")
         return True
     except Exception as e:
         logger.error(f"❌ Failed to load Faster-Whisper ({MODEL_SIZE}): {e}", exc_info=True)

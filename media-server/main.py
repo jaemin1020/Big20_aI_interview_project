@@ -439,7 +439,7 @@ async def start_remote_stt(track, session_id):
                 celery_app.send_task(
                     "tasks.stt.recognize",
                     args=[audio_b64],
-                    queue="gpu_queue" # GPU 워커 전용 큐 사용
+                    queue="cpu_queue" # [수정] STT는 CPU 워커가 처리하도록 변경
                 )
                 
                 logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
@@ -610,7 +610,7 @@ async def stt_recognize(file: UploadFile = File(...)):
         task = celery_app.send_task(
             "tasks.stt.recognize",
             args=[audio_b64],
-            queue="gpu_queue"
+            queue="cpu_queue"
         )
         # 테스트용이므로 결과 대기
         result = task.get(timeout=30)
