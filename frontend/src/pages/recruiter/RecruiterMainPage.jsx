@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './RecruiterMainPage.css';
 import JobPostingCreatePage from './JobPostingCreatePage';
+import JobPostingListPage from './JobPostingListPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -57,6 +58,8 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
         switch (activeMenu) {
             case 'job_posting_create':
                 return { title: '공고 등록', subtitle: '새로운 채용 공고를 등록하세요' };
+            case 'job_posting_list':
+                return { title: '공고 현황', subtitle: '등록된 채용 공고를 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -92,34 +95,33 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         {jobPostingMenuOpen && (
                             <div className="dropdown-menu">
                                 <button className="dropdown-item" onClick={() => setActiveMenu('job_posting_create')}>공고 등록</button>
-                                <button className="dropdown-item">공고 목록</button>
-                                <button className="dropdown-item">공고 통계</button>
+                                <button className="dropdown-item" onClick={() => setActiveMenu('job_posting_list')}>공고 현황</button>
                             </div>
                         )}
                     </div>
 
                     <button
-                        className={`nav-item ${activeMenu === 'candidates' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('candidates')}
+                        className={`nav-item ${activeMenu === 'interview_status' ? 'active' : ''}`}
+                        onClick={() => setActiveMenu('interview_status')}
                     >
-                        <span className="nav-icon">👥</span>
-                        <span className="nav-label">지원자 관리</span>
+                        <span className="nav-icon">📋</span>
+                        <span className="nav-label">면접 현황</span>
                     </button>
 
                     <button
-                        className={`nav-item ${activeMenu === 'interviews' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('interviews')}
+                        className={`nav-item ${activeMenu === 'interview_management' ? 'active' : ''}`}
+                        onClick={() => setActiveMenu('interview_management')}
                     >
                         <span className="nav-icon">🎤</span>
                         <span className="nav-label">면접 관리</span>
                     </button>
 
                     <button
-                        className={`nav-item ${activeMenu === 'analytics' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('analytics')}
+                        className={`nav-item ${activeMenu === 'rubrics' ? 'active' : ''}`}
+                        onClick={() => setActiveMenu('rubrics')}
                     >
-                        <span className="nav-icon">📈</span>
-                        <span className="nav-label">분석 리포트</span>
+                        <span className="nav-icon">📐</span>
+                        <span className="nav-label">Rubrics</span>
                     </button>
 
                     <div className="nav-divider"></div>
@@ -288,6 +290,16 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                             user={user}
                             onBack={() => setActiveMenu('dashboard')}
                             embedded={true}
+                        />
+                    </div>
+                )}
+
+                {/* 공고 현황 콘텐츠 */}
+                {activeMenu === 'job_posting_list' && (
+                    <div className="dashboard-content">
+                        <JobPostingListPage
+                            user={user}
+                            onNavigate={(page) => setActiveMenu(page)}
                         />
                     </div>
                 )}
