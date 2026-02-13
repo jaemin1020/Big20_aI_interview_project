@@ -38,8 +38,8 @@ class ExaoneLLM(LLM):
         # CPU 환경에서는 EXAONE 로딩 건너뛰기 (libcuda.so.1 에러 방지)
         use_gpu = os.getenv("USE_GPU", "true").lower() == "true"
         if not use_gpu:
-            logger.warning("⚠️ USE_GPU=false detected. Skipping EXAONE engine loading (CPU mode).")
-            logger.warning("⚠️ EXAONE-based tasks will not work in this worker.")
+            logger.warning("⚠️ USE_GPU=false 감지됨. EXAONE 엔진 로딩을 건너뜁니다 (CPU 모드).")
+            logger.warning("⚠️ 이 워커에서는 EXAONE 기반 작업을 수행할 수 없습니다.")
             ExaoneLLM._initialized = True
             return
             

@@ -71,13 +71,13 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             generate_next_question_task.apply_async(args=[interview_id], queue='gpu_queue')
             logger.info(f"🚀 [IMMEDIATE] apply_async(queue='gpu_queue') called for Interview {interview_id}")
         else:
-            logger.error(f"Could not find interview_id for transcript {transcript_id}")
+            logger.error(f"인터뷰 ID를 찾을 수 없습니다: {transcript_id}")
     except Exception as e:
-        logger.error(f"Failed to trigger next question task: {e}")
-    logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
+        logger.error(f"다음 질문 생성 트리거 실패: {e}")
+    logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
     
     if not answer_text or not answer_text.strip():
-        logger.warning(f"Empty answer for transcript {transcript_id}. Skipping LLM evaluation.")
+        logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
         return {
             "technical_score": 0,
             "communication_score": 0,
@@ -91,7 +91,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         n_gpu_layers = int(os.getenv("N_GPU_LAYERS", "0"))
         
         if n_gpu_layers == 0:
-            logger.info("⚡ [FAST MODE] CPU Worker spotted. Skipping heavy LLM for individual answer evaluation.")
+            logger.info("⚡ [FAST MODE] CPU Worker 감지됨. 개별 답변에 대한 무거운 LLM 분석을 건너뜁니다.")
             result = {
                 "technical_score": 3,
                 "communication_score": 3,
@@ -150,7 +150,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             update_question_avg_score(question_id, answer_quality)
 
         duration = time.time() - start_ts
-        logger.info(f"Evaluation Completed ({duration:.2f}s)")
+        logger.info(f"답변 평가 완료 ({duration:.2f}초)")
         return result
 
     except Exception as e:
@@ -174,13 +174,13 @@ def generate_final_report(interview_id: int):
     생성자: ejm
     생성일자: 2026-02-04
     """
-    logger.info(f"Generating Final Report for Interview {interview_id}")
+    logger.info(f"인터뷰 {interview_id}에 대한 최종 리포트 생성 중...")
     from db import create_or_update_evaluation_report, update_interview_overall_score, get_interview_transcripts
     
     try:
         transcripts = get_interview_transcripts(interview_id)
         if not transcripts:
-            logger.warning("No transcripts found for this interview.")
+            logger.warning("이 인터뷰에 대한 대화 내역을 찾을 수 없습니다.")
             create_or_update_evaluation_report(
                 interview_id,
                 technical_score=0, communication_score=0, cultural_fit_score=0,
@@ -211,7 +211,7 @@ def generate_final_report(interview_id: int):
             try:
                 result = parser.parse(raw_output)
             except Exception as parse_err:
-                logger.error(f"Final report parsing failed: {parse_err}")
+                logger.error(f"최종 리포트 파싱 실패: {parse_err}")
                 json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
                 if json_match:
                     result = json.loads(json_match.group())
@@ -219,7 +219,7 @@ def generate_final_report(interview_id: int):
                     raise parse_err
                 
         except Exception as llm_err:
-            logger.error(f"LLM Summary failed: {llm_err}")
+            logger.error(f"LLM 요약 생성 실패: {llm_err}")
             result = {
                 "technical_score": 75, "communication_score": 75, "cultural_fit_score": 75,
                 "summary_text": "분석 시스템 지연으로 요약이 지체되었습니다.",
@@ -243,7 +243,7 @@ def generate_final_report(interview_id: int):
             }
         )
         update_interview_overall_score(interview_id, score=overall)
-        logger.info(f"✅ Final Report Generated for Interview {interview_id}")
+        logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
 
     except Exception as e:
         logger.error(f"❌ Error in generate_final_report: {e}")
