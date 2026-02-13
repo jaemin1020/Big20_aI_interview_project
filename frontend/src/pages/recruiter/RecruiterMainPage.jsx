@@ -6,6 +6,7 @@ import JobPostingListPage from './JobPostingListPage';
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
+    const [interviewStatusMenuOpen, setInterviewStatusMenuOpen] = useState(false);
     const [currentCandidatePage, setCurrentCandidatePage] = useState(0);
 
     // Mock Data - 실제로는 API에서 가져옴
@@ -100,20 +101,30 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         )}
                     </div>
 
-                    <button
-                        className={`nav-item ${activeMenu === 'interview_status' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('interview_status')}
-                    >
-                        <span className="nav-icon">📋</span>
-                        <span className="nav-label">면접 현황</span>
-                    </button>
+                    {/* 면접 현황 메뉴 (드롭다운) */}
+                    <div className="nav-dropdown">
+                        <button
+                            className={`nav-item ${activeMenu === 'interview-status' ? 'active' : ''}`}
+                            onClick={() => setInterviewStatusMenuOpen(!interviewStatusMenuOpen)}
+                        >
+                            <span className="nav-icon">📋</span>
+                            <span className="nav-label">면접 현황</span>
+                            <span className={`dropdown-arrow ${interviewStatusMenuOpen ? 'open' : ''}`}>▼</span>
+                        </button>
+                        {interviewStatusMenuOpen && (
+                            <div className="dropdown-menu">
+                                <button className="dropdown-item" onClick={() => setActiveMenu('candidate_management')}>지원자 관리</button>
+                                <button className="dropdown-item" onClick={() => setActiveMenu('interview_management')}>면접 관리</button>
+                            </div>
+                        )}
+                    </div>
 
                     <button
-                        className={`nav-item ${activeMenu === 'interview_management' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('interview_management')}
+                        className={`nav-item ${activeMenu === 'interview_results' ? 'active' : ''}`}
+                        onClick={() => setActiveMenu('interview_results')}
                     >
-                        <span className="nav-icon">🎤</span>
-                        <span className="nav-label">면접 관리</span>
+                        <span className="nav-icon">📊</span>
+                        <span className="nav-label">면접 결과</span>
                     </button>
 
                     <button
