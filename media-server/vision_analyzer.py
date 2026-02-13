@@ -15,47 +15,57 @@ GAZE_TOLERANCE_Y = 0.08  # 시선 상하 허용치
 HEAD_SENSITIVITY = 0.008 # 고개 끄덕임 민감도
 
 class VisionAnalyzer:
-    """
-    미디어 서버용 MediaPipe 비전 분석기
-    (화면 그리기 기능 제거, 순수 데이터 분석용)
-    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(VisionAnalyzer, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
+        if self._initialized: return
+        
         # 모델 경로
         self.model_path = 'model_repository/face_landmarker.task'
-        
         self.detector = None
         self.is_ready = False
 
         # 모델 파일 존재 확인 및 다운로드
         if not os.path.exists(self.model_path):
-            logger.warning(f"⚠️ 모델 파일 없음: {self.model_path}")
+            print(f"⚠️ [Vision] 모델 파일 없음: {self.model_path}", flush=True)
             try:
-                logger.info("-> 모델 다운로드 시도 (urllib)...")
+                print("-> [Vision] 모델 다운로드 시작 (urllib)... (3.7MB)", flush=True)
                 os.makedirs("model_repository", exist_ok=True)
                 import urllib.request
                 url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
                 urllib.request.urlretrieve(url, self.model_path)
-                logger.info("✅ 모델 다운로드 완료")
+                print("✅ [Vision] 모델 다운로드 완료", flush=True)
             except Exception as e:
-                logger.error(f"❌ 모델 다운로드 실패: {e}")
+                print(f"❌ [Vision] 모델 다운로드 실패: {e}", flush=True)
                 return
             
         try:
+            print("-> [Vision] MediaPipe FaceLandmarker 설정 구성 중...", flush=True)
             base_options = python.BaseOptions(
                 model_asset_path=self.model_path,
-                delegate=python.BaseOptions.Delegate.CPU # Docker 환경에서는 CPU 권장
+                delegate=python.BaseOptions.Delegate.CPU
             )
             options = vision.FaceLandmarkerOptions(
                 base_options=base_options,
-                output_face_blendshapes=True, # 표정 분석 활성화
-                running_mode=vision.RunningMode.VIDEO, # 비디오 스트림 모드
-                num_faces=1 # 면접자 1명만 분석
+                output_face_blendshapes=True,
+                running_mode=vision.RunningMode.VIDEO,
+                num_faces=1
             )
+            print("-> [Vision] create_from_options 호출 시작 (이 단계에서 멈출 수 있음)...", flush=True)
             self.detector = vision.FaceLandmarker.create_from_options(options)
-            logger.info("✅ MediaPipe FaceLandmarker 로드 완료")
+            print("✅ [Vision] MediaPipe FaceLandmarker 로드 완료 (준비됨)", flush=True)
             self.is_ready = True
+            self._initialized = True
         except Exception as e:
-            logger.error(f"❌ Vision 모델 로드 실패: {e}")
+            print(f"❌ [Vision] 모델 로드 실패: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             self.is_ready = False
 
         # 영점 (Calibration) 기본값 (PoC와 동일)

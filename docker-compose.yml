@@ -141,6 +141,7 @@ services:
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
     depends_on:
       - backend
       - redis
