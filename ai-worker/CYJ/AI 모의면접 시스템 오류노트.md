@@ -1,6 +1,6 @@
 # 🛡️ AI 면접 시스템 개발 및 트러블슈팅 일지 (Dev Log)
 
-**작성일**: 2026년 2월 5일 ~ 2월 10일 (최종 업데이트)
+**작성일**: 2026년 2월 5일 ~ 2월 13일 (최종 업데이트)
 **작성자**: Project Big20 AI Team
 **문서 설명**: 본 문서는 AI 면접 시스템 개발 과정에서 발생한 주요 에러와 이슈, 그리고 해결 과정을 체계적으로 정리한 **기술 회고록(Retrospective)**입니다.
 
@@ -186,3 +186,169 @@
 * **해결**: `audioContext.createScriptProcessor`를 통해 노드를 정상 생성하고 `destination`에 연결하는 로직 추가.
 
 ---
+
+## 3. 📅 2026-02-13 작업 일지 — WebRTC 영상 분석 연동 디버깅 (대형 세션)
+
+> **작업 목표**: WebRTC를 통해 클라이언트(브라우저)에서 미디어 서버로 실시간 영상/음성 스트림을 전송하고, 서버에서 MediaPipe 기반 영상 분석(시선, 자세, 미소, 감정)이 정상 동작하여 점수를 계산하도록 하는 것.
+
+---
+
+### 3.1. 🔌 WebRTC 연결 (Media Server ↔ Frontend)
+
+#### 🔴 Issue #1: SDP 파싱 에러 — `Failed to parse SessionDescription`
+
+* **발생일**: 2026-02-13
+* **위치**: `frontend/src/App.jsx` (WebRTC 연결 시)
+* **증상**: 브라우저 콘솔에 `Uncaught DOMException: Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': Failed to parse SessionDescription. Invalid SDP line: a=setup:active` 에러 발생. WebRTC 연결 자체가 수립되지 않음.
+* **원인**: `media-server/main.py`의 `force_localhost_candidate()` 함수에서 SDP를 줄 단위(`splitlines()`)로 분해 후 `"\r\n".join()`으로 재조립하면서, **원본 SDP의 줄바꿈 포맷이 손상**됨. `a=setup:active` 같은 정상 SDP 라인이 파싱 불가능한 형태로 변형됨.
+* **해결**: 
+    1. `splitlines()` + `join()` 방식을 **전면 폐기**.
+    2. `re.sub()` (정규표현식)을 사용하여 **원본 SDP 텍스트 구조를 유지하면서** 사설 IP(`172.x.x.x`, `10.x.x.x`, `192.168.x.x`)만 `127.0.0.1`로 치환하도록 변경.
+    3. `\b` (단어 경계) 메타 문자를 추가하여 IP 주소가 아닌 다른 텍스트의 일부로 포함된 숫자까지 실수로 치환하는 **오탐(False Positive)** 방지.
+* **관련 파일**: `media-server/main.py` — `force_localhost_candidate()` 함수
+* **교훈**: SDP(Session Description Protocol)는 매우 엄격한 텍스트 프로토콜이므로, 원본 포맷(줄바꿈, 공백)을 절대 변경해서는 안 됨. 필요한 부분만 정밀하게 치환해야 함.
+
+---
+
+#### 🔴 Issue #2: ICE Candidate 미수집 — 서버가 클라이언트 주소를 모름
+
+* **발생일**: 2026-02-13
+* **위치**: `frontend/src/App.jsx` — `setupWebRTC()` 함수
+* **증상**: SDP 파싱 에러 해결 후에도 영상 프레임이 서버에 도달하지 않음. 서버 로그에 `⏰ 5초간 프레임 수신 없음 (타임아웃)` 반복.
+* **원인**: 클라이언트가 `createOffer()` 직후 ICE Candidate 수집이 완료되기 **전에** SDP를 서버로 보내버림. 서버는 클라이언트의 네트워크 주소(Candidate)를 모르니 미디어 스트림을 받을 수 없음.
+* **해결**: `setupWebRTC()` 함수에 **ICE Gathering 완료 대기 로직** 추가:
+    ```javascript
+    await new Promise((resolve) => {
+        if (pc.iceGatheringState === 'complete') { resolve(); return; }
+        const checkState = () => {
+            if (pc.iceGatheringState === 'complete') {
+                pc.removeEventListener('icegatheringstatechange', checkState);
+                resolve();
+            }
+        };
+        pc.addEventListener('icegatheringstatechange', checkState);
+        setTimeout(() => { /* 1초 fallback */ resolve(); }, 1000);
+    });
+    ```
+* **관련 파일**: `frontend/src/App.jsx` — `setupWebRTC()` 함수
+* **교훈**: WebRTC에서 SDP Offer를 보내기 전에 반드시 `iceGatheringState === 'complete'`를 확인해야 함. 특히 Docker 환경에서는 STUN/TURN 없이 로컬 후보만 사용하므로 이 과정이 더 중요함.
+
+---
+
+#### 🔴 Issue #3: Docker 내부 IP 노출 — 클라이언트가 172.x.x.x에 접근 불가
+
+* **발생일**: 2026-02-13
+* **위치**: `media-server/main.py` — WebRTC `/offer` 엔드포인트
+* **증상**: SDP Answer에 Docker 내부 네트워크 IP(`172.19.0.x`)가 포함되어 응답됨. 브라우저는 이 IP에 접근할 수 없으므로 미디어 연결 실패.
+* **원인**: Docker 컨테이너 내부에서 aiortc가 자신의 IP를 Docker Bridge Network IP로 인식하여 SDP에 포함시킴.
+* **해결**: `force_localhost_candidate()` 함수를 구현하여, 서버 응답 SDP에서 사설 IP 대역을 `127.0.0.1`로 자동 변환. 클라이언트는 `localhost:50000-50050` 포트 포워딩을 통해 미디어 서버에 접속.
+* **관련 파일**: `media-server/main.py`, `docker-compose.yml` (포트 매핑: `50000-50050:50000-50050/udp`)
+
+---
+
+### 3.2. 📊 영상 분석 점수 계산 (Media Server)
+
+#### 🔴 Issue #4: `_calculate_scores()` 변수 미정의 — `UnboundLocalError` 가능성
+
+* **발생일**: 2026-02-13
+* **위치**: `media-server/main.py` — `VideoAnalysisTrack._calculate_scores()` 메서드
+* **증상**: 점수 계산이 되지 않거나, 변수 참조 에러 발생 가능성.
+* **원인**: `avg_smile`, `avg_anxiety`, `gaze_ratio`, `posture_ratio` 변수를 **산출하기 전에** 보정(Adjustment) 수식에서 먼저 사용하려 함. 누적 리스트(`all_smiles`, `all_anxiety`)와 카운터(`total_gaze_center`, `total_posture_stable`)는 있지만, 이를 평균으로 환산하는 코드가 빠져 있었음.
+* **해결**: 보정 수식 **앞에** 평균값 산출 로직 추가:
+    ```python
+    avg_smile = (sum(all_smiles) / len(all_smiles)) * 100 if all_smiles else 0.0
+    avg_anxiety = (sum(all_anxiety) / len(all_anxiety)) * 100 if all_anxiety else 0.0
+    gaze_ratio = (total_gaze_center / total_frames) * 100
+    posture_ratio = (total_posture_stable / total_frames) * 100
+    ```
+* **관련 파일**: `media-server/main.py` — `_calculate_scores()` 메서드
+
+---
+
+#### 🔴 Issue #5: `process_vision()` 이벤트 루프 블로킹
+
+* **발생일**: 2026-02-13
+* **위치**: `media-server/main.py` — `VideoAnalysisTrack.process_vision()` 메서드
+* **증상**: MediaPipe의 `process_frame()` 호출이 CPU 집약적(~50ms)이어서, 같은 이벤트 루프에서 실행 시 WebRTC 패킷 수신이 지연됨. `⏰ 5초간 프레임 수신 없음` 에러가 간헐적으로 재발.
+* **원인**: `asyncio` 이벤트 루프는 싱글 스레드이므로, CPU 작업이 루프를 블로킹하면 네트워크 I/O(WebRTC 패킷 수신)가 밀림.
+* **해결**: `loop.run_in_executor(None, self.analyzer.process_frame, img, timestamp_ms)`를 사용하여 **스레드 풀**에서 실행하도록 변경. 이벤트 루프가 블로킹되지 않음.
+* **관련 파일**: `media-server/main.py` — `process_vision()` 메서드
+
+---
+
+### 3.3. 🎨 Frontend (App.jsx)
+
+#### 🔴 Issue #6: `NotSupportedError: Failed to execute 'start' on 'MediaRecorder'`
+
+* **발생일**: 2026-02-13
+* **위치**: `frontend/src/pages/setup/EnvTestPage.jsx` (handleStartTest 함수)
+* **증상**: 환경 테스트 페이지에서 음성 인식 테스트 시 `MediaRecorder` 시작 실패 에러 발생.
+* **원인**: `MediaRecorder`가 이미 'recording' 상태이거나, 사용 중인 `stream`이 유효하지 않거나 종료되었을 때 발생. 페이지를 왔다 갔다 하거나 테스트를 반복할 때 상태 관리가 꼬임.
+* **해결**: `mediaRecorder.start()` 호출을 `try-catch` 블록으로 감싸서 에러 핸들링 추가.
+* **관련 파일**: `frontend/src/pages/setup/EnvTestPage.jsx`
+
+---
+
+#### 🔴 Issue #7: `App.jsx` 함수 구조 파손 — Vite 빌드 에러
+
+* **발생일**: 2026-02-13
+* **위치**: `frontend/src/App.jsx`
+* **증상**: `[plugin:vite:react-babel] Unexpected token, expected ","` 빌드 에러. 웹사이트 자체가 뜨지 않음.
+* **원인**: AI 에이전트의 연속적인 코드 수정 과정에서 `setupWebRTC()` 함수와 `toggleRecording()` 함수의 **중괄호/괄호 구조가 파손**됨. `setupWebRTC`의 `try-catch` 블록이 삭제되고, `toggleRecording`의 함수 선언(`const toggleRecording = async () => {`)이 사라지면서 두 함수의 코드가 뒤섞임.
+* **해결**: Python 스크립트(`patch_app.py`)를 작성하여 파일 내용을 정밀하게 파싱하고, `setupWebRTC`와 `toggleRecording` 함수를 올바른 구조로 **통째로 재삽입**. (일반 코드 수정 도구로는 빈 줄이 많아 타겟팅 실패)
+* **관련 파일**: `frontend/src/App.jsx`
+* **교훈**: 복잡한 JSX 파일의 함수 경계를 수정할 때는 한 번에 큰 블록을 건드리지 말고, 작은 단위로 나눠서 수정해야 구조가 파손되지 않음.
+
+---
+
+### 3.4. ⚙️ 성능 최적화 및 기타
+
+#### 🟡 Optimization #1: 디버그 로그 레벨 조정
+
+* **발생일**: 2026-02-13
+* **위치**: `media-server/main.py` — 로깅 설정
+* **증상**: Docker 로그에 `aiortc`의 RTP/RTCP 패킷 로그가 초당 수십 줄씩 출력되어 핵심 로그를 읽기 어려움.
+* **해결**: `aiortc`, `aioice`, `av` 라이브러리의 로그 레벨을 `DEBUG` → `WARNING`으로 변경. 핵심 분석 로그(`[실시간 종합점수]`)만 출력되도록 정리.
+
+#### 🟡 Optimization #2: 영상 분석 FPS 제한 (10FPS → 5FPS)
+
+* **발생일**: 2026-02-13
+* **위치**: `media-server/main.py` — `start_video_analysis()` 함수
+* **이유**: 영상 분석이 실시간으로 동작하면서 CPU 자원을 많이 사용함. 같은 호스트 머신에서 동작하는 LLM 질문 생성 워커와 자원 경쟁이 발생하여 **질문 생성 속도가 체감상 느려짐**.
+* **해결**: 분석 간격을 `0.1초(10FPS)` → `0.2초(5FPS)`로 변경. 면접 태도 분석에는 초당 5프레임으로 충분함.
+
+#### 🟡 Optimization #3: STT GPU 가속 지원 추가
+
+* **발생일**: 2026-02-13
+* **위치**: `ai-worker/tasks/stt.py` — `load_stt_pipeline()` 함수
+* **기존**: Whisper STT가 **강제 CPU 모드** (`device="cpu"`, `compute_type="int8"`)로 하드코딩 되어 있었음.
+* **변경**: `USE_GPU` 환경 변수를 확인하여, GPU 워커에서는 `device="cuda"` + `compute_type="float16"`을 사용하도록 동적 설정.
+* **주의**: 현재 Celery 라우팅 설정에서 STT 태스크는 `cpu_queue`로 배정되므로, 실질적으로 CPU 워커(`USE_GPU=false`)에서 실행됨. GPU 가속을 활용하려면 라우팅 변경 필요.
+
+---
+
+### 3.5. 🔍 GPU 사용 현황 점검
+
+* **확인 결과**: `docker exec interview_worker_gpu nvidia-smi` 실행 → **"No running processes found"**
+* **원인**: Celery Solo Pool은 첫 태스크 요청 시에만 모델을 로딩하는 **지연 로딩(Lazy Loading)** 구조. 서버 기동 직후에는 GPU에 올라간 프로세스가 없음.
+* **EXAONE 7.8B 모델**: 첫 질문 생성 요청이 올 때 GPU에 로딩됨 (약 10~30초 소요). 이후 요청부터는 빠르게 응답.
+* **결론**: 질문 생성 속도가 느려진 것은 **AI 코드를 수정한 것이 아니라**, (1) WebRTC 연결 성공으로 인해 영상 분석이 실제로 동작하기 시작하면서 호스트 리소스 경쟁이 생긴 것, (2) `docker-compose down/up` 시 모델이 GPU에서 언로드되어 첫 요청 시 재로딩이 필요한 것이 주된 원인.
+
+---
+
+### 3.6. 📋 2026-02-13 작업 요약 (최종)
+
+| # | 작업 내용 | 관련 파일 | 상태 |
+|---|----------|----------|------|
+| 1 | SDP 파싱 에러 해결 (정규표현식 치환) | `media-server/main.py` | ✅ 완료 |
+| 2 | ICE Candidate 수집 대기 로직 추가 | `frontend/src/App.jsx` | ✅ 완료 |
+| 3 | Docker 내부 IP → localhost 변환 | `media-server/main.py` | ✅ 완료 |
+| 4 | 점수 계산 로직 오류 수정 | `media-server/main.py` | ✅ 완료 |
+| 5 | 이벤트 루프 블로킹 방지 (run_in_executor) | `media-server/main.py` | ✅ 완료 |
+| 6 | MediaRecorder 에러 핸들링 | `frontend/EnvTestPage.jsx` | ✅ 완료 |
+| 7 | App.jsx 함수 구조 파손 복구 | `frontend/src/App.jsx` | ✅ 완료 |
+| 8 | aiortc 디버그 로그 숨김 | `media-server/main.py` | ✅ 완료 |
+| 9 | 영상 분석 FPS 5로 제한 | `media-server/main.py` | ✅ 완료 |
+| 10 | STT GPU 가속 옵션 추가 | `ai-worker/tasks/stt.py` | ✅ 완료 |
+
+**최종 결과**: WebRTC 연결 성공 → 실시간 영상 분석 동작 확인 → 시선/자세/미소/감정 점수 계산 정상 출력 ✅

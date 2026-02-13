@@ -53,16 +53,15 @@ socket.socket.bind = restricted_socket_bind
 print("🐒 [미디어 서버] Global Socket Monkey Patch Applied: UDP Ports 50000-50050", flush=True)
 
 # 1. 로깅 설정
-logging.basicConfig(
-    level=logging.INFO, 
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)] # Docker logs에 잘 나오도록 stdout 핸들러 명시
-)
+# [필수] WebRTC 디버깅 로그 (연결 문제 해결용)
+# 너무 시끄러우면 WARNING으로 변경
+logging.basicConfig(level=logging.INFO) # 전체 레벨은 INFO로 유지
 logger = logging.getLogger("Media-Server")
 
-# [DEBUG] WebRTC 상세 로깅 활성화 (User 요청)
-logging.getLogger("aiortc").setLevel(logging.DEBUG)
-logging.getLogger("aioice").setLevel(logging.DEBUG)
+# aiortc 및 aioice 로그 레벨 조정 (연결 성공했으므로 시끄러운 로그 숨김)
+logging.getLogger("aiortc").setLevel(logging.WARNING)
+logging.getLogger("aioice").setLevel(logging.WARNING)
+logging.getLogger("av").setLevel(logging.WARNING) # av 라이브러리 로그도 숨김
 
 app = FastAPI()
 
@@ -361,9 +360,10 @@ async def start_video_analysis(track, session_id):
                     print(f"🎉 [{session_id}] 첫 프레임 수신 성공!", flush=True)
                 if frame_count % 100 == 0:
                     print(f"📽️ [{session_id}] 현재까지 {frame_count} 프레임 수신됨...", flush=True)
-                    
-                # 10FPS (0.1s 간격) 분석
-                if curr - analysis_track.last_tracking_time > 0.1:
+
+                # [성능 조절] 5FPS (0.2s 간격) 분석 
+                # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
+                if curr - analysis_track.last_tracking_time > 0.2:
                     analysis_track.last_tracking_time = curr
                     asyncio.create_task(analysis_track.process_vision(frame, int(curr * 1000)))
 
