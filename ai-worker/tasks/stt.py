@@ -1,7 +1,7 @@
 import os
 import base64
 import tempfile
-import logging # [NEW] Added missing import
+import logging
 from celery import shared_task
 from faster_whisper import WhisperModel
 
@@ -18,7 +18,7 @@ MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 def load_stt_pipeline():
     """
     Faster-Whisper 모델을 로드합니다. (싱글톤 패턴)
-    Compute Type: int8 (CPU 성능 최적화)
+    GPU 환경이면 CUDA + float16, CPU 환경이면 int8 양자화 사용
     """
     global stt_model
     
@@ -27,11 +27,17 @@ def load_stt_pipeline():
         return True
 
     try:
-        device = "cpu"
-        # CPU에서 int8 양자화 사용 시 속도 대폭 향상
-        compute_type = "int8" 
+        # [GPU 가속] 환경 변수 확인
+        use_gpu = os.getenv("USE_GPU", "false").lower() == "true"
         
-        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device} (compute_type={compute_type})...")
+        if use_gpu:
+            device = "cuda"
+            compute_type = "float16"  # GPU에서는 float16이 최적
+        else:
+            device = "cpu"
+            compute_type = "int8"     # CPU에서는 int8이 최적
+        
+        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on {device.upper()} (compute_type={compute_type})...")
         
         # 모델 로드 (최초 실행 시 다운로드됨)
         stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
@@ -40,8 +46,6 @@ def load_stt_pipeline():
         return True
     except Exception as e:
         logger.error(f"❌ Failed to load Faster-Whisper ({MODEL_SIZE}): {e}", exc_info=True)
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error details: {str(e)}")
         stt_model = None
         return False
 
@@ -58,7 +62,7 @@ def recognize_audio_task(audio_b64: str):
     # 모델 로드 (지연 로딩)
     if stt_model is None:
         logger.info("[STT] Model not loaded. Attempting to load...")
-        success = load_stt_pipeline() # 함수명 수정: load_stt_model -> load_stt_pipeline
+        success = load_stt_pipeline()
         if not success or stt_model is None:
             error_msg = f"STT Model loading failed. Model: {MODEL_SIZE}"
             logger.error(f"[STT] {error_msg}")
@@ -84,8 +88,6 @@ def recognize_audio_task(audio_b64: str):
             input_path = tmp.name
 
         # Faster-Whisper 사용 (stt_model.transcribe)
-        # logger.debug(f"🎤 Transcribing audio... (Model: {MODEL_SIZE})") # [Log Reduced]
-        
         segments, info = stt_model.transcribe(
             input_path, 
             beam_size=1, 

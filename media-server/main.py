@@ -360,9 +360,10 @@ async def start_video_analysis(track, session_id):
                     print(f"🎉 [{session_id}] 첫 프레임 수신 성공!", flush=True)
                 if frame_count % 100 == 0:
                     print(f"📽️ [{session_id}] 현재까지 {frame_count} 프레임 수신됨...", flush=True)
-                    
-                # 10FPS (0.1s 간격) 분석
-                if curr - analysis_track.last_tracking_time > 0.1:
+
+                # [성능 조절] 5FPS (0.2s 간격) 분석 
+                # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
+                if curr - analysis_track.last_tracking_time > 0.2:
                     analysis_track.last_tracking_time = curr
                     asyncio.create_task(analysis_track.process_vision(frame, int(curr * 1000)))
 
