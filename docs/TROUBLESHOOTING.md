@@ -16,6 +16,7 @@
 7. [Celery Task 이름 불일치](#7-celery-task-이름-불일치)
 8. [Docker 볼륨 공유 문제](#8-docker-볼륨-공유-문제)
 9. [numpy array 체크 오류](#9-numpy-array-체크-오류)
+10. [프론트엔드 빌드 오류 (Missing Semicolon)](#10-프론트엔드-빌드-오류-missing-semicolon)
 
 ---
 
@@ -556,6 +557,68 @@ docker exec -it interview_worker ls -lh /app/uploads/resumes/
 
 ---
 
+---
+
+## 10. 프론트엔드 빌드 오류 (Missing Semicolon)
+
+### 🔴 **문제**
+
+```bash
+npm run build
+# 또는 개발 서버 실행 시 브라우저 콘솔/터미널에 에러 발생
+```
+
+**에러 메시지**:
+
+```
+[plugin:vite:react-babel] /app/src/App.jsx: Missing semicolon. (385:3)
+  388 |     alert('장비가 아직 준비되지 않았습니다. 잠시만 기다려주세요.');
+...
+399|      wsRef.current.send(JSON.stringify({ type: 'start_recording' }));
+   |                                                         ^
+```
+
+### 🔍 **원인**
+
+`App.jsx` 내 `toggleRecording` 함수의 구문 구조가 병합 과정이나 코드 수정 중 파손되었습니다.
+
+1.  **중괄호(`}`) 위치 오류**: 374행에서 시작된 `if` 블록이 376행에서 너무 일찍 닫히면서, 이후의 로직들이 블록 밖으로 밀려났습니다.
+2.  **공중 부양된 `else` (Orphaned else)**: 385행의 `else` 문이 짝이 맞는 `if` 없이 단독으로 존재하게 되어, 자바스크립트 엔진이 이를 문법 오류로 인식했습니다.
+3.  **바벨 파서 혼동**: 구문 구조가 깨짐에 따라 바벨이 정확한 에러 지점을 찾지 못하고 "세미콜론 누락"이라는 엉뚱한 메시지를 출력하게 되었습니다.
+
+### ✅ **해결 방법**
+
+**파일**: `frontend/src/App.jsx`
+
+잘못된 중괄호를 제거하고 `if-else` 구조를 논리적으로 복원하였습니다.
+
+```javascript
+// 수정 전 (구조 파손)
+const toggleRecording = async () => {
+  if (condition) {
+    stop();
+  } // ❌ 여기서 일찍 닫힘
+  
+  // ...중간 로직...
+  
+  } else { // ❌ 짝이 없는 else 발생
+    start();
+  }
+};
+
+// 수정 후 (구조 복구)
+const toggleRecording = async () => {
+  if (condition) {
+    stop();
+    // ...중지 관련 로직들이 if 블록 내부에 포함됨...
+  } else { // ✅ 정식 if-else 구조로 복구
+    start();
+  }
+};
+```
+
+---
+
 **작성자**: AI Assistant
-**최종 수정**: 2026-02-04
-**상태**: ✅ 모든 오류 해결 완료
+**최종 수정**: 2026-02-13
+**상태**: ✅ 해결 완료

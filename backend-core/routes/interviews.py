@@ -165,13 +165,26 @@ async def get_all_interviews(
     interviews = db.exec(stmt).all()
     
     result = []
+    from db_models import Company, Resume
     for interview in interviews:
         candidate = db.get(User, interview.candidate_id)
+        resume = db.get(Resume, interview.resume_id) if interview.resume_id else None
+        company = db.get(Company, interview.company_id) if interview.company_id else None
+        
+        # 📄 이력서 추출 회사명 우선, 없으면 DB 회사명
+        actual_company = "지원 기업"
+        if resume and resume.structured_data:
+            actual_company = resume.structured_data.get("header", {}).get("target_company") or actual_company
+        
+        if (not actual_company or actual_company == "지원 기업") and company:
+            actual_company = company.company_name
+            
         result.append({
             "id": interview.id,
             "candidate_id": interview.candidate_id,
             "candidate_name": candidate.full_name if candidate else "Unknown",
             "position": interview.position,
+            "company_name": actual_company, # 회사명 추가
             "status": interview.status,
             "created_at": interview.created_at,
             "start_time": interview.start_time,
@@ -326,7 +339,45 @@ async def get_evaluation_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not yet available")
     
-    return report
+    # 🔗 데이터 원본(DB) 조회
+    from db_models import Company, Resume
+    interview = db.get(Interview, interview_id)
+    resume = db.get(Resume, interview.resume_id) if interview and interview.resume_id else None
+    company = db.get(Company, interview.company_id) if interview and interview.company_id else None
+    candidate = db.get(User, interview.candidate_id) if interview else None
+
+    # 📄 이력서 및 프로필에서 실제 데이터 추출
+    res_data = resume.structured_data if resume and resume.structured_data else {}
+    res_header = res_data.get("header", {})
+    
+    cand_name = res_header.get("name") or (candidate.full_name if candidate else "지원자")
+    actual_position = res_header.get("target_role") or (interview.position if interview else "직무 미상")
+    
+    # 회사명: 이력서 추출값 -> DB 저장값 -> '지원 기업' (폴백)
+    actual_company = res_header.get("target_company")
+    if not actual_company or str(actual_company).strip() == "":
+        actual_company = company.company_name if (company and company.company_name) else "지원 기업"
+    
+    # 🔄 데이터 매핑 (EvaluationReportResponse 형식에 맞춤)
+    report_dict = report.dict()
+    report_dict["position"] = actual_position
+    report_dict["company_name"] = actual_company
+    report_dict["candidate_name"] = cand_name
+    report_dict["interview_date"] = interview.start_time if interview else report.created_at
+    
+    # [핵심] AI가 분석한 상세 피드백 및 강점/보완점 필드 최상위 노출
+    details = report.details_json or {}
+    report_dict["technical_feedback"] = details.get("technical_feedback") or report.summary_text # 폴백
+    report_dict["experience_feedback"] = details.get("experience_feedback")
+    report_dict["problem_solving_feedback"] = details.get("problem_solving_feedback")
+    report_dict["communication_feedback"] = details.get("communication_feedback")
+    report_dict["responsibility_feedback"] = details.get("responsibility_feedback")
+    report_dict["growth_feedback"] = details.get("growth_feedback")
+    
+    report_dict["strengths"] = details.get("strengths", [])
+    report_dict["improvements"] = details.get("improvements", [])
+
+    return report_dict
 
 # --- Transcript Route (별도 파일로 할 수도 있지만 interview와 밀접하므로 여기에 포함) ---
 # 기존 main.py에서는 /transcripts 였지만 여기서는 /interviews 하위가 아님.
