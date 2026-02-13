@@ -804,6 +804,7 @@ function App() {
             isRecording={isRecording}
             isMediaReady={isMediaReady}
             transcript={transcript}
+            setTranscript={setTranscript}
             toggleRecording={toggleRecording}
             nextQuestion={nextQuestion}
             onFinish={finishInterview}

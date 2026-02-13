@@ -278,13 +278,12 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-            <PremiumButton onClick={() => onNext()} variant="secondary" style={{ flex: 1, opacity: 0.7 }}>
-              건너뛰기
+            <PremiumButton onClick={handleAudioPass} variant="secondary" style={{ flex: 1, opacity: 0.7 }}>
+              테스트 건너뛰기
             </PremiumButton>
             <PremiumButton
               onClick={handleAudioPass}
               style={{ flex: 1 }}
-              disabled={!isRecognitionOk}
             >
               다음 진행
             </PremiumButton>

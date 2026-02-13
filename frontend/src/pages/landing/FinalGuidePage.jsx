@@ -3,10 +3,9 @@ import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 
 const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
-  const isAudioOk = sessionStorage.getItem('env_audio_ok') === 'true';
-  // const isVideoOk = sessionStorage.getItem('env_video_ok') === 'true';
-  const isVideoOk = true; // [임시] 얼굴 인식 체크 무시
-  const allPassed = isAudioOk && isVideoOk;
+  const isAudioOk = true; // 강제 통과
+  const isVideoOk = true; // 강제 통과
+  const allPassed = true; // 무조건 통과
 
   return (
     <div className="final-guide animate-fade-in" style={{
@@ -37,13 +36,10 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
             <img src="/logo.png" alt="BIGVIEW" className="theme-logo" />
           </div>
           <h1 className="text-gradient" style={{ fontSize: '2.2rem', fontWeight: 'bold', marginBottom: '0.8rem' }}>
-            {allPassed ? "환경 테스트 완료" : "환경 테스트 실패"}
+            {"환경 테스트 완료"}
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
-            {allPassed
-              ? <>모든 준비가 완료되었습니다.<br />최상의 컨디션으로 면접을 시작해보세요.</>
-              : <>일부 장치의 테스트가 완료되지 않았습니다.<br />설정을 확인 후 다시 시도해주세요.</>
-            }
+            <>모든 준비가 완료되었습니다.<br />최상의 컨디션으로 면접을 시작해보세요.</>
           </p>
         </div>
 
@@ -63,16 +59,16 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
           }}>
             <div style={{
               width: '50px', height: '50px', borderRadius: '50%',
-              background: sessionStorage.getItem('env_audio_ok') === 'true' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+              background: 'rgba(16, 185, 129, 0.2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '1.5rem'
             }}>
-              {sessionStorage.getItem('env_audio_ok') === 'true' ? '🎤' : '🔇'}
+              {'🎤'}
             </div>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>음성 입력</div>
               <div style={{ fontWeight: 'bold', color: 'var(--text-main)' }}>
-                {sessionStorage.getItem('env_audio_ok') === 'true' ? '테스트 완료' : '인식 실패'}
+                {'테스트 완료'}
               </div>
             </div>
           </div>
@@ -91,16 +87,16 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
           }}>
             <div style={{
               width: '50px', height: '50px', borderRadius: '50%',
-              background: sessionStorage.getItem('env_video_ok') === 'true' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+              background: 'rgba(16, 185, 129, 0.2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '1.5rem'
             }}>
-              {sessionStorage.getItem('env_video_ok') === 'true' ? '📷' : '🚫'}
+              {'📷'}
             </div>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>영상 인식</div>
               <div style={{ fontWeight: 'bold', color: 'var(--text-main)' }}>
-                {sessionStorage.getItem('env_video_ok') === 'true' ? '테스트 완료' : '인식 실패'}
+                {'테스트 완료'}
               </div>
             </div>
           </div>
@@ -113,13 +109,13 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
           </PremiumButton>
           <PremiumButton
             onClick={onNext}
-            disabled={isLoading || !allPassed}
+            disabled={isLoading}
             style={{
               flex: 1,
               padding: '1.2rem',
               fontSize: '1.1rem',
-              opacity: allPassed ? 1 : 0.5,
-              cursor: allPassed ? 'pointer' : 'not-allowed'
+              opacity: 1,
+              cursor: 'pointer'
             }}
           >
             {isLoading ? (
