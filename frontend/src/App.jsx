@@ -609,6 +609,20 @@ function App() {
       };
       initMedia();
     }
+
+    // 면접 진행 중 페이지 이탈 방지 경고
+    const handleBeforeUnload = (e) => {
+      if (step === 'interview') {
+        const message = "면접 진행 중입니다. 페이지를 벗어나시면 현재까지의 답변이 정상적으로 분석되지 않을 수 있습니다. 면접을 종료하시려면 '면접 종료' 버튼을 눌러주세요.";
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, [step, interview]);
 
   useEffect(() => {

@@ -376,7 +376,7 @@ const InterviewPage = ({
                 pointerEvents: 'none',
                 animation: 'tooltipFadeIn 0.3s ease-out forwards'
               }}>
-                {"면접을 종료하면 결과를 확인할 수 없으며,\n동일한 면접에 대한 재응시는 어렵습니다.\n처음부터 다시 시작해야 하니 주의해 주세요."}
+                {"면접을 종료하면 현재까지의 답변을 바탕으로\nAI 분석 리포트가 생성됩니다.\n정말로 면접을 마무리하시겠습니까?"}
                 <div style={{
                   position: 'absolute',
                   top: '100%',
