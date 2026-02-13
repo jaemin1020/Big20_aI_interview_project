@@ -67,6 +67,7 @@ function App() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [report, setReport] = useState(null);
   const [isReportLoading, setIsReportLoading] = useState(false);
+  const [isMediaReady, setIsMediaReady] = useState(false); // 장비 준비 상태 추가
 
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -260,6 +261,7 @@ function App() {
 
   const initInterviewSession = async () => {
     setIsLoading(true);
+    setIsMediaReady(false); // 새 세션 시작 시 상태 리셋
     setCurrentIdx(0); // 새로운 면접 시작 시 질문 인덱스 초기화
     try {
       // 1. Create Interview with Parsed Position & Resume ID
@@ -341,7 +343,9 @@ function App() {
         audio: true
       });
       console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
-      videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
@@ -352,9 +356,12 @@ function App() {
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
+        if (videoRef.current) {
+          videoRef.current.srcObject = audioStream;
+        }
         alert('카메라 접근 거부됨. 음성만 사용합니다.');
       } catch (audioErr) {
-        alert('마이크 접근 실패');
+        alert('마이크 접근 실패. 마이크 권한과 연결 상태를 확인해주세요.');
         throw audioErr;
       }
     }
@@ -395,6 +402,7 @@ function App() {
     console.log('[WebRTC] Received Answer SDP:', answer.sdp);
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
     console.log('[WebRTC] Connection established successfully');
+    setIsMediaReady(true); // 모든 연결 완료 시 준비 상태로 변경
   };
 
   const toggleRecording = async () => {
@@ -402,14 +410,29 @@ function App() {
       console.log('[STT] Stopping recording...');
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
+
+        // WebSocket으로 녹음 중지 알림
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
+        }
       }
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
+      // 녹음 시작
+      if (!isMediaReady) {
+        alert('장비가 아직 준비되지 않았습니다. 잠시만 기다려주세요.');
+        return;
+      }
       console.log('[STT] Starting recording...');
       setTranscript('');
       setIsRecording(true);
       isRecordingRef.current = true;
+
+      // WebSocket으로 녹음 시작 알림
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'start_recording' }));
+      }
 
       try {
         const stream = videoRef.current?.srcObject;
@@ -450,8 +473,13 @@ function App() {
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
-              setTranscript(recognizedText);
-              console.log('[STT] ✅ Success:', recognizedText);
+              // 실시간 텍스트가 이미 있다면 중복 방지를 위해 비교하거나 보완
+              setTranscript(prev => {
+                if (prev.trim().length > recognizedText.length) return prev;
+                return recognizedText;
+              });
+
+              console.log('[STT] ✅ Batch Recognition Success:', recognizedText);
 
               // 자동 저장: DB에 transcript 저장
               if (interview && questions && questions[currentIdx]) {
@@ -506,7 +534,7 @@ function App() {
     const interval = setInterval(async () => {
       try {
         const finalReport = await getEvaluationReport(interviewId);
-        if (finalReport && finalReport.length > 0) {
+        if (finalReport && finalReport.id) {
           setReport(finalReport);
           setIsReportLoading(false);
           clearInterval(interval);
@@ -525,6 +553,16 @@ function App() {
   };
 
   const finishInterview = async () => {
+    // 0. 마지막 답변이 있다면 저장 후 종료
+    if (transcript.trim()) {
+      try {
+        await createTranscript(interview.id, 'User', transcript.trim(), questions[currentIdx].id);
+        console.log('[finishInterview] Final transcript saved.');
+      } catch (e) {
+        console.warn('[finishInterview] Failed to save final transcript:', e);
+      }
+    }
+
     if (wsRef.current) wsRef.current.close();
     if (pcRef.current) pcRef.current.close();
 
@@ -540,7 +578,7 @@ function App() {
   };
 
   const nextQuestion = async () => {
-    console.log('[nextQuestion] Start - Current Index:', currentIdx);
+    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
     if (!interview || !questions || !questions[currentIdx]) {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
@@ -571,7 +609,10 @@ function App() {
           await new Promise(r => setTimeout(r, 2000));
           const updatedQs = await getInterviewQuestions(interview.id);
 
-          if (updatedQs.length > questions.length) {
+          const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
+          const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
+
+          if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
             setQuestions(updatedQs);
             setCurrentIdx(nextIdx);
@@ -614,6 +655,20 @@ function App() {
       };
       initMedia();
     }
+
+    // 면접 진행 중 페이지 이탈 방지 경고
+    const handleBeforeUnload = (e) => {
+      if (step === 'interview') {
+        const message = "면접 진행 중입니다. 페이지를 벗어나시면 현재까지의 답변이 정상적으로 분석되지 않을 수 있습니다. 면접을 종료하시려면 '면접 종료' 버튼을 눌러주세요.";
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, [step, interview]);
 
   useEffect(() => {
@@ -766,6 +821,7 @@ function App() {
             question={questions[currentIdx]?.content}
             audioUrl={questions[currentIdx]?.audio_url}
             isRecording={isRecording}
+            isMediaReady={isMediaReady}
             transcript={transcript}
             toggleRecording={toggleRecording}
             nextQuestion={nextQuestion}

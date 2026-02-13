@@ -59,15 +59,15 @@ app.conf.update(
     # [큐 라우팅] 역할별 전용 일꾼 시스템 구축
     task_default_queue='cpu_queue',
     task_routes={
-        # GPU 사용 태스크 (질문 생성, 임베딩)
+        # GPU 사용 태스크 (질문 생성, 임베딩, STT, 리포트)
         'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
+        'tasks.stt.*': {'queue': 'gpu_queue'}, 
         
-        # CPU 사용 태스크 (답변 분석, STT, 비전, 기타)
+        # CPU 사용 태스크 (답변 분석, 비전, 기타)
         'tasks.evaluator.*': {'queue': 'cpu_queue'},
-        'tasks.stt.*': {'queue': 'cpu_queue'}, # Whisper Heavy Model이면 GPU 권장
         'tasks.vision.*': {'queue': 'cpu_queue'},
         'tasks.resume_parser.*': {'queue': 'gpu_queue'},
         'tasks.tts.*': {'queue': 'cpu_queue'},

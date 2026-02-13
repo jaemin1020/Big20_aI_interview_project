@@ -267,7 +267,7 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                     <div>
                                         <h4 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{item.position || '직무 미정'}</h4>
                                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                            {item.company_name || '회사명 미입력'} | {item.status === 'completed' ? '완료됨' : '진행 중'}
+                                            {item.company_name || '회사명 미입력'} | {(item.status === 'completed' || item.status === 'COMPLETED') ? '완료됨' : '진행 중'}
                                         </p>
                                     </div>
                                 </div>
@@ -279,21 +279,21 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                         padding: '6px 12px',
                                         borderRadius: '20px',
                                         fontSize: '0.8rem',
-                                        background: item.status === 'completed' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
-                                        color: item.status === 'completed' ? '#22c55e' : '#eab308',
-                                        border: `1px solid ${item.status === 'completed' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)'}`,
+                                        background: (item.status === 'completed' || item.status === 'COMPLETED') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                                        color: (item.status === 'completed' || item.status === 'COMPLETED') ? '#22c55e' : '#eab308',
+                                        border: `1px solid ${(item.status === 'completed' || item.status === 'COMPLETED') ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)'}`,
                                         display: 'flex',
                                         alignItems: 'center',
                                         marginRight: '10px'
                                     }}>
-                                        {item.status === 'completed' ? '분석 완료' : '미완료'}
+                                        {(item.status === 'completed' || item.status === 'COMPLETED') ? '분석 완료' : '미완료'}
                                     </div>
 
                                     <PremiumButton
                                         variant="secondary"
                                         onClick={() => handleViewDetail(item.id)}
-                                        disabled={item.status !== 'completed'}
-                                        style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: item.status === 'completed' ? 1 : 0.5 }}
+                                        disabled={item.status !== 'completed' && item.status !== 'COMPLETED'}
+                                        style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: (item.status === 'completed' || item.status === 'COMPLETED') ? 1 : 0.5 }}
                                     >
                                         상세보기
                                     </PremiumButton>

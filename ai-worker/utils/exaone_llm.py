@@ -82,6 +82,10 @@ class ExaoneLLM(LLM):
         **kwargs: Any,
     ) -> str:
         """LLM 실행 핵심 메서드 (LangChain 표준)"""
+        if ExaoneLLM.llm is None:
+            logger.error("❌ EXAONE 모델이 로드되지 않았습니다. (CPU 모드이거나 로딩 실패)")
+            raise RuntimeError("EXAONE engine is not initialized. Check if this is a GPU worker.")
+
         try:
             # stop 시퀀스 기본값 설정
             stop_sequences = ["[|endofturn|]", "[|user|]"] if stop is None else stop
