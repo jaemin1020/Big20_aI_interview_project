@@ -25,6 +25,7 @@ def parse_resume_final(input_source):
         "awards": [],
         "projects": [],
         "certifications": [],
+        "skills": [],
         "self_intro": []
     }
 
@@ -63,11 +64,13 @@ def parse_resume_final(input_source):
         # (주의: 이 경우 표(Table) 구조는 파싱 불가능. 텍스트 기반 자소서만 파싱됨)
         full_text_buffer.append(input_source)
 
+    full_text = "\n".join(full_text_buffer)
     # -------------------------------------------------------
-    # 3. 표 데이터 파싱 (파일 모드일 때만 동작)
+    # 3. 데이터 파싱
     # -------------------------------------------------------
+    
+    # --- Phase 1: 헤더 정보 우선 탐색 (표 기반) ---
     if tables:
-        # --- Phase 1: 헤더 정보 우선 탐색 (표 기반) ---
         for table in tables:
             for row in table:
                 safe_row = [clean_text(cell) if cell else "" for cell in row]
@@ -82,43 +85,42 @@ def parse_resume_final(input_source):
                             elif "지원회사" in key or "지원기업" in key: data["header"]["target_company"] = val
                             elif "지원직무" in key or "지원분야" in key: data["header"]["target_role"] = val
 
-        # --- Phase 1.5: Regex 기반 폴백 (표에서 못 찾았을 때) ---
-        full_text = "\n".join(full_text_buffer)
-        
-        # 이름 찾기
-        if not data["header"]["name"]:
-            name_patterns = [
-                r"이\s*름\s*[:：\-\s]+([가-힣]{2,4})",
-                r"성\s*함\s*[:：\-\s]+([가-힣]{2,4})",
-                r"Name\s*[:：\-\s]+([a-zA-Z가-힣\s]+)"
-            ]
-            for p in name_patterns:
-                match = re.search(p, full_text, re.IGNORECASE)
-                if match:
-                    data["header"]["name"] = match.group(1).strip()
-                    break
-        
-        # 지원직무 찾기
-        if not data["header"]["target_role"]:
-            role_patterns = [
-                r"지원\s*직무\s*[:：\-\s]+([^\n]+)",
-                r"지원\s*분야\s*[:：\-\s]+([^\n]+)",
-                r"희망\s*직무\s*[:：\-\s]+([^\n]+)",
-                r"Position\s*[:：\-\s]+([^\n]+)",
-                r"Role\s*[:：\-\s]+([^\n]+)"
-            ]
-            for p in role_patterns:
-                match = re.search(p, full_text, re.IGNORECASE)
-                if match:
-                    role = re.sub(r'[\(\)\[\]]', '', match.group(1)).strip()
-                    data["header"]["target_role"] = role
-                    break
+    # --- Phase 1.5: Regex 기반 폴백 (표에서 못 찾았거나 표가 없을 때) ---
+    # 이름 찾기
+    if not data["header"]["name"]:
+        name_patterns = [
+            r"이\s*름\s*[:：\-\s]*([가-힣]{2,4})",
+            r"성\s*함\s*[:：\-\s]*([가-힣]{2,4})",
+            r"Name\s*[:：\-\s]*([a-zA-Z가-힣\s]{2,10})"
+        ]
+        for p in name_patterns:
+            match = re.search(p, full_text, re.IGNORECASE)
+            if match:
+                data["header"]["name"] = match.group(1).strip()
+                break
+    
+    # 지원직무 찾기
+    if not data["header"]["target_role"]:
+        role_patterns = [
+            r"지원\s*직무\s*[:：\-\s]*([^\n]{2,20})",
+            r"지원\s*분야\s*[:：\-\s]*([^\n]{2,20})",
+            r"희망\s*직무\s*[:：\-\s]*([^\n]{2,20})",
+            r"Position\s*[:：\-\s]*([^\n]{2,20})",
+            r"Role\s*[:：\-\s]*([^\n]{2,20})"
+        ]
+        for p in role_patterns:
+            match = re.search(p, full_text, re.IGNORECASE)
+            if match:
+                role = re.sub(r'[\(\)\[\]]', '', match.group(1)).strip()
+                data["header"]["target_role"] = role
+                break
 
-        # 기본값 설정
-        if not data["header"]["target_role"]:
-            data["header"]["target_role"] = "일반"
+    # 기본값 설정
+    if not data["header"]["target_role"]:
+        data["header"]["target_role"] = "일반"
 
-        # --- Phase 2: 섹션별 데이터 파싱 ---
+    # --- Phase 2: 섹션별 데이터 파싱 (표 기반) ---
+    if tables:
         current_section = None 
         for table in tables:
             flat_table = get_row_text(table[0]) if table else ""
@@ -197,6 +199,34 @@ def parse_resume_final(input_source):
         elif current_q:
             data["self_intro"].append({"question": clean_text(current_q), "answer": part})
             current_q = ""
+
+    # -------------------------------------------------------
+    # 5. 기술 스택(Skills) 추출 보강 (Regex 기반)
+    # -------------------------------------------------------
+    skill_keywords = [
+        "Python", "Java", "JavaScript", "TypeScript", "React", "Vue", "Node.js", "Spring", "Boot",
+        "JPA", "SQL", "MySQL", "PostgreSQL", "Docker", "AWS", "Kubernetes", "Git", "Redis",
+        "FastAPI", "Django", "Flask", "C++", "C#", "Go", "Rust", "Swift", "Kotlin", "Flutter"
+    ]
+    
+    found_skills = set()
+    for kw in skill_keywords:
+        if re.search(rf'\b{re.escape(kw)}\b', full_text, re.IGNORECASE):
+            found_skills.add(kw)
+    
+    if tables:
+        for table in tables:
+            for row in table:
+                row_text = get_row_text(row)
+                if any(x in row_text for x in ["기술", "스택", "Stack"]):
+                    for cell in row:
+                        if cell:
+                            parts = re.split(r'[,\s/]+', cell)
+                            for p in parts:
+                                if len(p) > 1 and not is_date(p) and p not in ["기술명", "수준", "상세내용"]:
+                                    found_skills.add(p.strip())
+    
+    data["skills"] = list(found_skills)
 
     return data
 
