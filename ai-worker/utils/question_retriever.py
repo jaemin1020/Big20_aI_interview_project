@@ -31,7 +31,8 @@ class QuestionRetriever:
         question_type: Optional[str] = None, 
         category: Optional[QuestionCategory] = None,
         position: Optional[str] = None,
-        top_k: int = 5
+        top_k: int = 5,
+        **kwargs
     ) -> List[Question]:
         """
         텍스트 문맥(이력서 내용 등)을 기반으로 가장 관련성 높은 질문을 DB에서 추출합니다.
@@ -61,6 +62,11 @@ class QuestionRetriever:
             if position:
                 # 대소문자 구분 없이 유사 직무 검색 (SQL ILIKE 느낌)
                 stmt = stmt.where(Question.position.contains(position))
+            
+            # 3.5 특정 키워드 제외 필터 (예: 특정 지원자 이름이 포함된 기존 질문 배제)
+            exclude_keyword = kwargs.get("exclude_keyword")
+            if exclude_keyword:
+                stmt = stmt.where(~Question.content.contains(exclude_keyword))
             
             # 4. 시맨틱 검색 (벡터 유사도 정렬)
             # pgvector의 <=> 연산자 (cosine distance) 사용

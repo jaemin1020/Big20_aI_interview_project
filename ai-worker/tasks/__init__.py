@@ -1,12 +1,7 @@
 
 # AI-Worker Tasks Package
-from .evaluator import analyze_answer
-from .vision import analyze_emotion
-from .question_generator import generate_next_question_task
-from .resume_parser import parse_resume_pdf
-from .resume_embedding import generate_resume_embeddings
-from .stt import recognize_audio_task
-from .tts import synthesize_task
+# 🚨 Circular/Heavy Input avoidance
+# Modules are imported lazily or individually by callers to avoid missing dependency errors (like deepface) in local environments.
 
 __all__ = [
     'analyze_answer', 
