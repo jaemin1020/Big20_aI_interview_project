@@ -3,5 +3,9 @@ from database import engine
 from db_models import Question
 
 with Session(engine) as session:
-    count = session.exec(select(func.count(Question.id))).one()
-    print(f"Total questions in DB: {count}")
+    total = session.exec(select(func.count(Question.id))).one()
+    embedded = session.exec(select(func.count(Question.id)).where(Question.embedding != None)).one()
+    print(f"Total questions in DB: {total}")
+    print(f"Embedded questions in DB: {embedded}")
+    if total > 0:
+        print(f"Progress: {(embedded/total)*100:.2f}%")

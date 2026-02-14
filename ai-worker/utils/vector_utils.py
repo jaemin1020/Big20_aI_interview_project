@@ -4,6 +4,7 @@ Question 및 AnswerBank의 텍스트를 벡터로 변환
 """
 from sentence_transformers import SentenceTransformer
 from typing import List
+import os
 import logging
 
 logger = logging.getLogger("VectorUtils")
