@@ -71,59 +71,50 @@ async def create_interview(
     
     logger.info(f"Interview record created: ID={interview_id} (Target Role: {target_role})")
     
-    # 2. 템플릿 질문 즉시 생성 (사용자 대기 시간 0초)
+    # 2. 템플릿 질문 즉시 생성 (자기소개, 지원동기)
     try:
         from utils.interview_helpers import get_candidate_info, generate_template_question
         candidate_info = get_candidate_info(db, interview_data.resume_id)
         
-        # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 등)
         from config.interview_scenario import get_initial_stages
         initial_stages = get_initial_stages()
         
         for stage_config in initial_stages:
             question_text = generate_template_question(stage_config["template"], candidate_info)
             
-            # Question 저장
+            # 2-1. Question 객체 생성
             question = Question(
                 content=question_text,
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config["stage"],
-                rubric_json={
-                    "criteria": ["명확성", "진정성", "직무 이해도"],
-                    "weight": {"content": 0.6, "communication": 0.4}
-                },
+                rubric_json={"criteria": ["명확성"]},
                 position=target_role
             )
             db.add(question)
-            db.commit()
-            db.refresh(question)
+            db.flush() # ID 생성을 위해 메모리 상에서만 반영
             
-            # Transcript 저장 (실시간 대화 내역)
+            # 2-2. Transcript 객체 생성
             transcript = Transcript(
                 interview_id=new_interview.id,
-                speaker=Speaker.AI,
+                speaker="AI",
                 text=question_text,
                 question_id=question.id,
-                order=stage_config["order"] - 1
+                order=stage_config.get("order", 0)
             )
             db.add(transcript)
-            db.commit()
-            
-        # 면접 상태 업데이트: IN_PROGRESS (또는 LIVE)
-        new_interview.status = InterviewStatus.LIVE # 기존 호환성을 위해 LIVE 유지
-        db.add(new_interview)
-        db.commit()
         
-        logger.info(f"✅ Fast interview setup completed for ID={interview_id}")
+        # 모든 질문/대화가 준비되었을 때 한꺼번에 커밋
+        new_interview.status = InterviewStatus.LIVE
+        db.add(new_interview)
+        db.commit() # 여기서 실제 DB 저장 실행
+        
+        logger.info(f"✅ Interview setup SUCCESS for ID={interview_id}")
 
     except Exception as e:
-        logger.error(f"❌ Interview setup failed: {e}")
+        logger.error(f"❌ Interview setup CRITICAL FAILURE: {e}")
         db.rollback()
-        # 실패 시 인터뷰 삭제
-        db.execute(text("DELETE FROM interviews WHERE id = :i_id"), {"i_id": interview_id})
-        db.commit()
-        raise HTTPException(status_code=500, detail=f"면접 생성 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"질문 생성 중 서버 오류: {str(e)}")
 
     # 응답 보내기 전 마지막 상태 확인
     return InterviewResponse(
@@ -214,25 +205,31 @@ async def get_interview_questions(
     생성자: ejm
     생성일자: 2026-02-06
     """
-    # Question 테이블과 조인하여 audio_url 가져오기
-    stmt = select(Transcript, Question).join(Question, Transcript.question_id == Question.id).where(
+    # Transcript 테이블에서 AI 발화(질문) 목록 조회
+    # Speaker.AI(Enum) 대신 문자열 'AI'로 직접 비교하여 쿼리 안전성 확보
+    stmt = select(Transcript).where(
         Transcript.interview_id == interview_id,
-        Transcript.speaker == Speaker.AI
+        Transcript.speaker == "AI"
     ).order_by(Transcript.id)
 
-    
     results = db.exec(stmt).all()
     
-    return [
-        {
-            "id": t.question_id,
-            "content": t.text,
-            "order": t.order,
-            "timestamp": t.timestamp,
-            "audio_url": q.rubric_json.get("audio_url") if q.rubric_json else None
-        }
-        for t, q in results
-    ]
+    # 인터뷰 상태 정보 가져오기
+    interview = db.get(Interview, interview_id)
+    
+    return {
+        "status": interview.status if interview else "UNKNOWN",
+        "questions": [
+            {
+                "id": t.question_id,
+                "content": t.text,
+                "order": t.order,
+                "timestamp": t.timestamp,
+                "audio_url": None # 오디오 URL은 필요 시 Question 테이블에서 따로 가져올 수 있음
+            }
+            for t in results
+        ]
+    }
 
 
 # 면접의 전체 대화 기록 조회
@@ -425,6 +422,7 @@ async def create_realtime_interview(
     db.add(new_interview)
     db.commit()
     db.refresh(new_interview)
+    db.flush() # ID를 얻기 위해 flush
     
     logger.info(f"Realtime Interview created: ID={new_interview.id}, Candidate={candidate_name}, Target Role={target_role}")
     
@@ -432,16 +430,21 @@ async def create_realtime_interview(
     try:
         from utils.interview_helpers import generate_template_question
         
-        # 시나리오에서 초기 템플릿 가져오기 (자기소개, 지원동기 상위 2개)
-        from config.interview_scenario import get_initial_stages
-        from db_models import Question, QuestionCategory, QuestionDifficulty
-        
-        initial_stages = get_initial_stages()
+        # 시나리오에서 초기 템플릿 가져오기
+        try:
+            from config.interview_scenario import get_initial_stages
+            initial_stages = get_initial_stages()
+        except ImportError:
+            # 폴백: 시나리오 로드 실패 시 강제 생성
+            logger.warning("⚠️ Could not import interview_scenario, using hardcoded fallback questions.")
+            initial_stages = [
+                {"stage": "intro", "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.", "order": 1},
+                {"stage": "motivation", "template": "{candidate_name} 지원자님, 지원동기 말씀해주세요.", "order": 2}
+            ]
         
         for stage_config in initial_stages:
-            # 템플릿에 변수 삽입 (이미 확보한 candidate_info 사용)
             question_text = generate_template_question(
-                stage_config["template"],
+                stage_config.get("template", "{candidate_name}님 시작해주세요."),
                 candidate_info
             )
             
@@ -450,40 +453,33 @@ async def create_realtime_interview(
                 content=question_text,
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
-                question_type=stage_config["stage"], # 단계 매칭을 위해 추가
-                rubric_json={
-                    "criteria": ["명확성", "진정성", "직무 이해도"],
-                    "weight": {"content": 0.6, "communication": 0.4}
-                },
-                position=target_role # 추출된 직무 사용
+                question_type=stage_config.get("stage", "general"),
+                rubric_json={"criteria": ["명확성"]},
+                position=target_role
             )
             db.add(question)
-            db.commit()  # 즉시 커밋
-            db.refresh(question)
+            db.flush() # question.id를 얻기 위해 flush
             
-            # Transcript에 AI 발화 기록 (별도 세션 사용)
-            from database import engine
-            from sqlmodel import Session as NewSession
-            with NewSession(engine) as transcript_session:
-                transcript = Transcript(
-                    interview_id=new_interview.id,
-                    speaker=Speaker.AI,
-                    text=question_text,
-                    question_id=question.id,
-                    order=stage_config["order"] - 1
-                )
-                transcript_session.add(transcript)
-                transcript_session.commit()
+            # Transcript 에 AI 발화 기록
+            transcript = Transcript(
+                interview_id=new_interview.id,
+                speaker="AI",
+                text=question_text,
+                question_id=question.id,
+                order=stage_config.get("order", 0)
+            )
+            db.add(transcript)
         
-        logger.info(f"✅ Generated {len(initial_stages)} template questions immediately")
+        # 일괄 커밋
+        db.commit()
+        logger.info(f"✅ Realtime interview setup SUCCESS for ID={new_interview.id}")
         
     except Exception as e:
-        logger.error(f"❌ Template question generation failed: {e}")
-        db.delete(new_interview)
-        db.commit()
+        logger.error(f"❌ Realtime interview setup FAILED: {e}")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"면접 질문 생성에 실패했습니다: {str(e)}"
+            detail=f"질문 생성 실패: {str(e)}"
         )
     
     return InterviewResponse(

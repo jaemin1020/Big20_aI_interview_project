@@ -166,7 +166,20 @@ def generate_next_question_task(interview_id: int):
             next_stage_data = get_next_stage(last_stage_name)
 
         if not next_stage_data:
-            logger.info("Scenario Completed.")
+            logger.info(f"🏁 Scenario Completed for Interview {interview_id}. Updating status to COMPLETED.")
+            try:
+                interview.status = "COMPLETED" # InterviewStatus.COMPLETED
+                interview.end_time = datetime.utcnow()
+                session.add(interview)
+                session.commit()
+                
+                # 리포트 생성 태스크 즉시 트리거
+                from tasks.evaluator import generate_final_report
+                generate_final_report.apply_async(args=[interview_id])
+                logger.info(f"📊 Triggered final report generation for Interview {interview_id}")
+            except Exception as e:
+                logger.error(f"Failed to update interview status to COMPLETED: {e}")
+                
             return {"status": "completed"}
 
         stage_name = next_stage_data["stage"]

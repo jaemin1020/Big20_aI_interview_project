@@ -270,14 +270,20 @@ function App() {
       const newInterview = await createInterview(interviewPosition, null, parsedResumeData?.id, null);
       setInterview(newInterview);
 
-      // 2. Get Questions
-      let qs = await getInterviewQuestions(newInterview.id);
+      // 2. Get Questions (백엔드 커밋 시간을 위해 2초 대기 후 첫 요청)
+      await new Promise(r => setTimeout(r, 2000));
+      let data = await getInterviewQuestions(newInterview.id);
+      console.log("🚀 [Session Init] Initial Data received:", data);
+      let qs = data.questions || [];
 
-      // Simple retry logic
-      if (!qs || qs.length === 0) {
-        console.log("Questions not ready, retrying in 3s...");
+      // Simple retry logic (최대 5번 재시도)
+      let retryCount = 0;
+      while ((!qs || qs.length === 0) && retryCount < 5) {
+        console.log(`Questions not ready (attempt ${retryCount + 1}), retrying in 3s...`);
         await new Promise(r => setTimeout(r, 3000));
-        qs = await getInterviewQuestions(newInterview.id);
+        data = await getInterviewQuestions(newInterview.id);
+        qs = data.questions || [];
+        retryCount++;
       }
 
       if (!qs || qs.length === 0) {
@@ -295,7 +301,9 @@ function App() {
         setUser(null);
         setStep('auth');
       } else {
-        alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
+        const errorDetail = err.response?.data?.detail || err.message || "서버 오류";
+        console.error("🚀 [Detailed Error]:", err.response?.data);
+        alert(`면접 세션 생성 실패: ${errorDetail}`);
       }
     } finally {
       setIsLoading(false);
@@ -571,19 +579,29 @@ function App() {
         setTranscript('');
         setIsLoading(false);
       } else {
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
-        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
+        for (let i = 0; i < 60; i++) { // 2초 간격으로 60번 시도 (최대 2분으로 단축)
           await new Promise(r => setTimeout(r, 2000));
-          const updatedQs = await getInterviewQuestions(interview.id);
+          const data = await getInterviewQuestions(interview.id);
+          const updatedQs = data.questions || [];
+          const currentStatus = data.status;
+
+          // [핵심] 서버에서 면접이 종료되었다고 알려주면 즉시 루프 탈출
+          if (currentStatus === 'COMPLETED') {
+            console.log('[nextQuestion] Server signaled COMPLETED status. Finalizing.');
+            setQuestions(updatedQs);
+            foundNew = false; // 더 이상의 질문은 없음
+            break;
+          }
 
           const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
           const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1); // 🚨 한 번에 하나씩만 진행 (스킵 방지)
+            setCurrentIdx(prev => prev + 1);
             setTranscript('');
             foundNew = true;
             break;
@@ -591,8 +609,8 @@ function App() {
         }
 
         if (!foundNew) {
-          // 더 이상 질문이 없으면 면접 종료
-          console.log('[nextQuestion] No more questions found. Finishing interview.');
+          // 인터뷰 완료 신호가 왔거나, 타임아웃 발생 시 면접 종료
+          console.log('[nextQuestion] No more questions found or Interview COMPLETED. Finishing.');
           setStep('loading');
           if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
           await finishInterview();
