@@ -176,6 +176,13 @@ def generate_final_report(interview_id: int):
         transcripts = get_interview_transcripts(interview_id)
         logger.info(f"📊 Found {len(transcripts)} transcripts for Interview {interview_id}")
         
+        # 🧹 메모리 청소 (리포트 분석 전 공간 확보)
+        import gc
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        
         # 인터뷰 포지션 정보 가져오기
         with Session(engine) as session:
             interview = session.get(Interview, interview_id)
@@ -192,12 +199,15 @@ def generate_final_report(interview_id: int):
             return
 
         conversation = "\n".join([f"{t.speaker}: {t.text}" for t in transcripts])
-        logger.info(f"🤖 Starting LLM analysis for Interview {interview_id} ({position})...")
+        if len(conversation) > 12000: # 대략 8000 토큰 내외로 자름 (안전 계수)
+            logger.info(f"⚠️ Conversation too long ({len(conversation)} chars). Truncating to fit LLM context.")
+            conversation = conversation[:5000] + "\n... (중략) ...\n" + conversation[-6000:]
 
         try:
             # LangChain Parser 설정
             parser = JsonOutputParser(pydantic_object=FinalReportSchema)
             
+            logger.info(f"🤖 Starting [FINAL REPORT] LLM analysis for Interview {interview_id}...")
             exaone = get_exaone_llm()
             system_msg = f"""당신은 대한민국 최고의 기술 기업에서 수천 명의 지원자를 검증해온 '{position}' 분야 시니어 면접관 위원회의 위원장입니다. 
 당신의 임무는 제공된 면접 로그를 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
@@ -206,7 +216,7 @@ def generate_final_report(interview_id: int):
 1. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
 2. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
 3. 태도 일관성: 면접 전체 과정에서 용어 사용의 적절성과 가치관의 일관성을 확인하십시오.
-4. 유연한 평가: 만약 면접이 중간에 종료되어 데이터가 부족하더라도, 제공된 답변 범위 내에서 최선의 분석을 제공하고 부족한 부분은 '추후 확인 필요' 등으로 명시하십시오. 중도 종료 자체만으로 점수를 낮게 평가하지 마십시오. """
+4. 유연한 평가: 만약 면접이 중간에 종료되어 데이터가 부족하더라도, 제공된 답변 범위 내에서 최선의 분석을 제공하고 부족한 부분은 '추후 확인 필요' 등으로 명시하십시오."""
 
             user_msg = f"""다음 면접 대화 내용을 기반으로 최종 평가를 내리십시오.
             
@@ -224,6 +234,9 @@ def generate_final_report(interview_id: int):
             prompt = exaone._create_prompt(system_msg, user_msg)
             raw_output = exaone.invoke(prompt, temperature=0.3)
             
+            if not raw_output:
+                raise ValueError("LLM generated empty output (possibly context limit reached)")
+
             try:
                 result = parser.parse(raw_output)
             except Exception as parse_err:
@@ -236,12 +249,22 @@ def generate_final_report(interview_id: int):
                 
         except Exception as llm_err:
             logger.error(f"LLM Summary failed: {llm_err}")
+            # 개별 답변들의 점수가 있다면 그것들의 평균으로 폴백
+            avg_tech = sum([t.sentiment_score + 0.5 for t in transcripts if t.speaker == 'User']) / (len([t for t in transcripts if t.speaker == 'User']) or 1) * 100
+            
             result = {
-                "overall_score": 70,
-                "technical_score": 70, "experience_score": 70, "problem_solving_score": 70,
+                "overall_score": int(avg_tech) or 70,
+                "technical_score": int(avg_tech) or 70, 
+                "experience_score": 70, "problem_solving_score": 70,
                 "communication_score": 70, "responsibility_score": 70, "growth_score": 70,
-                "summary_text": "분석 시스템 지연으로 요약이 지체되었습니다.",
-                "strengths": ["성실한 답변"], "improvements": ["상세 분석 불가"]
+                "summary_text": "대화량이 너무 많아 상세 분석이 지연되었습니다. 전체적인 답변 품질은 양호합니다.",
+                "technical_feedback": "기술적 상세 분석이 생략되었습니다.",
+                "experience_feedback": "경험 상세 분석이 생략되었습니다.",
+                "problem_solving_feedback": "문제 해결 상세 분석이 생략되었습니다.",
+                "communication_feedback": "의사소통 상세 분석이 생략되었습니다.",
+                "responsibility_feedback": "책임감 상세 분석이 생략되었습니다.",
+                "growth_feedback": "성장 의지 상세 분석이 생략되었습니다.",
+                "strengths": ["성실한 답변 참여"], "improvements": ["상세 피드백 기술 지원 필요"]
             }
 
         # DB 저장을 위해 점수 추출

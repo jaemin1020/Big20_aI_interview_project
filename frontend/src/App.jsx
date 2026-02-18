@@ -609,11 +609,17 @@ function App() {
         }
 
         if (!foundNew) {
-          // 인터뷰 완료 신호가 왔거나, 타임아웃 발생 시 면접 종료
-          console.log('[nextQuestion] No more questions found or Interview COMPLETED. Finishing.');
-          setStep('loading');
-          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-          await finishInterview();
+          // [수정] 폴링 타임아웃 시 무조건 종료하지 않고, 서버 상태가 COMPLETED일 때만 자동 종료
+          const finalCheck = await getInterviewQuestions(interview.id);
+          if (finalCheck.status === 'COMPLETED') {
+            console.log('[nextQuestion] Server confirmed COMPLETED. Finishing.');
+            setStep('loading');
+            if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+            await finishInterview();
+          } else {
+            console.warn('[nextQuestion] Polling timed out but interview not marked as COMPLETED by server.');
+            alert('AI 면접관의 다음 질문 생성이 지연되고 있습니다. 잠시 후 다시 [다음 질문] 버튼을 눌러주세요.');
+          }
         }
         setIsLoading(false);
       }

@@ -393,7 +393,7 @@ const InterviewPage = ({
             onClick={nextQuestion}
             style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
           >
-            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
+            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
           </PremiumButton>
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (

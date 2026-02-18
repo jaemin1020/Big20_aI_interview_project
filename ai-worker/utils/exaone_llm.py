@@ -54,6 +54,9 @@ class ExaoneLLM(LLM):
         else:
             target_path = MODEL_PATH
 
+        # Context window 설정 (기본 8192로 상향)
+        n_ctx = int(os.getenv("N_CTX", "8192"))
+        
         try:
             # 🚨 CPU 환경에서 CUDA 빌드된 llama-cpp 로딩 시 발생하는 크래시 방지를 위해 지연 임포트
             from llama_cpp import Llama
@@ -62,11 +65,11 @@ class ExaoneLLM(LLM):
             ExaoneLLM.llm = Llama(
                 model_path=target_path,
                 n_gpu_layers=gpu_layers,
-                n_ctx=4096,
+                n_ctx=n_ctx,
                 n_batch=512,
                 verbose=False
             )
-            logger.info(f"✅ EXAONE Engine Loaded (n_gpu_layers: {gpu_layers})")
+            logger.info(f"✅ EXAONE Engine Loaded (n_gpu_layers: {gpu_layers}, n_ctx: {n_ctx})")
         except Exception as e:
             logger.error(f"❌ 엔진 로드 실패: {e}")
             raise e
