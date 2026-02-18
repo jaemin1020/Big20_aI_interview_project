@@ -48,14 +48,15 @@ PROMPT_TEMPLATE = """[|system|]
 
 [작성 지침 - 절대 규칙]
 1. **단 두 문장, 150자 이내**: 모든 질문은 반드시 **최대 두 문장(150자 이내)**으로 생성하라.
-2. **평가 의도(Guide) 중심**: 지원자 정보(RAG)보다 현재 평가 단계의 **'평가 의도({guide})'**를 80% 비중으로 우선하여 질문을 구성하라. (예: 협업 단계라면 기술보다는 협업 방식에 집중)
-3. **꼬리 질문(followup) 규칙**: 반드시 지원자의 최근 답변 속 키워드를 인용하되, 질문의 시작은 "추가적으로 궁금한 게 있습니다."로 시작하라.
-4. **가독성**: 강조 기호(예: **, __)나 특수 문자는 절대 사용하지 마라. 순수 텍스트로만 답변하라.
-5. **사족 금지**: "답변 잘 들었습니다" 등의 추임새는 금지한다.
+2. **평가 의도(Guide) 중심**: 지원자 정보(RAG)보다 현재 평가 단계의 **'평가 의도({guide})'**를 80% 비중으로 우선하여 질문을 구성하라.
+3. **직무 지식(skill) 단계 특화**: 만약 현재 단계가 'skill'이라면, 이력서의 기술 키워드를 1개 인용하여 실무 개념을 묻는 **쉬운(Easy) 난이도**의 질문을 하라.
+4. **꼬리 질문(followup) 규칙**: 반드시 지원자의 최근 답변 내용을 **한 문장으로 짧게 요약("~라고 말씀해 주셨는데,")**한 뒤, 그와 연관된 심층 질문을 던져라. "답변 잘 들었습니다" 같은 말은 절대 하지 마라.
+5. **출처 명시**: 질문 시작 시 반드시 근거가 되는 출처(예: "이력서 내 경력사항을 보니", "자기소개서 2번 문항을 보니")를 언급하라.
+6. **가독성 및 금지사항**: 강조 기호(**)나 특수 문자를 사용하지 말고, 순수 텍스트로만 답변하라. 질문 외의 사족은 일절 배제하라.
 [|endofturn|]
 [|user|]
 # 평가 단계: {stage}
-# 평가 의도: {guide}
+# 시나리오 가이드: {guide}
 # 지원자 고유 정보 및 근거 (RAG + 대화 로그):
 {context}
 
@@ -84,7 +85,6 @@ def generate_next_question_task(interview_id: int):
         Interview, Transcript, Speaker, Question, Resume
 
     )
-    from config.interview_scenario import get_stage_by_name, get_next_stage
     from utils.exaone_llm import get_exaone_llm
     
     with Session(engine) as session:
@@ -92,6 +92,33 @@ def generate_next_question_task(interview_id: int):
         if not interview: 
             logger.error(f"Interview {interview_id} not found.")
             return {"status": "error", "message": "Interview not found"}
+
+        # [추가] 직무 전환 여부 확인 및 시나리오 분기
+        resume = session.get(Resume, interview.resume_id)
+        major = ""
+        if resume and resume.structured_data:
+            education = resume.structured_data.get("education", [])
+            if education and isinstance(education, list) and len(education) > 0:
+                major = education[0].get("major", "")
+        
+        # transition 여부 판별 (백엔드와 동일한 키워드 기준)
+        is_transition = False
+        target_role = interview.position or ""
+        if major and target_role:
+            tech_role_keywords = ['개발', '엔지니어', '프로그래머', 'IT', 'SW', '소프트웨어', '데이터', '인공지능', 'AI', '보안', '시스템']
+            tech_major_keywords = ['컴퓨터', '소프트웨어', '정보통신', '전기', '전자', 'IT', '데이터', '인공지능', 'AI', '수학', '통계', '산업공학']
+            is_tech_role = any(kw in target_role for kw in tech_role_keywords)
+            is_tech_major = any(kw in major for kw in tech_major_keywords)
+            if is_tech_role and not is_tech_major:
+                is_transition = True
+        
+        # 시나리오 모듈 선택적 임포트
+        if is_transition:
+            from config.interview_scenario_transition import get_stage_by_name, get_next_stage
+            logger.info(f"✨ [AI-WORKER] Transition scenario selected (Major: {major})")
+        else:
+            from config.interview_scenario import get_stage_by_name, get_next_stage
+            logger.info("✅ [AI-WORKER] Standard scenario selected")
             
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
@@ -252,21 +279,21 @@ def generate_next_question_task(interview_id: int):
                     q3_data = next((item for item in self_intro if "[질문3]" in item.get("question", "")), None)
                     if not q3_data and len(self_intro) >= 3: q3_data = self_intro[2]
                     if q3_data:
-                        narrative_context = f"[자기소개서 3번 내용 - 협업]\n질문: {q3_data.get('question')}\n답변: {q3_data.get('answer')}\n\n"
+                        narrative_context = f"[자기소개서 질문 3번 내용 - 협업]\n답변 내용: {q3_data.get('answer')}\n\n"
 
                 elif stage_name == "responsibility":
                     self_intro = sd.get("self_intro", [])
                     q1_data = next((item for item in self_intro if "[질문1]" in item.get("question", "")), None)
                     if not q1_data and len(self_intro) >= 1: q1_data = self_intro[0]
                     if q1_data:
-                        narrative_context = f"[자기소개서 1번 내용 - 가치관]\n질문: {q1_data.get('question')}\n답변: {q1_data.get('answer')}\n\n"
+                        narrative_context = f"[자기소개서 질문 1번 내용 - 가치관]\n답변 내용: {q1_data.get('answer')}\n\n"
 
                 elif stage_name == "growth":
                     self_intro = sd.get("self_intro", [])
                     q2_data = next((item for item in self_intro if "[질문2]" in item.get("question", "")), None)
                     if not q2_data and len(self_intro) >= 2: q2_data = self_intro[1]
                     if q2_data:
-                        narrative_context = f"[자기소개서 2번 내용 - 성장의지]\n질문: {q2_data.get('question')}\n답변: {q2_data.get('answer')}\n\n"
+                        narrative_context = f"[자기소개서 질문 2번 내용 - 성장의지]\n답변 내용: {q2_data.get('answer')}\n\n"
 
             # Retriever 기반 컨텍스트 검색
             retriever = get_retriever(resume_id=interview.resume_id, top_k=10)
@@ -321,7 +348,7 @@ def generate_next_question_task(interview_id: int):
 
             
             logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
-            content = llm_chain.invoke({
+            content = chain.invoke({
                 "context": context_text,
                 "position": interview.position,
                 "stage": stage_name,
@@ -352,9 +379,12 @@ def generate_next_question_task(interview_id: int):
                     intro_msg = s.get("intro_sentence", "")
                     break
             
-            # 꼬리질문의 경우 별도의 인트로를 사용하거나 생략
+            # 꼬리질문의 경우 고정된 인트로 추가 (중복 방지를 위해 LLM에게는 시키지 않음)
             if stage_type == "followup":
                 intro_msg = "추가적으로 궁금한 점이 있습니다."
+            elif intro_msg == "추가적으로 궁금한 점이 있습니다.":
+                # 메인 질문인데 시나리오에 잘못 들어가 있는 경우 제거
+                intro_msg = ""
 
             # 질문 앞에 [단계] 및 안내 문구 추가
             final_content = f"[{stage_display}] {intro_msg} {content}" if intro_msg else f"[{stage_display}] {content}"

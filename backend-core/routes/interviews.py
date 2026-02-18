@@ -73,10 +73,19 @@ async def create_interview(
     
     # 2. 템플릿 질문 즉시 생성 (자기소개, 지원동기)
     try:
-        from utils.interview_helpers import get_candidate_info, generate_template_question
+        from utils.interview_helpers import get_candidate_info, generate_template_question, check_if_transition
         candidate_info = get_candidate_info(db, interview_data.resume_id)
         
-        from config.interview_scenario import get_initial_stages
+        # [추가] 직무 전환 여부 확인 및 시나리오 선택
+        is_transition = check_if_transition(candidate_info.get("major", ""), target_role)
+        
+        if is_transition:
+            from config.interview_scenario_transition import get_initial_stages
+            logger.info(f"✨ [TRANSITION] Career change detected ({candidate_info.get('major')} -> {target_role}). Using transition scenario.")
+        else:
+            from config.interview_scenario import get_initial_stages
+            logger.info("✅ [STANDARD] Regular career path detected. Using standard scenario.")
+            
         initial_stages = get_initial_stages()
         
         for stage_config in initial_stages:
@@ -433,18 +442,27 @@ async def create_realtime_interview(
     
     # 2. 템플릿 질문 즉시 생성
     try:
-        from utils.interview_helpers import generate_template_question
+        from utils.interview_helpers import generate_template_question, check_if_transition
+        
+        # [추가] 직무 전환 여부 확인 및 시나리오 선택
+        is_transition = check_if_transition(candidate_info.get("major", ""), target_role)
         
         # 시나리오에서 초기 템플릿 가져오기
         try:
-            from config.interview_scenario import get_initial_stages
+            if is_transition:
+                from config.interview_scenario_transition import get_initial_stages
+                logger.info(f"✨ [REALTIME-TRANSITION] Career change detected ({candidate_info.get('major')} -> {target_role}). Using transition scenario.")
+            else:
+                from config.interview_scenario import get_initial_stages
+                logger.info("✅ [REALTIME-STANDARD] Regular career path detected. Using standard scenario.")
+            
             initial_stages = get_initial_stages()
         except ImportError:
             # 폴백: 시나리오 로드 실패 시 강제 생성
             logger.warning("⚠️ Could not import interview_scenario, using hardcoded fallback questions.")
             initial_stages = [
-                {"stage": "intro", "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.", "order": 1},
-                {"stage": "motivation", "template": "{candidate_name} 지원자님, 지원동기 말씀해주세요.", "order": 2}
+                {"stage": "intro", "display_name": "기본 질문", "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.", "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.", "order": 1},
+                {"stage": "motivation", "display_name": "기본 질문", "intro_sentence": "감사합니다. 이어서 지원하신 동기에 대해 들어보고 싶습니다.", "template": "{candidate_name} 지원자님, 지원동기 말씀해주세요.", "order": 2}
             ]
         
         for stage_config in initial_stages:

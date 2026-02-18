@@ -22,6 +22,7 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
         {
             "candidate_name": "최승우",
             "target_role": "보안엔지니어",
+            "major": "컴퓨터공학",
             "email": "...",
             "phone": "..."
         }
@@ -37,6 +38,7 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
             return {
                 "candidate_name": "지원자",
                 "target_role": "해당 직무",
+                "major": "",
                 "email": "",
                 "phone": ""
             }
@@ -58,9 +60,16 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
         
         header = data.get("header", {})
         
+        # 교육 정보에서 전공 추출
+        major = ""
+        education = data.get("education", [])
+        if education and isinstance(education, list) and len(education) > 0:
+            major = education[0].get("major", "")
+        
         return {
             "candidate_name": header.get("name", "지원자"),
             "target_role": header.get("target_role", "해당 직무"),
+            "major": major,
             "email": header.get("email", ""),
             "phone": header.get("phone", "")
         }
@@ -70,9 +79,34 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
         return {
             "candidate_name": "지원자",
             "target_role": "해당 직무",
+            "major": "",
             "email": "",
             "phone": ""
         }
+
+
+def check_if_transition(major: str, target_role: str) -> bool:
+    """
+    지원 직무와 전공을 비교하여 '직무 전환자/비전공자' 여부를 판단합니다.
+    """
+    if not major or not target_role:
+        return False
+    
+    # 1. 기술(IT) 직무 키워드
+    tech_role_keywords = ['개발', '엔지니어', '프로그래머', 'IT', 'SW', '소프트웨어', '데이터', '인공지능', 'AI', '보안', '시스템']
+    # 2. 기술(IT) 전공 키워드 (이공계 핵심)
+    tech_major_keywords = ['컴퓨터', '소프트웨어', '정보통신', '전기', '전자', 'IT', '데이터', '인공지능', 'AI', '수학', '통계', '산업공학']
+    
+    # 지원 직무가 IT 관련인지 확인
+    is_tech_role = any(kw in target_role for kw in tech_role_keywords)
+    # 전공이 IT 관련인지 확인
+    is_tech_major = any(kw in major for kw in tech_major_keywords)
+    
+    # [결론] 직무는 IT인데, 전공이 IT가 아니라면 '전환자'로 판단!
+    if is_tech_role and not is_tech_major:
+        return True
+        
+    return False
 
 
 def generate_template_question(template: str, variables: Dict[str, str]) -> str:
