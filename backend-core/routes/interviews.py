@@ -81,6 +81,9 @@ async def create_interview(
         
         for stage_config in initial_stages:
             question_text = generate_template_question(stage_config["template"], candidate_info)
+            # [단계] 말머리 추가
+            display_name = stage_config.get("display_name", "면접질문")
+            question_text = f"[{display_name}] {question_text}"
             
             # 2-1. Question 객체 생성
             question = Question(
@@ -447,6 +450,9 @@ async def create_realtime_interview(
                 stage_config.get("template", "{candidate_name}님 시작해주세요."),
                 candidate_info
             )
+            # [단계] 말머리 추가
+            display_name = stage_config.get("display_name", "면접질문")
+            question_text = f"[{display_name}] {question_text}"
             
             # Question 저장
             question = Question(

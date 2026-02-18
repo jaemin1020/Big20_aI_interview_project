@@ -14,6 +14,7 @@ from db import (
     engine,
     Session,
     Transcript,
+    Interview,
     update_transcript_sentiment,
     update_question_avg_score,
     get_interview_transcripts,
@@ -164,7 +165,12 @@ def generate_final_report(interview_id: int):
     최종 평가 보고서 생성 (시니어 면접관 페르소나 적용)
     """
     logger.info(f"Generating Final Report for Interview {interview_id}")
-    from db import create_or_update_evaluation_report, update_interview_overall_score, get_interview_transcripts
+    from db import (
+        Interview, 
+        create_or_update_evaluation_report, 
+        update_interview_overall_score, 
+        get_interview_transcripts
+    )
     
     try:
         transcripts = get_interview_transcripts(interview_id)

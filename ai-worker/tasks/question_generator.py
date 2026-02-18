@@ -342,25 +342,13 @@ def generate_next_question_task(interview_id: int):
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
-            # [추가] 면접 단계별 한국어 명칭 매핑
-            STAGE_DISPLAY_NAMES = {
-                "intro": "자기 소개",
-                "motivation": "지원 동기",
-                "skill": "직무 역량",
-                "skill_followup": "직무 역량 심층",
-                "experience": "실무 경험",
-                "experience_followup": "실무 경험 심층",
-                "problem_solving": "문제 해결",
-                "problem_solving_followup": "문제 해결 심층",
-                "communication": "협업 및 소통",
-                "communication_followup": "협업 및 소통 심층",
-                "responsibility": "가치관 및 책임",
-                "responsibility_followup": "가치관 및 책임 심층",
-                "growth": "성장 가능성",
-                "growth_followup": "성장 가능성 심층",
-                "final_statement": "최종 발언"
-            }
-            stage_display = STAGE_DISPLAY_NAMES.get(stage_name, "심층 면접")
+            # [추가] 면접 단계별 한국어 명칭 가져오기 (interview_scenario.py 기준)
+            from config.interview_scenario import INTERVIEW_STAGES
+            stage_display = "심층 면접"
+            for s in INTERVIEW_STAGES:
+                if s["stage"] == stage_name:
+                    stage_display = s.get("display_name", stage_display)
+                    break
             
             # 질문 앞에 [단계] 표시 추가
             final_content = f"[{stage_display}] {content}"

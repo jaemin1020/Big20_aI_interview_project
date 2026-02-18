@@ -8,6 +8,8 @@ INTERVIEW_STAGES = [
     # 1. 자기소개 (템플릿 - 즉시)
     {
         "stage": "intro",
+        "display_name": "자기 소개",
+        "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
         "type": "template",
         "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.",
         "variables": ["candidate_name"],
@@ -17,6 +19,8 @@ INTERVIEW_STAGES = [
     # 2. 지원동기 (템플릿 - 즉시)
     {
         "stage": "motivation",
+        "display_name": "지원 동기",
+        "intro_sentence": "감사합니다. 이어서 지원하신 동기에 대해 들어보고 싶습니다.",
         "type": "template",
         "template": "{candidate_name} 지원자님, 지원하신 직무인 '{target_role}'에 지원하게 된 동기는 무엇입니까?",
         "variables": ["candidate_name", "target_role"],
@@ -26,6 +30,8 @@ INTERVIEW_STAGES = [
     # 3. 직무 지식 평가 (AI 생성)
     {
         "stage": "skill",
+        "display_name": "직무지식질문",
+        "intro_sentence": "다음은 지원자님의 직무 지식을 확인해 보겠습니다.",
         "type": "ai",
         "category": None,
         "query_template": "{target_role} 기술 스킬 도구 활용 능력",
@@ -36,6 +42,7 @@ INTERVIEW_STAGES = [
     # 4. 직무 지식 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "skill_followup",
+        "display_name": "직무심층질문",
         "type": "followup",
         "parent": "skill",
         "guide": "이전 답변 기술의 한계 및 예외 상황 검증.",
@@ -45,6 +52,8 @@ INTERVIEW_STAGES = [
     # 5. 직무 경험 평가 (AI 생성)
     {
         "stage": "experience",
+        "display_name": "실무경험질문",
+        "intro_sentence": "이제 지원자님의 실무 경험에 대해 여쭤보겠습니다.",
         "type": "ai",
         "category": None,
         "query_template": "프로젝트 성과 달성 경험 결과 활동 인턴 교육",
@@ -55,6 +64,7 @@ INTERVIEW_STAGES = [
     # 6. 직무 경험 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "experience_followup",
+        "display_name": "실무심층질문",
         "type": "followup",
         "parent": "experience",
         "guide": "의사결정 근거 및 해결 논리 파악.",
@@ -64,6 +74,8 @@ INTERVIEW_STAGES = [
     # 7. 문제 해결 능력 평가 (AI 생성)
     {
         "stage": "problem_solving",
+        "display_name": "문제해결질문",
+        "intro_sentence": "다음은 문제 해결 능력을 확인하기 위한 질문입니다.",
         "type": "ai",
         "category": None,
         "query_template": "문제 해결 기술적 난관 극복",
@@ -74,6 +86,7 @@ INTERVIEW_STAGES = [
     # 8. 문제 해결 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "problem_solving_followup",
+        "display_name": "문제해결심층",
         "type": "followup",
         "parent": "problem_solving",
         "guide": "실패/돌발 변수 대처 및 사후 학습 확인.",
@@ -83,6 +96,7 @@ INTERVIEW_STAGES = [
     # 9. 의사소통 및 협업 평가 (AI 생성)
     {
         "stage": "communication",
+        "display_name": "협업소통질문",
         "type": "ai",
         "category": "narrative",
         "query_template": "자기소개서 3번 의사소통 협업 갈등 해결 사례",
@@ -93,6 +107,7 @@ INTERVIEW_STAGES = [
     # 10. 의사소통 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "communication_followup",
+        "display_name": "협업소통심층",
         "type": "followup",
         "parent": "communication",
         "guide": "반대 의견 설득 원칙 및 커뮤니케이션 스타일.",
@@ -102,6 +117,7 @@ INTERVIEW_STAGES = [
     # 11. 책임감 및 가치관 평가 (AI 생성)
     {
         "stage": "responsibility",
+        "display_name": "가치관책임질문",
         "type": "ai",
         "category": "narrative",
         "query_template": "자기소개서 1번 지원동기 보안 전문가 윤리의식 사명감",
@@ -112,6 +128,7 @@ INTERVIEW_STAGES = [
     # 12. 책임감 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "responsibility_followup",
+        "display_name": "가치관책임심층",
         "type": "followup",
         "parent": "responsibility",
         "guide": "개인 신념과 조직 문화 충돌 시 조화 방안.",
@@ -121,6 +138,7 @@ INTERVIEW_STAGES = [
     # 13. 성장의지 평가 (AI 생성)
     {
         "stage": "growth",
+        "display_name": "성장가능성질문",
         "type": "ai",
         "category": "narrative",
         "query_template": "자기소개서 2번 기술 습득 과정 IDS 구축 시각화 자동화",
@@ -131,6 +149,7 @@ INTERVIEW_STAGES = [
     # 14. 성장의지 꼬리질문 (AI 생성 - 답변 기반)
     {
         "stage": "growth_followup",
+        "display_name": "성장가능성심층",
         "type": "followup",
         "parent": "growth",
         "guide": "최근 기술 한계 극복 시도 및 구체적 학습 활동.",
@@ -140,6 +159,7 @@ INTERVIEW_STAGES = [
     # 15. 최종 발언 (템플릿 - 즉시)
     {
         "stage": "final_statement",
+        "display_name": "최종 발언",
         "type": "template",
         "template": "{candidate_name} 지원자님, 지금까지 많은 답변 감사드립니다. 마지막으로 하고 싶으신 말씀이나 궁금한 점이 있으신가요?",
         "variables": ["candidate_name"],
