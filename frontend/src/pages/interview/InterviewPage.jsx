@@ -61,7 +61,11 @@ const InterviewPage = ({
       else if (question) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
-          const utterance = new SpeechSynthesisUtterance(question);
+
+          // [추가] [...] 태그 제거 로직
+          const cleanText = question.includes(']') ? question.split(']').slice(1).join(']').trim() : question;
+
+          const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.lang = 'ko-KR';
           utterance.rate = 1.0;
           utterance.pitch = 1.0;

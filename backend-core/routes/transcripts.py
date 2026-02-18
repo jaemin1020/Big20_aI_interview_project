@@ -60,7 +60,8 @@ async def create_transcript(
                     transcript.text,
                     question.rubric_json,
                     question.id
-                ]
+                ],
+                queue='gpu_queue'
             )
             logger.info(f"Evaluation task sent for transcript {transcript.id}")
     

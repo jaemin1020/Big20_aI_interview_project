@@ -6,6 +6,7 @@ import base64
 import tempfile
 import soundfile as sf
 import numpy as np
+import re
 
 # Configure logging
 logger = logging.getLogger("TTS-Task")
@@ -91,7 +92,10 @@ def synthesize_task(text: str, language="ko", speed=1.0):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             temp_path = tmp.name
             
-        success = tts_engine.synthesize(text, temp_path, speed=speed)
+        # [추가] [...] 형태의 태그 제거 (음성으로 읽지 않음)
+        clean_text = re.sub(r'\[.*?\]', '', text).strip()
+        
+        success = tts_engine.synthesize(clean_text, temp_path, speed=speed)
         
         if not success:
              return {"status": "error", "message": "Synthesis failed"}

@@ -1,6 +1,6 @@
 import sys
 import os
-import time
+import re
 import gc 
 import logging
 import torch
@@ -48,15 +48,10 @@ PROMPT_TEMPLATE = """[|system|]
 
 [작성 지침 - 절대 규칙]
 1. **단 두 문장, 150자 이내**: 모든 질문은 반드시 **최대 두 문장(150자 이내)**으로 생성하라.
-2. **사실적 일관성(Factual Consistency)**: 
-   - 이력서에 기술된 내용이 **'과거에 실제로 수행한 경험'**인지, 단순히 **'앞으로 하겠다는 목표나 계획'**인지 명확히 구분하라.
-   - **계획/포부**인 경우: "어떻게 구현할 것인지", "무엇을 준비할 것인지" 등 미래지향적/방법론적 질문을 던져라. (성과나 데이터셋을 물어보는 실수를 하지 마라.)
-   - **경험/성과**인 경우: 구체적인 수치, 데이터셋, 본인의 역할, 기술적 결정을 물어보라.
-3. **맥락별 인용 우선순위**: 
-   - 일반 질문: [이력서 내용] 인용 + 질문
-   - 꼬리 질문(followup): **[지원자의 최근 답변]** 속 핵심 키워드를 반드시 인용 + 구체적 확인 질문
-4. **사족 금지**: 바로 인용문으로 시작하라.
-5. **실무형 난이도**: 지원자의 수준에 맞는 구체적인 상황 질문을 던져라.
+2. **평가 의도(Guide) 중심**: 지원자 정보(RAG)보다 현재 평가 단계의 **'평가 의도({guide})'**를 80% 비중으로 우선하여 질문을 구성하라. (예: 협업 단계라면 기술보다는 협업 방식에 집중)
+3. **꼬리 질문(followup) 규칙**: 반드시 지원자의 최근 답변 속 키워드를 인용하되, 질문의 시작은 "추가적으로 궁금한 게 있습니다."로 시작하라.
+4. **가독성**: 강조 기호(예: **, __)나 특수 문자는 절대 사용하지 마라. 순수 텍스트로만 답변하라.
+5. **사족 금지**: "답변 잘 들었습니다" 등의 추임새는 금지한다.
 [|endofturn|]
 [|user|]
 # 평가 단계: {stage}
@@ -326,13 +321,18 @@ def generate_next_question_task(interview_id: int):
 
             
             logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
-            content = chain.invoke({
-                "position": target_role,
-                "name": candidate_name,
+            content = llm_chain.invoke({
+                "context": context_text,
+                "position": interview.position,
                 "stage": stage_name,
-                "guide": next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                "context": context_text
+                "guide": next_stage_data.get("guide", ""),
+                "name": candidate_name
             })
+            
+            # [수정] 강조 기호(**) 및 마크다운 제거
+            content = re.sub(r'\*\*|__', '', content)
+            # 단일 문장 내의 불필요한 공백 및 개행 정리
+            content = " ".join(content.split())
             
             if not content:
                 content = f"{candidate_name}님, 준비하신 내용을 토대로 해당 역량에 대해 더 말씀해주실 수 있나요?"
@@ -342,16 +342,22 @@ def generate_next_question_task(interview_id: int):
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
-            # [추가] 면접 단계별 한국어 명칭 가져오기 (interview_scenario.py 기준)
+            # [추가] 면접 단계별 한국어 명칭 및 안내 문구 가져오기
             from config.interview_scenario import INTERVIEW_STAGES
             stage_display = "심층 면접"
+            intro_msg = ""
             for s in INTERVIEW_STAGES:
                 if s["stage"] == stage_name:
                     stage_display = s.get("display_name", stage_display)
+                    intro_msg = s.get("intro_sentence", "")
                     break
             
-            # 질문 앞에 [단계] 표시 추가
-            final_content = f"[{stage_display}] {content}"
+            # 꼬리질문의 경우 별도의 인트로를 사용하거나 생략
+            if stage_type == "followup":
+                intro_msg = "추가적으로 궁금한 점이 있습니다."
+
+            # 질문 앞에 [단계] 및 안내 문구 추가
+            final_content = f"[{stage_display}] {intro_msg} {content}" if intro_msg else f"[{stage_display}] {content}"
             
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
             save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
