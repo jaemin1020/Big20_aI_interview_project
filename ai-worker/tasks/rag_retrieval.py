@@ -64,7 +64,7 @@ from langchain_community.vectorstores import PGVector
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (LangChain PGVector 활용)
 # -----------------------------------------------------------
-def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
+def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
     """
     LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
     """
@@ -122,7 +122,7 @@ def retrieve_context(query, resume_id=1, top_k=3, filter_category=None):
 # -----------------------------------------------------------
 # [핵심] Retriever 생성 함수 (LangChain LCEL용)
 # -----------------------------------------------------------
-def get_retriever(resume_id=1, top_k=3, filter_category=None):
+def get_retriever(resume_id=1, top_k=10, filter_category=None):
     """
     LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
     """

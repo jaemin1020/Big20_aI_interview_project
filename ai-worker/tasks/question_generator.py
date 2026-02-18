@@ -48,11 +48,15 @@ PROMPT_TEMPLATE = """[|system|]
 
 [작성 지침 - 절대 규칙]
 1. **단 두 문장, 150자 이내**: 모든 질문은 반드시 **최대 두 문장(150자 이내)**으로 생성하라.
-2. **맥락별 인용 우선순위**: 
+2. **사실적 일관성(Factual Consistency)**: 
+   - 이력서에 기술된 내용이 **'과거에 실제로 수행한 경험'**인지, 단순히 **'앞으로 하겠다는 목표나 계획'**인지 명확히 구분하라.
+   - **계획/포부**인 경우: "어떻게 구현할 것인지", "무엇을 준비할 것인지" 등 미래지향적/방법론적 질문을 던져라. (성과나 데이터셋을 물어보는 실수를 하지 마라.)
+   - **경험/성과**인 경우: 구체적인 수치, 데이터셋, 본인의 역할, 기술적 결정을 물어보라.
+3. **맥락별 인용 우선순위**: 
    - 일반 질문: [이력서 내용] 인용 + 질문
-   - 꼬리 질문(followup): **[지원자의 최근 답변]** 속 핵심 키워드(기술명, 수치, 조치 사항 등)를 반드시 인용 + 그에 대한 적절한 수준의 구체적 확인 질문
-3. **사족 금지**: "답변 잘 들었습니다" 등의 추임새는 0점 처리한다. 바로 인용문으로 시작하라.
-4. **실무형 난이도**: 너무 난해하거나 학술적인 질문 대신, 실무 단계에서 겪을 법한 **'구체적인 상황'이나 '본인의 역할'**에 대해 물어보라.
+   - 꼬리 질문(followup): **[지원자의 최근 답변]** 속 핵심 키워드를 반드시 인용 + 구체적 확인 질문
+4. **사족 금지**: 바로 인용문으로 시작하라.
+5. **실무형 난이도**: 지원자의 수준에 맞는 구체적인 상황 질문을 던져라.
 [|endofturn|]
 [|user|]
 # 평가 단계: {stage}
@@ -270,9 +274,20 @@ def generate_next_question_task(interview_id: int):
                         narrative_context = f"[자기소개서 2번 내용 - 성장의지]\n질문: {q2_data.get('question')}\n답변: {q2_data.get('answer')}\n\n"
 
             # Retriever 기반 컨텍스트 검색
-            retriever = get_retriever(resume_id=interview.resume_id, top_k=5)
+            retriever = get_retriever(resume_id=interview.resume_id, top_k=10)
             retrieved_docs = retriever.invoke(query)
-            rag_context = "\n".join([f"- {doc.page_content}" for doc in retrieved_docs]) if retrieved_docs else "이력서 세부 근거 없음"
+            
+            # [수정] 카테고리 정보를 포함하여 지식의 성격(경험 vs 계획)을 명시
+            rag_context_list = []
+            if retrieved_docs:
+                for doc in retrieved_docs:
+                    cat = doc.metadata.get('category', 'unknown')
+                    # 카테고리명을 더 직관적으로 변환하여 LLM에 전달
+                    cat_name = "경험/활동" if cat in ['project', 'experience', 'activity', 'award'] else "자기소개/계획"
+                    rag_context_list.append(f"- [{cat_name}] {doc.page_content}")
+                rag_context = "\n".join(rag_context_list)
+            else:
+                rag_context = "이력서 세부 근거 없음"
 
             # [핵심 로직] 2. 프로필 + 이력서(RAG) + '방금 한 답변'을 섞어서 LLM에게 전달
             if stage_type == "followup":
@@ -288,6 +303,12 @@ def generate_next_question_task(interview_id: int):
             else:
                 # 일반 AI 질문: 프로필 + RAG 결합
                 context_text = f"{profile_summary}{narrative_context}[이력서 세부 내용]\n{rag_context}"
+
+            # [추가] 실시간 디버깅 및 사용자 확인을 위한 로그 출력
+            logger.info("========================================")
+            logger.info(f"🔍 [LLM INPUT CONTEXT] (Interview ID: {interview_id}, Stage: {stage_name})")
+            logger.info(context_text)
+            logger.info("========================================")
 
             # 3. 지원자 정보 정제
             resume = session.get(Resume, interview.resume_id)
@@ -321,9 +342,32 @@ def generate_next_question_task(interview_id: int):
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
+            # [추가] 면접 단계별 한국어 명칭 매핑
+            STAGE_DISPLAY_NAMES = {
+                "intro": "자기 소개",
+                "motivation": "지원 동기",
+                "skill": "직무 역량",
+                "skill_followup": "직무 역량 심층",
+                "experience": "실무 경험",
+                "experience_followup": "실무 경험 심층",
+                "problem_solving": "문제 해결",
+                "problem_solving_followup": "문제 해결 심층",
+                "communication": "협업 및 소통",
+                "communication_followup": "협업 및 소통 심층",
+                "responsibility": "가치관 및 책임",
+                "responsibility_followup": "가치관 및 책임 심층",
+                "growth": "성장 가능성",
+                "growth_followup": "성장 가능성 심층",
+                "final_statement": "최종 발언"
+            }
+            stage_display = STAGE_DISPLAY_NAMES.get(stage_name, "심층 면접")
+            
+            # 질문 앞에 [단계] 표시 추가
+            final_content = f"[{stage_display}] {content}"
+            
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
-            save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
-            return {"status": "success", "stage": stage_name, "question": content}
+            save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
+            return {"status": "success", "stage": stage_name, "question": final_content}
         except Exception as e:
             logger.error(f"실시간 질문 생성 실패: {e}")
             return {"status": "error", "error": str(e)}

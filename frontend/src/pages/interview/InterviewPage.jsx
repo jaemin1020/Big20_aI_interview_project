@@ -191,6 +191,21 @@ const InterviewPage = ({
                 fontWeight: '700',
                 fontSize: '0.9rem'
               }}>Q{currentIdx + 1}</span>
+
+              {/* [추가] 면접 단계 배지 표시 */}
+              {question?.startsWith('[') && question.includes(']') && (
+                <span style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'var(--primary)',
+                  padding: '2px 10px',
+                  borderRadius: '6px',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  border: '1px solid var(--primary)'
+                }}>
+                  {question.split(']')[0].substring(1)}
+                </span>
+              )}
             </div>
 
             <h2 style={{
@@ -200,7 +215,7 @@ const InterviewPage = ({
               color: 'var(--text-main)',
               wordBreak: 'keep-all'
             }}>
-              {question}
+              {question?.includes(']') ? question.split(']').slice(1).join(']').trim() : question}
             </h2>
           </div>
 
