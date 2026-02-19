@@ -24,6 +24,7 @@ import io  # [NEW] 오디오 버퍼링용
 # aiortc/aioice는 기본적으로 random port(0)를 사용하므로, 이를 Docker가 매핑한 50000-50050 범위로 강제함
 import socket
 import random
+import numpy as np # [NEW] 오디오 분석을 위한 NumPy (가벼운 연산용)
 
 original_socket_bind = socket.socket.bind
 
@@ -135,6 +136,9 @@ class VideoAnalysisTrack(MediaStreamTrack):
         
         # [신규] 전체 면접 통합 데이터 버켓 (모든 프레임 누적)
         self.session_all_data = self._get_empty_q_data()
+        
+        # [신규] 오디오 자신감 점수 누적 리스트 (최종 리포트용)
+        self.audio_scores = []
         
         # 실시간 로그 쿨타임
         self.last_log_time = 0
@@ -258,8 +262,23 @@ class VideoAnalysisTrack(MediaStreamTrack):
         print(f"   2. 시선집중     : {s['gaze_ratio']:5.1f}점 x 0.3 = {s['score_focus']:4.1f}점")
         print(f"   3. 자세안정     : {s['posture_ratio']:5.1f}점 x 0.2 = {s['score_posture']:4.1f}점")
         print(f"   4. 정서안정     : {100-s['avg_anxiety']:5.1f}점 x 0.2 = {s['score_emotion']:4.1f}점")
+        
+        # [NEW] 오디오 자신감 최종 리포트 추가
+        if self.audio_scores:
+            avg_audio_conf = sum(self.audio_scores) / len(self.audio_scores)
+            if avg_audio_conf >= 70:
+                audio_feedback = "👍 아주 좋습니다! (자신감 넘침)"
+            elif avg_audio_conf >= 60:
+                audio_feedback = "👌 안정적입니다. (무난함)"
+            else:
+                audio_feedback = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+            
+            print(f"   5. 음성자신감   : {avg_audio_conf:5.1f}점 | {audio_feedback}")
+        else:
+            print(f"   5. 음성자신감   : (데이터 없음)")
+
         print(f"   -------------------------------------------")
-        print(f"   ∑ 최종 종합 합계: {s['overall_score']:.1f}점")
+        print(f"   ∑ 최종 종합 합계: {s['overall_score']:.1f}점 (음성 점수 미포함)")
         print("="*50 + "\n")
 
     async def process_vision(self, frame, timestamp_ms):
@@ -433,6 +452,60 @@ async def start_remote_stt(track, session_id):
                 # 4. Base64 인코딩
                 wav_bytes = output_buffer.getvalue()
                 audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+
+                # [NEW] 오디오 자신감 분석 (NumPy RMS Volume & Density)
+                # --------------------------------------------------------------------------------
+                try:
+                    # 1. 버퍼에서 바이트 데이터를 가져와서 NumPy 배열로 변환 (int16 -> float32)
+                    #    Normalize: -32768 ~ 32767 범위를 -1.0 ~ 1.0 으로 변환하여 계산하기 쉽게 만듦
+                    #    (예외처리: 데이터가 비어있거나 깨졌을 경우를 대비해 try-except 블록 사용)
+                    audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+
+                    if len(audio_np) > 0:
+                        # 2. 성량(Volume) 분석: RMS (Root Mean Square) 계산
+                        #    오디오의 에너지 크기를 측정하여 목소리가 얼마나 큰지 판단
+                        #    (제곱 -> 평균 -> 제곱근)
+                        volume_rms = np.sqrt(np.mean(audio_np**2))
+                        #    0.0 ~ 0.5 범위를 0 ~ 100점으로 환산 (보정치 500 곱함)
+                        volume_score = min(volume_rms * 500, 100) 
+
+                        # 3. 발화 밀도(Speed/Density) 분석
+                        #    일정 크기(Threshold: 0.05) 이상의 소리가 전체 시간 중 얼마나 차지하는지 비율 계산
+                        #    말이 너무 느리거나 침묵이 길면 점수가 낮아짐
+                        threshold = 0.05
+                        speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
+                        speed_score = min(speaking_ratio * 200, 100) # 비율 0.5 이상이면 100점 (보정치 200)
+
+                        # 4. 최종 자신감 점수 합산 (성량 50% + 속도 50%)
+                        confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
+
+                        # [NEW] 점수 구간별 피드백 메시지 생성 (User Feedback)
+                        if confidence_score >= 70:
+                            feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
+                        elif confidence_score >= 60:
+                            feedback_msg = "👌 안정적입니다. (무난함)"
+                        else:
+                            feedback_msg = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+
+                        # [DEBUG] 상세 수치 출력 (사용자 모니터링용)
+                        # - RMS: 소리의 평균 에너지 (0.01~0.1 사이 평범, 0.2 이상 큼)
+                        # - Ratio: 말하는 시간 비율 (0.2~0.5 사이 평범)
+                        logger.info(
+                            f"[{session_id}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
+                            f"(🔊성량: {volume_score:4.1f}점/RMS:{volume_rms:.4f}, "
+                            f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
+                        )
+                        
+                        # [NEW] 최종 리포트를 위해 점수 누적 (VideoAnalysisTrack 찾아서 저장)
+                        if session_id in active_video_tracks:
+                            track_instance = active_video_tracks[session_id]
+                            track_instance.audio_scores.append(confidence_score)
+
+                except Exception as e:
+                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
+                except Exception as e:
+                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
+                # --------------------------------------------------------------------------------
                 
                 # 5. Celery Task 배달 (AI Worker에게)
                 # 결과값은 비동기로 처리되므로, 여기서는 '보냈다'는 사실만 중요
