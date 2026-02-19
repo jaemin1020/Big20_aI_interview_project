@@ -253,13 +253,7 @@ const AuthPage = ({
             {authMode === 'login' ? '로그인' : '회원가입 완료'}
           </PremiumButton>
 
-          {authMode === 'login' && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>아이디 찾기</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--glass-border)', cursor: 'default' }}>|</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>비밀번호 찾기</span>
-            </div>
-          )}
+
 
           <p style={{ textAlign: 'center', fontSize: '0.9rem', marginTop: '1rem', color: 'var(--text-muted)' }}>
             {authMode === 'login' ? '계정이 없으신가요?' : '이미 계정이 있으신가요?'}
