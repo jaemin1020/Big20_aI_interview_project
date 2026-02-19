@@ -16,6 +16,7 @@ const InterviewPage = ({
   isLoading
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
+  const [isTimerActive, setIsTimerActive] = React.useState(false); // TTS 종료 후 타이머 시작
   const [showTooltip, setShowTooltip] = React.useState(false);
   // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
   const [prevIdx, setPrevIdx] = React.useState(currentIdx);
@@ -37,11 +38,13 @@ const InterviewPage = ({
   if (currentIdx !== prevIdx) {
     setPrevIdx(currentIdx);
     setTimeLeft(60);
+    setIsTimerActive(false); // 타이머 일시 정지 (TTS 끝날 때까지)
     isTimeOverRef.current = false;
   }
 
   React.useEffect(() => {
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
+    setIsTimerActive(false); // TTS 시작 전 타이머 정지
 
     // TTS 재생 로직
     const playTTS = () => {
@@ -53,7 +56,17 @@ const InterviewPage = ({
         }
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
-        audio.play().catch(e => console.error("Audio play failed:", e));
+
+        // 오디오 종료 시 타이머 시작
+        audio.onended = () => {
+          console.log("Audio ended, starting timer.");
+          setIsTimerActive(true);
+        };
+
+        audio.play().catch(e => {
+          console.error("Audio play failed:", e);
+          setIsTimerActive(true); // 재생 실패 시 바로 타이머 시작
+        });
       }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
@@ -63,8 +76,19 @@ const InterviewPage = ({
           utterance.lang = 'ko-KR';
           utterance.rate = 1.0;
           utterance.pitch = 1.0;
+
+          // TTS 종료 시 타이머 시작
+          utterance.onend = () => {
+            console.log("TTS ended, starting timer.");
+            setIsTimerActive(true);
+          };
+
           window.speechSynthesis.speak(utterance);
+        } else {
+          setIsTimerActive(true); // TTS 지원 안 하면 바로 시작
         }
+      } else {
+        setIsTimerActive(true); // 읽을 질문도 없으면 바로 시작
       }
     };
 
@@ -83,6 +107,8 @@ const InterviewPage = ({
 
   React.useEffect(() => {
     // 타이머 기능 활성화
+    if (!isTimerActive) return; // TTS 중이면 대기
+
     if (timeLeft <= 0) {
       // 이미 타이머 종료 처리를 했다면 중복 호출 방지
       if (isTimeOverRef.current) return;
@@ -101,13 +127,16 @@ const InterviewPage = ({
 
     return () => clearInterval(timer);
 
-  }, [timeLeft, nextQuestion, isRecording]);
+  }, [timeLeft, nextQuestion, isRecording, isTimerActive]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // 진행률 계산
+  const progressPercent = ((currentIdx + 1) / totalQuestions) * 100;
 
   return (
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
@@ -139,30 +168,52 @@ const InterviewPage = ({
         </div>
       )}
 
-      {/* Rectangular Timer Box: White background with Icon */}
-      <div style={{
-        alignSelf: 'flex-end',
-        marginBottom: '0.5rem',
-        padding: '6px 16px',
-        background: '#ffffff',
-        border: '1px solid rgba(0,0,0,0.05)',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        zIndex: 10
-      }}>
-        <span style={{ fontSize: '1rem' }} className={timeLeft <= 10 ? 'blink' : ''}>⏱️</span>
-        <span style={{
-          fontSize: '1.2rem',
-          fontWeight: '800',
-          fontFamily: "'Inter', monospace",
-          color: timeLeft <= 10 ? '#ef4444' : '#0f172a',
-          letterSpacing: '0.05em'
+      {/* Progress Bar & Timer Container */}
+      <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+
+        {/* Progress Bar */}
+        <div style={{ flex: 1, marginRight: '2rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+            <span>면접 진행률</span>
+            <span>{Math.round(progressPercent)}% ({currentIdx + 1}/{totalQuestions})</span>
+          </div>
+          <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{
+              width: `${progressPercent}%`,
+              height: '100%',
+              background: 'var(--gradient-main)',
+              borderRadius: '4px',
+              transition: 'width 0.5s ease-out'
+            }}></div>
+          </div>
+        </div>
+
+        {/* Rectangular Timer Box */}
+        <div style={{
+          padding: '6px 16px',
+          background: '#ffffff',
+          border: '1px solid rgba(0,0,0,0.05)',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          zIndex: 10
         }}>
-          {formatTime(timeLeft)}
-        </span>
+          <span style={{ fontSize: '1rem' }} className={timeLeft <= 10 ? 'blink' : ''}>
+            {isTimerActive ? '⏱️' : '🔇'}
+          </span>
+          <span style={{
+            fontSize: '1.2rem',
+            fontWeight: '800',
+            fontFamily: "'Inter', monospace",
+            color: timeLeft <= 10 ? '#ef4444' : '#0f172a',
+            letterSpacing: '0.05em',
+            opacity: isTimerActive ? 1 : 0.5
+          }}>
+            {formatTime(timeLeft)}
+          </span>
+        </div>
       </div>
 
       {/* Header Card: Question & Video Only */}
