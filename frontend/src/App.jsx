@@ -93,6 +93,8 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
+  // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
+  const liveTranscriptRef = useRef('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -152,6 +154,11 @@ function App() {
       isInitialized.current = true;
     }
   }, []);
+
+  // transcript 상태 → ref 동기화 (onstop 클로저 stale 방지)
+  useEffect(() => {
+    liveTranscriptRef.current = transcript;
+  }, [transcript]);
 
   // 상태 변화 시마다 sessionStorage에 저장
   useEffect(() => {
@@ -488,9 +495,14 @@ function App() {
         mediaRecorder.onstop = async () => {
           console.log('[STT] Batch recording stopped. Real-time transcript status check...');
 
-          // 실시간 자막이 이미 충분히 확보되었다면 대용량 파일 전송 스킵 (최적화)
-          if (transcript.length > 50) {
-            console.log('[STT] ✅ Real-time transcript seems sufficient. Skipping heavy batch POST.');
+          // [수정] stale closure 문제 해결:
+          // transcript(state)는 녹음 시작 시점('')으로 고정되어 항상 폴백이 실행됐음.
+          // liveTranscriptRef.current는 항상 최신값을 반영하므로 정확하게 판단 가능.
+          const currentLiveText = liveTranscriptRef.current;
+          console.log(`[STT] Live transcript length at stop: ${currentLiveText.length} chars`);
+
+          if (currentLiveText.length > 50) {
+            console.log('[STT] ✅ Real-time transcript sufficient. Skipping batch POST.');
             setIsLoading(false);
             return;
           }
@@ -504,7 +516,7 @@ function App() {
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
               setTranscript(prev => {
-                // 실시간 텍스트가 이미 더 길다면(더 많은 정보를 담고 있다면) 유지
+                // 실시간 텍스트가 이미 더 길다면 유지
                 if (prev.length > recognizedText.length) return prev;
                 return recognizedText;
               });

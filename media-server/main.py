@@ -17,6 +17,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
+import numpy as np  # [수정] RMS 무음 감지에 사용
 from vision_analyzer import VisionAnalyzer  # [NEW] MediaPipe Vision Analyzer
 import io  # [NEW] 오디오 버퍼링용
 
@@ -425,87 +426,111 @@ async def send_to_websocket(ws: WebSocket, data: dict):
 # WebRTC 오디오 스트림 -> WAV 파일 변환 -> AI Worker로 전송
 async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
-    
-    # 약 2초 단위로 오디오를 모아서 전송 (Responsiveness 향상)
-    CHUNK_THRESHOLD = 100 # 약 2초 (20ms * 100 = 2000ms)
+
+    # [개선] 2초 단위 청크 (1초는 인식률 저하, 큐 적체 유발)
+    CHUNK_THRESHOLD = 100  # 20ms * 100 = 2000ms (~2초)
+    # [개선] 동시 처리 태스크 제한: Worker(solo pool)가 한 번에 1개만 처리하므로
+    # MAX_PENDING=2로 설정: 처리 중 1개 + 대기 1개 (=1이면 30~148s 동안 모든 청크 폐기됨)
+    MAX_PENDING = 2
     accumulated_frames = []
-    
+    # [수정] list로 감싸서 중첩 async 함수 클로저에서 안전하게 변경 가능하게 함
+    pending_stt = [0]  # pending_stt[0] = 현재 처리 중인 STT 태스크 수
+
     try:
         while True:
-            # 1. 오디오 프레임 수신
             frame = await track.recv()
             accumulated_frames.append(frame)
-            
-            if len(accumulated_frames) >= CHUNK_THRESHOLD:
-                
-                # 2. WAV 변환 (In-Memory)
-                # av 라이브러리의 Output Container 사용
-                output_buffer = io.BytesIO()
-                output_container = av.open(output_buffer, mode='w', format='wav')
-                output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
-                
-                for f in accumulated_frames:
-                    # 리샘플링 및 패킷 작성
-                    for packet in output_stream.encode(f):
-                        output_container.mux(packet)
-                        
-                # 3. 마무리 (Flush)
-                for packet in output_stream.encode(None):
+
+            if len(accumulated_frames) < CHUNK_THRESHOLD:
+                continue
+
+            # --- 청크 준비 완료 ---
+
+            # [개선 1] Worker 큐 적체 방지: 이전 태스크가 아직 처리 중이면 이 청크 폐기
+            if pending_stt[0] >= MAX_PENDING:
+                logger.debug(f"[{session_id}] ⏭️ STT 큐 적체 회피: 청크 폐기 (pending={pending_stt[0]})")
+                accumulated_frames = []
+                continue
+
+            # WAV 변환 (In-Memory)
+            output_buffer = io.BytesIO()
+            output_container = av.open(output_buffer, mode='w', format='wav')
+            output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+
+            for f in accumulated_frames:
+                for packet in output_stream.encode(f):
                     output_container.mux(packet)
-                output_container.close()
-                
-                # 4. Base64 인코딩
-                wav_bytes = output_buffer.getvalue()
-                audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
-                
-                # 5. Celery Task 배달 (AI Worker에게)
-                # [개선] 결과를 기다렸다가(브라우저가 아닌 서버가 기다림) 웹소켓으로 즉시 중계
-                task = celery_app.send_task(
-                    "tasks.stt.recognize",
-                    args=[audio_b64],
-                    queue="cpu_queue"
-                )
-                
-                # 비대기(Non-blocking) 방식으로 결과를 받아 전송
-                async def wait_and_relay(celery_task, sid):
-                    try:
-                        loop = asyncio.get_event_loop()
-                        
-                        # 최대 15초 동안 결과 추적 (큐 대기 시간 고려)
-                        start_time = time.time()
-                        is_ready = False
-                        while time.time() - start_time < 15:
-                            is_ready = await loop.run_in_executor(None, celery_task.ready)
-                            if is_ready:
-                                break
-                            await asyncio.sleep(0.5) 
-                        
+            for packet in output_stream.encode(None):
+                output_container.mux(packet)
+            output_container.close()
+
+            wav_bytes = output_buffer.getvalue()
+
+            # [개선 2] 무음 감지: RMS 에너지가 기준 이하이면 Worker에 보내지 않음
+            try:
+                import wave as wave_module
+                with wave_module.open(io.BytesIO(wav_bytes), 'rb') as wf:
+                    raw = wf.readframes(wf.getnframes())
+                    rms = np.sqrt(np.mean(np.frombuffer(raw, dtype=np.int16).astype(np.float32) ** 2))
+                if rms < 80:  # 무음 임계값 (실경험 기반: 80 이하 = 사실상 무음)
+                    logger.info(f"[{session_id}] 🔇 무음 청크(RMS={rms:.1f}), 전송 스킵")
+                    accumulated_frames = []
+                    continue
+                logger.info(f"[{session_id}] 🔊 발화 청크 감지(RMS={rms:.1f}), 전송 진행")
+            except Exception as e:
+                logger.warning(f"[{session_id}] RMS 계산 실패, 전송 진행: {e}")
+
+            audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+
+            # Celery Task 전송
+            task = celery_app.send_task(
+                "tasks.stt.recognize",
+                args=[audio_b64],
+                queue="cpu_queue"
+            )
+            pending_stt[0] += 1
+            logger.info(f"[{session_id}] 📤 STT 청크 전송 ({len(wav_bytes)} bytes, pending={pending_stt[0]})")
+
+            # 비대기 결과 수신 및 WebSocket 중계
+            async def wait_and_relay(celery_task, sid):
+                try:
+                    loop = asyncio.get_event_loop()
+                    start_time = time.time()
+                    is_ready = False
+                    while time.time() - start_time < 20:
+                        is_ready = await loop.run_in_executor(None, celery_task.ready)
                         if is_ready:
-                            result = await loop.run_in_executor(None, lambda: celery_task.result)
-                            if result and result.get("status") == "success":
-                                text = result.get("text", "").strip()
-                                if text:
-                                    await send_to_websocket(sid, {
+                            break
+                        await asyncio.sleep(0.3)
+
+                    if is_ready:
+                        result = await loop.run_in_executor(None, lambda: celery_task.result)
+                        if result and result.get("status") == "success":
+                            text = result.get("text", "").strip()
+                            if text:
+                                ws = active_websockets.get(sid)
+                                if ws:
+                                    await send_to_websocket(ws, {
                                         "type": "stt_result",
                                         "text": text
                                     })
-                                    logger.info(f"[{sid}] 🎤 실시간 자막 전송 성공: {text[:30]}...")
-                    except Exception as e:
-                        if "closed file" not in str(e).lower():
-                            logger.error(f"[{sid}] STT 결과 중계 실패: {e}")
-                    finally:
-                        try:
-                            celery_task.forget()
-                        except:
-                            pass
+                                    logger.info(f"[{sid}] 🎤 자막 전송 성공: {text[:40]}...")
+                                else:
+                                    logger.warning(f"[{sid}] WebSocket 종료됨, 자막 전송 스킵")
+                    else:
+                        logger.warning(f"[{sid}] STT 타임아웃 (20s 초과)")
+                except Exception as e:
+                    if "closed file" not in str(e).lower():
+                        logger.error(f"[{sid}] STT 결과 중계 실패: {e}")
+                finally:
+                    pending_stt[0] -= 1
+                    try:
+                        celery_task.forget()
+                    except:
+                        pass
 
-                # 결과 대기 루틴 실행
-                asyncio.create_task(wait_and_relay(task, session_id))
-                
-                logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
-                
-                # 버퍼 초기화
-                accumulated_frames = []
+            asyncio.create_task(wait_and_relay(task, session_id))
+            accumulated_frames = []
 
     except Exception as e:
         logger.info(f"[{session_id}] STT 스트림 종료: {e}")
