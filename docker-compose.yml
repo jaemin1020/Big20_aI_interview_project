@@ -111,8 +111,8 @@ services:
       dockerfile: Dockerfile
     working_dir: /app
     container_name: interview_worker_cpu
-    # cpu_queue와 기본 celery 큐를 함께 처리
-    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=solo
+    # cpu_queue와 기본 celery 큐를 함께 처리 (STT 동시 처리를 위해 threads 풀 사용)
+    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --concurrency=4
     deploy:
       resources:
         limits:

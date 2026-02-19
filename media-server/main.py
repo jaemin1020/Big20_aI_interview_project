@@ -107,14 +107,33 @@ async def background_init_analyzer():
 # 2. Celery 설정
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
+celery_app.conf.update(
+    broker_connection_retry_on_startup=True,
+    redis_backend_health_check_interval=30,  # 연결 안정성 확보
+)
 
 # 3. 연결 관리 (세션별 WebSocket 및 PeerConnection 저장)
 active_websockets: Dict[str, WebSocket] = {}
 active_pcs: Dict[str, RTCPeerConnection] = {}
 active_video_tracks: Dict[str, 'VideoAnalysisTrack'] = {}
-active_analysis_tasks: Dict[str, asyncio.Task] = {}  # [추가] 분석 루프 태스크 관리
+active_analysis_tasks: Dict[str, asyncio.Task] = {}
+ws_locks: Dict[str, asyncio.Lock] = {} # [추가] 웹소켓 동시 전송 방지용 락
 
-class VideoAnalysisTrack(MediaStreamTrack):
+async def send_to_websocket(session_id: str, data: dict):
+    """WebSocket으로 데이터 전송 (Lock을 사용하여 동시 전송 충돌 방지)"""
+    ws = active_websockets.get(session_id)
+    if not ws:
+        return
+    
+    # 세션별 락 가져오기
+    if session_id not in ws_locks:
+        ws_locks[session_id] = asyncio.Lock()
+    
+    async with ws_locks[session_id]:
+        try:
+            await ws.send_json(data)
+        except Exception as e:
+            logger.error(f"[{session_id}] WebSocket 전송 실패: {e}")
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
     kind = "video"
 
@@ -299,12 +318,24 @@ class VideoAnalysisTrack(MediaStreamTrack):
                     print(f"📊 [{self.session_id}] 영상 캡처 시작 (전체 세션 분석 중...)", flush=True)
 
                 current_time = time.time()
+                # [수정] 감지된 경우에도 2초마다 웹소켓 전송 (HUD 업데이트용)
                 if current_time - self.last_log_time > 2.0:
                     self.last_log_time = current_time
                     s = self._calculate_scores(self.session_all_data)
                     labels = result["labels"]
-                    # [사용자 컨펌용 포맷]
+                    # [사용자 컨펌용 로그]
                     print(f"[{self.session_id}] {self.current_q_index}번 질문 | [실시간 종합점수: {s['overall_score']:5.1f}점] | 👀 시선: {labels['gaze']:8} | 👤 자세: {labels['posture']:12} | 😊 미소: {int(result['scores']['smile']*100):3}%", flush=True)
+                    
+                    # [추가] 실시간 HUD 데이터 전송
+                    await send_to_websocket(self.session_id, {
+                        "type": "vision_analysis",
+                        "data": {
+                            "gaze": result["flags"]["is_center"], # 프론트엔드 기대 포맷으로 가공
+                            "posture": result["labels"]["posture"],
+                            "emotion": result["labels"]["emotion"],
+                            "scores": result["scores"]
+                        }
+                    })
             else:
                 # 얼굴 미감지 시에도 5초마다 로그 출력
                 current_time = time.time()
@@ -313,11 +344,9 @@ class VideoAnalysisTrack(MediaStreamTrack):
                     status = result.get("status", "unknown") if result else "no_result"
                     print(f"❓ [{self.session_id}] 얼굴 인식 대기 중... (상태: {status})", flush=True)
 
-                ws = active_websockets.get(self.session_id)
-                if ws:
-                    await send_to_websocket(ws, {
+                    await send_to_websocket(self.session_id, {
                         "type": "vision_analysis",
-                        "data": result,
+                        "data": result if result else {"status": "not_detected"},
                         "timestamp": current_time
                     })
         except Exception as e:
@@ -397,10 +426,9 @@ async def send_to_websocket(ws: WebSocket, data: dict):
 async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
     
-    # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
-    CHUNK_DURATION_MS = 3000 
+    # 약 2초 단위로 오디오를 모아서 전송 (Responsiveness 향상)
+    CHUNK_THRESHOLD = 100 # 약 2초 (20ms * 100 = 2000ms)
     accumulated_frames = []
-    accumulated_time = 0
     
     try:
         while True:
@@ -408,11 +436,7 @@ async def start_remote_stt(track, session_id):
             frame = await track.recv()
             accumulated_frames.append(frame)
             
-            # 프레임 시간 누적 (packet.duration 사용하거나 개수로 추정)
-            # 보통 Opus 프레임은 20ms or 60ms
-            # 여기서는 프레임 개수로 대략적인 시간 계산 (50개 = 약 1초 가정)
-            # 정확성을 위해 av.AudioFrame.time 사용 가능하지만 단순화
-            if len(accumulated_frames) >= 150: # 약 3초 (20ms * 150 = 3000ms)
+            if len(accumulated_frames) >= CHUNK_THRESHOLD:
                 
                 # 2. WAV 변환 (In-Memory)
                 # av 라이브러리의 Output Container 사용
@@ -435,12 +459,48 @@ async def start_remote_stt(track, session_id):
                 audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
                 
                 # 5. Celery Task 배달 (AI Worker에게)
-                # 결과값은 비동기로 처리되므로, 여기서는 '보냈다'는 사실만 중요
-                celery_app.send_task(
+                # [개선] 결과를 기다렸다가(브라우저가 아닌 서버가 기다림) 웹소켓으로 즉시 중계
+                task = celery_app.send_task(
                     "tasks.stt.recognize",
                     args=[audio_b64],
-                    queue="cpu_queue" # [수정] STT는 CPU 워커가 처리하도록 변경
+                    queue="cpu_queue"
                 )
+                
+                # 비대기(Non-blocking) 방식으로 결과를 받아 전송
+                async def wait_and_relay(celery_task, sid):
+                    try:
+                        loop = asyncio.get_event_loop()
+                        
+                        # 최대 15초 동안 결과 추적 (큐 대기 시간 고려)
+                        start_time = time.time()
+                        is_ready = False
+                        while time.time() - start_time < 15:
+                            is_ready = await loop.run_in_executor(None, celery_task.ready)
+                            if is_ready:
+                                break
+                            await asyncio.sleep(0.5) 
+                        
+                        if is_ready:
+                            result = await loop.run_in_executor(None, lambda: celery_task.result)
+                            if result and result.get("status") == "success":
+                                text = result.get("text", "").strip()
+                                if text:
+                                    await send_to_websocket(sid, {
+                                        "type": "stt_result",
+                                        "text": text
+                                    })
+                                    logger.info(f"[{sid}] 🎤 실시간 자막 전송 성공: {text[:30]}...")
+                    except Exception as e:
+                        if "closed file" not in str(e).lower():
+                            logger.error(f"[{sid}] STT 결과 중계 실패: {e}")
+                    finally:
+                        try:
+                            celery_task.forget()
+                        except:
+                            pass
+
+                # 결과 대기 루틴 실행
+                asyncio.create_task(wait_and_relay(task, session_id))
                 
                 logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
                 
@@ -524,7 +584,7 @@ def force_localhost_candidate(sdp_str):
 async def offer(request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    session_id = params.get("session_id", "unknown")
+    session_id = str(params.get("session_id", "unknown")) # 무조건 문자열로 변환
     
     print(f"📨 [{session_id}] Received Offer SDP (First 500 chars): {params['sdp'][:500]}...", flush=True)
 

@@ -325,9 +325,13 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
-          console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-          setTranscript(prev => prev + ' ' + data.text);
-
+          const newText = data.text.trim();
+          console.log('[STT Received]:', newText);
+          setTranscript(prev => {
+            // 중복 방지 (직전 텍스트와 같으면 무시)
+            if (prev.endsWith(newText)) return prev;
+            return prev ? `${prev} ${newText}` : newText;
+          });
         } else if (data.type === 'vision_analysis') {
           // [NEW] Update Vision Data State
           setVisionData(data.data);
@@ -350,26 +354,32 @@ function App() {
         video: true,
         audio: true
       });
-      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
+      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => ({ kind: t.kind, label: t.label })));
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        console.log('[WebRTC] Local video srcObject set.');
+      } else {
+        console.warn('[WebRTC] videoRef.current is missing during stream setup!');
       }
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
-        console.log('[WebRTC] Added track:', track.kind, track.label);
+        console.log('[WebRTC] Added track to PC:', track.kind, track.label);
       });
     } catch (err) {
-      console.warn('[WebRTC] Camera failed, trying audio-only:', err);
+      console.error('[WebRTC] navigator.mediaDevices.getUserMedia FAILED:', err);
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[WebRTC] Audio-only stream obtained.');
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
         if (videoRef.current) {
           videoRef.current.srcObject = audioStream;
         }
-        alert('카메라 접근 거부됨. 음성만 사용합니다.');
+        alert('카메라를 인식할 수 없거나 권한이 거부되었습니다. 음성으로만 면접을 진행합니다.');
       } catch (audioErr) {
-        alert('마이크 접근 실패. 마이크 권한과 연결 상태를 확인해주세요.');
+        console.error('[WebRTC] Audio-only also FAILED:', audioErr);
+        alert('마이크와 카메라를 모두 인식할 수 없습니다. 장비 연결을 확인하고 브라우저 권한을 허용해 주세요.');
         throw audioErr;
       }
     }
@@ -377,11 +387,12 @@ function App() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // ICE Wait
-    console.log('[WebRTC] Waiting for ICE gathering to complete...');
+    // ICE Wait (Timeout added)
+    console.log('[WebRTC] Waiting for ICE gathering (Current state:', pc.iceGatheringState, ')');
     await new Promise((resolve) => {
       if (pc.iceGatheringState === 'complete') { resolve(); return; }
       const checkState = () => {
+        console.log('[WebRTC] ICE Gathering State Change:', pc.iceGatheringState);
         if (pc.iceGatheringState === 'complete') {
           pc.removeEventListener('icegatheringstatechange', checkState);
           resolve();
@@ -389,11 +400,13 @@ function App() {
       };
       pc.addEventListener('icegatheringstatechange', checkState);
       setTimeout(() => {
+        console.warn('[WebRTC] ICE gathering timed out (1.5s)');
         pc.removeEventListener('icegatheringstatechange', checkState);
         resolve();
-      }, 1000);
+      }, 1500);
     });
 
+    console.log('[WebRTC] Sending offer to media-server...');
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
       body: JSON.stringify({
@@ -404,13 +417,17 @@ function App() {
       headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) throw new Error(`WebRTC offer failed: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[WebRTC] Offer fetch error:', response.status, errorText);
+      throw new Error(`WebRTC offer failed: ${response.status}`);
+    }
 
     const answer = await response.json();
-    console.log('[WebRTC] Received Answer SDP:', answer.sdp);
+    console.log('[WebRTC] Received Answer SDP from server.');
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('[WebRTC] Connection established successfully');
-    setIsMediaReady(true); // 모든 연결 완료 시 준비 상태로 변경
+    console.log('[WebRTC] WebRTC connection handshake complete.');
+    setIsMediaReady(true);
   };
 
   const toggleRecording = async () => {
@@ -469,49 +486,32 @@ function App() {
         };
 
         mediaRecorder.onstop = async () => {
-          console.log('[STT] Processing audio...');
-          setIsLoading(true);
+          console.log('[STT] Batch recording stopped. Real-time transcript status check...');
+
+          // 실시간 자막이 이미 충분히 확보되었다면 대용량 파일 전송 스킵 (최적화)
+          if (transcript.length > 50) {
+            console.log('[STT] ✅ Real-time transcript seems sufficient. Skipping heavy batch POST.');
+            setIsLoading(false);
+            return;
+          }
 
           const blob = new Blob(chunks, { type: 'audio/webm' });
 
           try {
-            console.log('[STT] Sending audio for recognition...');
+            console.log('[STT] Sending batch audio as fallback...');
             const result = await recognizeAudio(blob);
-            console.log('[STT] Recognition result:', result);
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
-              // 실시간 텍스트가 이미 있다면 중복 방지를 위해 비교하거나 보완
               setTranscript(prev => {
-                if (prev.trim().length > recognizedText.length) return prev;
+                // 실시간 텍스트가 이미 더 길다면(더 많은 정보를 담고 있다면) 유지
+                if (prev.length > recognizedText.length) return prev;
                 return recognizedText;
               });
-
-              console.log('[STT] ✅ Batch Recognition Success:', recognizedText);
-
-              // 자동 저장: DB에 transcript 저장
-              if (interview && questions && questions[currentIdx]) {
-                try {
-                  console.log('[STT] Auto-saving transcript to DB...');
-                  await createTranscript(
-                    interview.id,
-                    'User',
-                    recognizedText,
-                    questions[currentIdx].id
-                  );
-                  console.log('[STT] ✅ Transcript saved to DB');
-                } catch (saveError) {
-                  console.error('[STT] ❌ Failed to save transcript:', saveError);
-                  // 저장 실패해도 transcript는 화면에 표시
-                }
-              }
-            } else {
-              setTranscript('음성이 인식되지 않았습니다.');
-              console.warn('[STT] ⚠️ Empty result');
+              console.log('[STT] ✅ Fallback Batch Recognition Success');
             }
           } catch (error) {
-            console.error('[STT] ❌ Error:', error);
-            setTranscript('음성 인식 중 오류가 발생했습니다.');
+            console.error('[STT] ❌ Fallback Error:', error);
           } finally {
             setIsLoading(false);
           }
@@ -571,8 +571,8 @@ function App() {
       }
     }
 
-    if (wsRef.current) wsRef.current.close();
-    if (pcRef.current) pcRef.current.close();
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
 
     try {
       await completeInterview(interview.id);

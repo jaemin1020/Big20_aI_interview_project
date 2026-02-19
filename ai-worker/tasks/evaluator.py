@@ -71,22 +71,6 @@ class FinalReportSchema(BaseModel):
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
     """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
-    # 🔗 즉시 다음 질문 생성 트리거 (분석 완료를 기다리지 않고 바로 생성 시작)
-    try:
-        from tasks.question_generator import generate_next_question_task
-        interview_id = None
-        with Session(engine) as session:
-            t = session.get(Transcript, transcript_id)
-            if t:
-                interview_id = t.interview_id
-        
-        if interview_id:
-            generate_next_question_task.apply_async(args=[interview_id], queue='gpu_queue')
-            logger.info(f"🚀 [ROUTED] send next question task to gpu_queue for Interview {interview_id}")
-        else:
-            logger.error(f"인터뷰 ID를 찾을 수 없습니다: {transcript_id}")
-    except Exception as e:
-        logger.error(f"다음 질문 생성 트리거 실패: {e}")
     logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
     
     if not answer_text or not answer_text.strip():

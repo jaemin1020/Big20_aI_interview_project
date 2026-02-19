@@ -63,7 +63,13 @@ PROMPT_TEMPLATE = """[|system|]
 {context}
 
 # 요청:
-지원자 {name}님의 정보를 바탕으로, 실무 역량을 검증할 수 있는 **깔끔하고 구체적인** 질문 1개만 생성해줘. (사족 없이 질문만 출력할 것)
+지원자 {name}님의 정보를 바탕으로, 실무 역량을 검증할 수 있는 **깔끔하고 구체적인** 질문 1개만 생성해줘.
+
+[출력 규칙 - 절대 엄수]
+1. 오직 질문만 출력하라. (사족, 인사말, 말머리 절대 금지)
+2. 대괄호([]), 소괄호(()), 별표(**), 따옴표("") 등 모든 특수문자를 제거한 순수 텍스트만 출력하라.
+3. "질문:", "다음 질문입니다:" 와 같은 라벨을 절대 붙이지 마라.
+4. 반드시 최대 두 문장(150자) 이내로 작성하라.
 [|endofturn|]
 [|assistant|]
 """
@@ -365,8 +371,8 @@ def generate_next_question_task(interview_id: int):
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
             chain = prompt | llm | output_parser
 
-            logger.info(f"🔗 Executing Generation Chain for stage: {stage_name}")
-            raw_content = chain.invoke({
+            logger.info(f"🔗 Executing One-Shot Generation Chain for stage: {stage_name}")
+            content = chain.invoke({
                 "context": context_text,
                 "position": interview.position,
                 "stage": stage_name,
@@ -374,13 +380,7 @@ def generate_next_question_task(interview_id: int):
                 "name": candidate_name
             })
             
-            # 5. [추가] 2단계: 질문 정제 (Self-Correction)
-            logger.info(f"✨ Refining generated question (Raw: {raw_content[:30]}...)")
-            refine_prompt_template = PromptTemplate.from_template(REFINER_PROMPT)
-            refine_chain = refine_prompt_template | llm | output_parser
-            
-            content = refine_chain.invoke({"raw_question": raw_content})
-            logger.info(f"✅ Refined Question: {content}")
+            logger.info(f"✅ Generated Question (One-Shot): {content}")
 
             # [최종 정제] 강조 기호 및 불필요한 공백 제거
             content = re.sub(r'[\*\*_~\[\]\(\)]', '', content)
@@ -400,10 +400,20 @@ def generate_next_question_task(interview_id: int):
             db_category = category_map.get(category_raw, "technical")
             
             # [추가] 면접 단계별 한국어 명칭 및 안내 문구 가져오기
-            from config.interview_scenario import INTERVIEW_STAGES
+            try:
+                if is_transition:
+                    from config.interview_scenario_transition import INTERVIEW_STAGES as TRANS_STAGES
+                    target_stages = TRANS_STAGES
+                else:
+                    from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                    target_stages = STD_STAGES
+            except ImportError:
+                from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                target_stages = STD_STAGES
+
             stage_display = "심층 면접"
             intro_msg = ""
-            for s in INTERVIEW_STAGES:
+            for s in target_stages:
                 if s["stage"] == stage_name:
                     stage_display = s.get("display_name", stage_display)
                     intro_msg = s.get("intro_sentence", "")
