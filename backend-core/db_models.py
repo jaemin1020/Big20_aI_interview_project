@@ -306,6 +306,7 @@ class InterviewResponse(SQLModel):
     id: int
     candidate_id: int
     position: str
+    company_name: Optional[str] = None
     status: InterviewStatus
     start_time: Optional[datetime]
     end_time: Optional[datetime]
@@ -328,3 +329,9 @@ class EvaluationReportResponse(SQLModel):
     summary_text: Optional[str]
     details_json: Optional[Dict[str, Any]]
     created_at: datetime
+    
+    # [추가] 리포트 표시용 정보
+    position: Optional[str] = None
+    company_name: Optional[str] = None
+    candidate_name: Optional[str] = None
+    interview_date: Optional[datetime] = None

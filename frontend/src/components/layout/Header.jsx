@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle }) => {
+const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle, hideMenuButtons = false }) => {
   const [activeMenu, setActiveMenu] = React.useState(null); // 'manage', 'myinfo', null
 
   // Close dropdowns when clicking outside
@@ -122,94 +122,98 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
       {showLogout && !isInterviewing && !isComplete && (
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
-          {/* 면접 관리 드롭다운 */}
-          <div
-            className="header-dropdown-container"
-            style={{ position: 'relative' }}
-          >
-            <button
-              onClick={() => setActiveMenu(activeMenu === 'manage' ? null : 'manage')}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '20px',
-                border: '1px solid var(--glass-border)',
-                background: activeMenu === 'manage' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: 'var(--text-main)',
-                cursor: 'pointer',
-                transition: 'all 0.3s',
-                outline: 'none'
-              }}
+          {/* 면접 관리 드롭다운 - hideMenuButtons가 false일 때만 표시 */}
+          {!hideMenuButtons && (
+            <div
+              className="header-dropdown-container"
+              style={{ position: 'relative' }}
             >
-              면접 관리 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'manage' ? '▲' : '▼'}</span>
-            </button>
-            {activeMenu === 'manage' && (
-              <div className="header-dropdown-menu" style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                width: '160px',
-                marginTop: '8px',
-                background: 'var(--glass-bg)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '12px',
-                padding: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-                animation: 'fadeIn 0.2s ease',
-                zIndex: 1001
-              }}>
-                <button className="dropdown-item" onClick={() => { onHistory(); setActiveMenu(null); }}>면접 이력</button>
-              </div>
-            )}
-          </div>
+              <button
+                onClick={() => setActiveMenu(activeMenu === 'manage' ? null : 'manage')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  border: '1px solid var(--glass-border)',
+                  background: activeMenu === 'manage' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  outline: 'none'
+                }}
+              >
+                면접 관리 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'manage' ? '▲' : '▼'}</span>
+              </button>
+              {activeMenu === 'manage' && (
+                <div className="header-dropdown-menu" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  width: '160px',
+                  marginTop: '8px',
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                  animation: 'fadeIn 0.2s ease',
+                  zIndex: 1001
+                }}>
+                  <button className="dropdown-item" onClick={() => { onHistory(); setActiveMenu(null); }}>면접 이력</button>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* 내 정보 드롭다운 */}
-          <div
-            className="header-dropdown-container"
-            style={{ position: 'relative' }}
-          >
-            <button
-              onClick={() => setActiveMenu(activeMenu === 'myinfo' ? null : 'myinfo')}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '20px',
-                border: '1px solid var(--glass-border)',
-                background: activeMenu === 'myinfo' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: 'var(--text-main)',
-                cursor: 'pointer',
-                transition: 'all 0.3s',
-                outline: 'none'
-              }}
+          {/* 내 정보 드롭다운 - hideMenuButtons가 false일 때만 표시 */}
+          {!hideMenuButtons && (
+            <div
+              className="header-dropdown-container"
+              style={{ position: 'relative' }}
             >
-              내 정보 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'myinfo' ? '▲' : '▼'}</span>
-            </button>
-            {activeMenu === 'myinfo' && (
-              <div className="header-dropdown-menu" style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                width: '160px',
-                marginTop: '8px',
-                background: 'var(--glass-bg)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '12px',
-                padding: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-                animation: 'fadeIn 0.2s ease',
-                zIndex: 1001
-              }}>
-                <button className="dropdown-item" onClick={() => { onProfileManagement(); setActiveMenu(null); }}>프로필 관리</button>
-                <button className="dropdown-item" onClick={() => { onAccountSettings(); setActiveMenu(null); }}>계정 관리</button>
-              </div>
-            )}
-          </div>
+              <button
+                onClick={() => setActiveMenu(activeMenu === 'myinfo' ? null : 'myinfo')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  border: '1px solid var(--glass-border)',
+                  background: activeMenu === 'myinfo' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  outline: 'none'
+                }}
+              >
+                내 정보 <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>{activeMenu === 'myinfo' ? '▲' : '▼'}</span>
+              </button>
+              {activeMenu === 'myinfo' && (
+                <div className="header-dropdown-menu" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  width: '160px',
+                  marginTop: '8px',
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                  animation: 'fadeIn 0.2s ease',
+                  zIndex: 1001
+                }}>
+                  <button className="dropdown-item" onClick={() => { onProfileManagement(); setActiveMenu(null); }}>프로필 관리</button>
+                  <button className="dropdown-item" onClick={() => { onAccountSettings(); setActiveMenu(null); }}>계정 관리</button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)', margin: 'auto 0' }}></div>
 
