@@ -56,7 +56,9 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
         username=user_data.username,
         role=user_data.role,
         password_hash=get_password_hash(user_data.password),
-        full_name=user_data.full_name
+        full_name=user_data.full_name,
+        birth_date=user_data.birth_date,
+        profile_image=user_data.profile_image
     )
     db.add(new_user)
     db.commit()
