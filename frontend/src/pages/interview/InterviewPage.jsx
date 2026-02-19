@@ -101,6 +101,7 @@ const InterviewPage = ({
         } else {
           setIsTimerActive(true); // TTS 지원 안 하면 바로 시작
         }
+        */
       } else {
         setIsTimerActive(true); // 읽을 질문도 없으면 바로 시작
       }
@@ -184,7 +185,7 @@ const InterviewPage = ({
         )
       }
 
-      {/* Progress Bar & Timer Container */ }
+      {/* Progress Bar & Timer Container */}
       <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
 
         {/* Progress Bar */}
@@ -232,7 +233,7 @@ const InterviewPage = ({
         </div>
       </div>
 
-      {/* Header Card: Question & Video Only */ }
+      {/* Header Card: Question & Video Only */}
       <GlassCard style={{ padding: '1rem 2rem', marginBottom: '0.5rem', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem', alignItems: 'center' }}>
 
@@ -380,7 +381,7 @@ const InterviewPage = ({
         </div>
       </GlassCard>
 
-      {/* Bottom Area: Transcript & Controls */ }
+      {/* Bottom Area: Transcript & Controls */}
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, minHeight: 0 }}>
 
         {/* Transcript Box */}
@@ -408,7 +409,14 @@ const InterviewPage = ({
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (transcript.trim() && !isLoading) {
+                  nextQuestion();
+                }
+              }
+            }}
             readOnly={isRecording}
             placeholder={isRecording ? '음성 인식 대기 중...' : '마이크를 사용할 수 없는 경우 이곳에 직접 답변을 입력하고 Enter를 눌러주세요.'}
             style={{
@@ -550,7 +558,7 @@ const InterviewPage = ({
         </div>
       </div>
 
-    </div >
+    </div>
   );
 };
 
