@@ -297,7 +297,9 @@ async def get_interview_questions(
             return None
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
         if filepath.exists():
-            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav"
+            # [수정] 브라우저 캐싱(특히 파일 생성 전 404 캐싱) 방지를 위해 타임스탬프 추가
+            timestamp = int(datetime.now().timestamp())
+            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
         return None
 
     return {

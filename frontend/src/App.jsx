@@ -136,6 +136,18 @@ function App() {
 
           if (savedStep) {
             setStep(savedStep);
+            // [추가] 새로고침 시 최신 질문 정보(TTS URL 등)를 서버에서 다시 가져와 세션 스토리지의 Stale 데이터 갱신
+            if (savedInterview) {
+              const interviewObj = JSON.parse(savedInterview);
+              getInterviewQuestions(interviewObj.id)
+                .then(data => {
+                  if (data.questions && data.questions.length > 0) {
+                    setQuestions(data.questions);
+                    console.log("🔄 [Hydration] Questions updated from server");
+                  }
+                })
+                .catch(err => console.error("Failed to re-fetch questions during hydration:", err));
+            }
           } else {
             setStep('main');
           }
@@ -293,9 +305,16 @@ function App() {
 
       // Simple retry logic (최대 5번 재시도)
       let retryCount = 0;
-      while ((!qs || qs.length === 0) && retryCount < 5) {
-        console.log(`Questions not ready (attempt ${retryCount + 1}), retrying in 3s...`);
-        await new Promise(r => setTimeout(r, 3000));
+      // [개선] 질문 개수뿐만 아니라, 첫 번째 질문의 TTS URL이 준비되었는지도 함께 체크 (기계음 방지)
+      while (retryCount < 5) {
+        const firstQHasAudio = qs.length > 0 && qs[0].audio_url;
+
+        if (qs.length > 0 && firstQHasAudio) {
+          break; // 질문이 있고 음성 주소도 준비됨
+        }
+
+        console.log(`Questions or Audio not ready (attempt ${retryCount + 1}), retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
         data = await getInterviewQuestions(newInterview.id);
         qs = data.questions || [];
         retryCount++;
@@ -644,16 +663,25 @@ function App() {
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
-            setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1);
-            setTranscript('');
-            foundNew = true;
+            const nextQ = updatedQs[nextIdx];
 
-            // [추가] WebSocket으로 신규 질문 전환 알림
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+            // [개선] 새 질문이 생겼더라도 TTS 음성 주소(audio_url)가 올 때까지 조금 더 기다림 (기계음 방지)
+            if (nextQ && nextQ.audio_url) {
+              console.log("✅ [Next Question] New question and Audio ready.");
+              setQuestions(updatedQs);
+              setCurrentIdx(prev => prev + 1);
+              setTranscript('');
+              foundNew = true;
+
+              // WebSocket으로 신규 질문 전환 알림
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+              }
+              break;
+            } else {
+              console.log("⏳ [Next Question] New question found, but waiting for Audio...");
+              // 아직 오디오가 없으면 다음 폴링에서 다시 체크하도록Questions 상태만 미리 업데이트하지 않고 기다림
             }
-            break;
           }
         }
 

@@ -115,7 +115,9 @@ class SupertonicTTS(TTSBase):
             lang_code = "ko" if language.lower() in ["korean", "ko"] else "en"
             
             # 목소리 스타일 설정 (F2: 여성 권장)
-            voice_style = self.tts.get_voice_style("F2")
+            style_name = "F2"
+            voice_style = self.tts.get_voice_style(style_name)
+            logger.info(f"🎭 [목소리 스타일 적용] {style_name}")
             
             audio, _ = self.tts.synthesize(
                 text=text,
@@ -155,7 +157,7 @@ def load_tts_engine():
 load_tts_engine()
 
 @shared_task(name="tasks.tts.synthesize")
-def synthesize_task(text: str, language="ko", speed=1.0):
+def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
     """설명:
         텍스트를 음성으로 변환하여 Base64 인코딩된 문자열로 반환하는 Celery 태스크
 
@@ -163,32 +165,42 @@ def synthesize_task(text: str, language="ko", speed=1.0):
         text (str): 변환할 텍스트
         language (str): 언어 코드 (기본값: "ko")
         speed (float): 음성 속도 (기본값: 1.0)
+        **kwargs: 추가 설정 (question_id 등)
 
     Returns:
         dict: 상태(success/error), Base64 오디오 데이터, 합성 시간 등을 포함
 
-    생성자: CYJ
-    생성일자: 2026-02-10
+    생성자: CYJ, hyl
+    생성일자: 2026-02-10, 2026-02-19
     """
     global tts_engine
+    question_id = kwargs.get("question_id")
+    
+    logger.info(f"🔊 [TTS 태스크 시작] ID: {question_id if question_id else 'N/A'}, 텍스트 길이: {len(text)}")
+    
     if tts_engine is None:
+        logger.info("⚙️ TTS 엔진 초기화 중...")
         load_tts_engine()
         
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             temp_path = tmp.name
-            
+        
+        logger.info(f"🟡 음성 합성 진행 중... (언어: {language})")
         result = tts_engine.generate_speech(text, temp_path, language=language)
         
         if not result["success"]:
+            logger.error(f"❌ 음성 합성 실패: {result.get('error')}")
             return {"status": "error", "message": result.get("error", "Synthesis failed")}
+
+        logger.info(f"✅ 음성 합성 완료 (소요시간: {result.get('duration_ms', 0):.2f}ms)")
 
         with open(temp_path, "rb") as f:
             audio_bytes = f.read()
             audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
 
-        # [추가] question_id가 있으면 공유 볼륨에 직접 저장 (백엔드가 이URL로 서빙)
+        # [추가] question_id가 있으면 공유 볼륨에 직접 저장 (백엔드가 이 URL로 서빙)
         if question_id is not None:
             try:
                 import pathlib
@@ -197,9 +209,9 @@ def synthesize_task(text: str, language="ko", speed=1.0):
                 out_path = tts_dir / f"q_{question_id}.wav"
                 with open(out_path, "wb") as f:
                     f.write(audio_bytes)
-                logger.info(f"[TTS] 저장 완료: {out_path} ({len(audio_bytes)} bytes)")
+                logger.info(f"💾 [파일 저장 성공] 경로: {out_path} (크기: {len(audio_bytes)} bytes)")
             except Exception as save_err:
-                logger.warning(f"[TTS] 파일 저장 실패 (무시): {save_err}")
+                logger.warning(f"⚠️ [파일 저장 실패] {save_err}")
             
         return {
             "status": "success", 

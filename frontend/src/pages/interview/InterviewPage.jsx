@@ -48,18 +48,33 @@ const InterviewPage = ({
 
     // TTS 재생 로직
     const playTTS = () => {
-      // 1. 서버 제공 오디오 URL이 있는 경우
+      console.log(`🔊 [TTS Play Attempt] URL: ${audioUrl ? 'PRESENT' : 'MISSING'}, Question: ${question?.substring(0, 30)}...`);
+
       if (audioUrl) {
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
         }
-        const audio = new Audio(audioUrl);
-        audioRef.current = audio;
-        audio.play().catch(e => console.error("Audio play failed:", e));
+
+        // [수정] 즉시 재생보다 500ms 정도 지연을 주어 브라우저가 리소스를 확보할 시간을 확보
+        setTimeout(() => {
+          console.log(`▶️ [Server Audio] Playing: ${audioUrl}`);
+          const audio = new Audio(audioUrl);
+          audioRef.current = audio;
+          audio.play().catch(e => {
+            console.warn("⚠️ Audio play failed (possibly autoplay block):", e);
+            // 만약 브라우저 정책으로 실패하면 그때 Fallback 시도 가능하나 일단 로그만 남김
+          });
+        }, 500);
       }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
       else if (question) {
+        console.log(`⏳ [Waiting for Server Audio] audioUrl is missing... Do NOT use fallback.`);
+        // [수정] 기계음 선점 방지를 위해 Fallback 비활성화
+        // 서버에서 생성된 음성이 올 때까지 침묵 유지 (App.jsx에서 오디오 준비 후 질문 전환)
+
+        /* 
+        console.log(`📢 [Browser Fallback] audioUrl is missing, using Web Speech API`);
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
 
@@ -72,6 +87,7 @@ const InterviewPage = ({
           utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }
+        */
       }
     };
 
