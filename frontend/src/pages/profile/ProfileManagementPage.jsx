@@ -4,18 +4,19 @@ import PremiumButton from '../../components/ui/PremiumButton';
 
 const ProfileManagementPage = ({ onBack, user }) => {
     // 프로필 이미지
-    const [profileImage, setProfileImage] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
+    // 프로필 이미지 (백엔드 URL 또는 base64)
+    const [profileImage, setProfileImage] = useState(user?.profile_image || null);
+    const [imagePreview, setImagePreview] = useState(user?.profile_image || null);
 
     // 희망 지원 정보 (복수 선택)
     const [desiredCompanyTypes, setDesiredCompanyTypes] = useState([]);
     const [desiredPositions, setDesiredPositions] = useState([]);
 
-    // 개인 정보 (회원가입 시 입력한 정보를 기본값으로)
-    const [name, setName] = useState(user?.name || '');
-    const [birthDate, setBirthDate] = useState(user?.birthDate || '');
+    // 개인 정보 (회원가입 시 입력한 정보를 기본값으로 - DB 필드명 snake_case 주의)
+    const [name, setName] = useState(user?.full_name || '');
+    const [birthDate, setBirthDate] = useState(user?.birth_date || '');
     const [email, setEmail] = useState(user?.email || '');
-    const [phone, setPhone] = useState(user?.phone || '');
+    const [phone, setPhone] = useState(user?.phone_number || '');
 
     const companyTypeOptions = [
         '대기업', '중견기업', '중소기업', '스타트업', '외국계기업', '공기업'

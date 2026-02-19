@@ -38,15 +38,17 @@ class Speaker(str, Enum):
 class User(SQLModel, table=True):
     """사용자 테이블 (지원자/채용담당자)"""
     __tablename__ = "users"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     username: str = Field(index=True, unique=True)
     role: UserRole = Field(default=UserRole.CANDIDATE)
     password_hash: str
     full_name: Optional[str] = None
+    birth_date: Optional[str] = None
+    profile_image: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="candidate")
     resumes: List["Resume"] = Relationship(back_populates="candidate")
@@ -54,41 +56,41 @@ class User(SQLModel, table=True):
 class Resume(SQLModel, table=True):
     """이력서 테이블"""
     __tablename__ = "resumes"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int = Field(foreign_key="users.id", index=True)
-    
+
     # 파일 정보
     file_name: str = Field(description="원본 파일명")
     file_path: str = Field(description="저장 경로 (S3 또는 로컬)")
     file_size: int = Field(description="파일 크기 (bytes)")
-    
+
     # 추출된 텍스트 (PDF → Text)
     extracted_text: Optional[str] = Field(default=None, description="PDF에서 추출한 전체 텍스트")
-    
+
     # 구조화된 정보 (JSON)
     structured_data: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB),
         description="경력, 학력, 기술스택 등 구조화된 데이터"
     )
-    
+
     # 지원직무 (이력서에서 자동 추출)
     target_position: Optional[str] = Field(default=None, description="지원직무 (이력서 헤더에서 추출)")
-    
+
     # 벡터 임베딩 (768차원 - 이력서 전체 내용)
     embedding: Any = Field(
         default=None,
         sa_column=Column(Vector(1024)),
         description="이력서 내용 벡터 (유사 이력서 검색용)"
     )
-    
+
     # 메타데이터
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = Field(default=None, description="파싱 완료 시각")
     is_active: bool = Field(default=True)
     processing_status: str = Field(default="pending", description="pending, processing, completed, failed")
-    
+
     # Relationships
     candidate: User = Relationship(back_populates="resumes")
     interviews: List["Interview"] = Relationship(back_populates="resume")
@@ -97,28 +99,28 @@ class Resume(SQLModel, table=True):
 class Company(SQLModel, table=True):
     """회사 정보 테이블 (벡터 검색 지원)"""
     __tablename__ = "companies"
-    
+
     # Primary Key (문자열 - 직접 삽입)
     id: str = Field(primary_key=True, max_length=50, description="회사 고유 ID (예: KAKAO, NAVER)")
-    
+
     # 기본 정보
     company_name: str = Field(index=True, description="회사명")
-    
+
     # 회사 특성 (벡터화 대상)
     ideal: Optional[str] = Field(default=None, description="회사가 추구하는 인재상 및 가치관")
     description: Optional[str] = Field(default=None, description="회사 소개 및 비전")
-    
+
     # 벡터 임베딩 (768차원 - ideal + description 통합 임베딩)
     embedding: Any = Field(
         default=None,
         sa_column=Column(Vector(1024)),
         description="회사 특성 벡터 (유사 회사 검색 및 문화 적합성 평가용)"
     )
-    
+
     # 시스템 필드
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # Relationships
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="company")
@@ -127,31 +129,31 @@ class Company(SQLModel, table=True):
 class Interview(SQLModel, table=True):
     """면접 세션 테이블"""
     __tablename__ = "interviews"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     candidate_id: int = Field(foreign_key="users.id", index=True)
     company_id: Optional[str] = Field(default=None, foreign_key="companies.id", index=True)
     resume_id: Optional[int] = Field(default=None, foreign_key="resumes.id", index=True)
-    
+
     # 면접 정보
     position: str = Field(description="지원 직무 (예: Backend Engineer)")
     status: InterviewStatus = Field(default=InterviewStatus.SCHEDULED)
-    
+
     # 시간 정보
     scheduled_time: Optional[datetime] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # 전체 점수 (평가 완료 후 업데이트)
     overall_score: Optional[float] = None
-    
+
     # 메타데이터
     emotion_summary: Optional[Dict[str, Any]] = Field(
-        default=None, 
+        default=None,
         sa_column=Column(JSONB)
     )
-    
+
     # Relationships
     candidate: User = Relationship(back_populates="interviews")
     company: Optional[Company] = Relationship(back_populates="interviews")
@@ -162,33 +164,33 @@ class Interview(SQLModel, table=True):
 class Question(SQLModel, table=True):
     """질문 은행 테이블"""
     __tablename__ = "questions"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     content: str
     category: QuestionCategory
     difficulty: QuestionDifficulty
-    
+
     # 질문 유형 및 추가 질문 여부
     question_type: Optional[str] = Field(default=None, description="자기소개, 지원동기, 직무지식, 직무경험, 문제해결, 협업, 책임감, 성장가능성")
     is_follow_up: bool = Field(default=False, description="추가 질문(1-1, 2-1, 3-1) 여부")
     parent_question_id: Optional[int] = Field(default=None, foreign_key="questions.id", description="원 질문 ID (추가 질문인 경우)")
-    
+
     # 평가 기준 (JSON 형식)
     rubric_json: Dict[str, Any] = Field(sa_column=Column(JSONB))
-    
+
     # 벡터 임베딩 (768차원 - 질문 유사도 검색용)
     embedding: Optional[List[float]] = Field(
         default=None,
         sa_column=Column(Vector(1024))
     )
-    
+
     # 메타데이터 (계층적 분류)
     company: Optional[str] = Field(default=None, index=True)    # 회사명 (예: "삼성전자", "카카오")
     industry: Optional[str] = Field(default=None, index=True)   # 산업 (예: "IT", "금융", "제조")
     position: Optional[str] = Field(default=None, index=True)   # 직무 (예: "Backend 개발자")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = Field(default=True)
-    
+
     # 통계
     usage_count: int = Field(default=0)
     avg_score: Optional[float] = None
@@ -196,86 +198,86 @@ class Question(SQLModel, table=True):
 class Transcript(SQLModel, table=True):
     """대화 기록 테이블 (실시간 STT 결과 저장)"""
     __tablename__ = "transcripts"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     interview_id: int = Field(foreign_key="interviews.id", index=True)
-    
+
     # 대화 정보
     speaker: Speaker
     text: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # 감정 분석 결과
     sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
     emotion: Optional[str] = None  # happy, neutral, sad, angry 등
-    
+
     # 메타데이터
     question_id: Optional[int] = Field(default=None, foreign_key="questions.id")
     order: Optional[int] = None  # 대화 순서
-    
+
     # Relationship
     interview: Interview = Relationship(back_populates="transcripts")
 
 class EvaluationReport(SQLModel, table=True):
     """평가 리포트 테이블"""
     __tablename__ = "evaluation_reports"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     interview_id: int = Field(foreign_key="interviews.id", unique=True, index=True)
-    
+
     # 점수 (0-100 scale)
     technical_score: Optional[float] = None
     communication_score: Optional[float] = None
     cultural_fit_score: Optional[float] = None
-    
+
     # 종합 평가
     summary_text: Optional[str] = None
-    
+
     # 상세 평가 (JSON 형식)
     details_json: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB)
     )
-    
+
     # 메타데이터
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # LLM 평가자 정보
     evaluator_model: Optional[str] = None  # "Solar-10.7B-Q8" 등
-    
+
     # Relationship
     interview: Interview = Relationship(back_populates="evaluation_report")
 
 class AnswerBank(SQLModel, table=True):
     """우수 답변 은행 (벡터 검색용)"""
     __tablename__ = "answer_bank"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     question_id: int = Field(foreign_key="questions.id", index=True)
-    
+
     # 답변 내용
     answer_text: str
-    
+
     # 벡터 임베딩 (768차원 - Question과 동일한 모델 사용)
     embedding: Optional[List[float]] = Field(
         default=None,
         sa_column=Column(Vector(1024))
     )
-    
+
     # 평가 점수 및 피드백
     score: float = Field(description="답변 점수 (0-100)")
     evaluator_feedback: Optional[str] = None
-    
+
     # 계층적 분류 (질문과 동일)
     company: Optional[str] = Field(default=None, index=True)
     industry: Optional[str] = Field(default=None, index=True)
     position: Optional[str] = Field(default=None, index=True)
-    
+
     # 메타데이터
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = Field(default=True)
-    
+
     # 통계
     reference_count: int = Field(default=0)  # 참고된 횟수
 
@@ -287,6 +289,8 @@ class UserCreate(SQLModel):
     username: str
     password: str
     full_name: Optional[str] = None
+    birth_date: Optional[str] = None
+    profile_image: Optional[str] = None
     role: UserRole = UserRole.CANDIDATE
 
 class UserLogin(SQLModel):

@@ -162,11 +162,11 @@ function App() {
 
     // 클라이언트 사이드 유효성 검사
     if (authMode === 'register') {
-      const usernameRegex = /^[a-z0-9_]{4,12}$/;
+      const usernameRegex = /^[a-z0-9]{4,12}$/;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
       if (!usernameRegex.test(account.username)) {
-        setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+        setAuthError("아이디는 4~12자의 영문 소문자, 숫자만 가능합니다. (공백/특수문자 불가)");
         return;
       }
       if (!emailRegex.test(account.email)) {
