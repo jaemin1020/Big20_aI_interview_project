@@ -16,14 +16,17 @@ const AuthPage = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFile = (file) => {
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAccount({ ...account, profileImage: reader.result });
-      };
-      reader.readAsDataURL(file);
-    } else if (file) {
-      alert("이미지 파일만 업로드 가능합니다.");
+    if (file) {
+      // 이미지 형식 엄격 검사 (JPG, PNG만 허용)
+      if (file.type === 'image/png' || file.type === 'image/jpeg') {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAccount({ ...account, profileImage: reader.result });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert("이미지 파일은 JPG(JPEG) 또는 PNG 형식만 업로드 가능합니다.");
+      }
     }
   };
 
@@ -51,6 +54,8 @@ const AuthPage = ({
       handleFile(e.dataTransfer.files[0]);
     }
   };
+
+
 
   return (
     <div className="auth-container animate-fade-in" style={{
@@ -147,7 +152,7 @@ const AuthPage = ({
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImageChange}
-                accept="image/*"
+                accept="image/png, image/jpeg"
                 style={{ display: 'none' }}
               />
             </div>
@@ -237,6 +242,8 @@ const AuthPage = ({
                   <span style={{ color: 'var(--primary)' }}>이용약관</span> 및 <span style={{ color: 'var(--primary)' }}>개인정보 처리방침</span>에 동의합니다.
                 </label>
               </div>
+
+              {/* 프로필 이미지는 선택 사항이므로 필수 체크 대상에서 제외 */}
             </>
           )}
 

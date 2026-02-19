@@ -198,17 +198,40 @@ function App() {
           return;
         }
 
+        if (account.password.length < 8) {
+          setAuthError('비밀번호는 최소 8자 이상이어야 합니다.');
+          return;
+        }
+
         if (account.password !== account.passwordConfirm) {
           setAuthError('비밀번호가 일치하지 않습니다.');
           return;
         }
+
+        if (!account.fullName) {
+          setAuthError('이름을 입력해주세요.');
+          return;
+        }
+
+        if (!account.birthDate) {
+          setAuthError('생년월일을 입력해주세요.');
+          return;
+        }
+
         if (!account.termsAgreed) {
           setAuthError('이용약관에 동의해야 합니다.');
           return;
         }
 
-        // 실제 API 호출
-        await apiRegister(account.email, account.username, account.password, account.fullName);
+        // 실제 API 호출 (생년월일, 프로필 이미지 포함)
+        await apiRegister(
+          account.email,
+          account.username,
+          account.password,
+          account.fullName,
+          account.birthDate,
+          account.profileImage
+        );
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
