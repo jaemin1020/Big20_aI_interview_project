@@ -257,28 +257,80 @@ class VideoAnalysisTrack(MediaStreamTrack):
         print(f"⏱️ 총 질문 수: {len(self.questions_history) + 1}개")
         print(f"⏱️ 분석 기간: {int(time.time() - self.session_started_at)}초 / {s['total_frames']} frames")
         print("-" * 50)
-        print("🧮 [영상분석] 전체 평균 채점 내역:")
-        print(f"   1. 자신감(미소) : {s['avg_smile']:5.1f}점 x 0.3 = {s['score_conf']:4.1f}점")
-        print(f"   2. 시선집중     : {s['gaze_ratio']:5.1f}점 x 0.3 = {s['score_focus']:4.1f}점")
-        print(f"   3. 자세안정     : {s['posture_ratio']:5.1f}점 x 0.2 = {s['score_posture']:4.1f}점")
-        print(f"   4. 정서안정     : {100-s['avg_anxiety']:5.1f}점 x 0.2 = {s['score_emotion']:4.1f}점")
+        # [NEW] 오디오 자신감 최종 리포트 합산 (Video + Audio)
+        # 사용자 요청 가중치: 시선(30), 음성(30), 미소(15), 자세(15), 정서(10)
         
-        # [NEW] 오디오 자신감 최종 리포트 추가
+        final_audio_score = 0
+        audio_feedback = "(데이터 없음)"
+
         if self.audio_scores:
-            avg_audio_conf = sum(self.audio_scores) / len(self.audio_scores)
-            if avg_audio_conf >= 70:
+            final_audio_score = sum(self.audio_scores) / len(self.audio_scores)
+            if final_audio_score >= 70:
                 audio_feedback = "👍 아주 좋습니다! (자신감 넘침)"
-            elif avg_audio_conf >= 60:
+            elif final_audio_score >= 60:
                 audio_feedback = "👌 안정적입니다. (무난함)"
             else:
                 audio_feedback = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
-            
-            print(f"   5. 음성자신감   : {avg_audio_conf:5.1f}점 | {audio_feedback}")
-        else:
-            print(f"   5. 음성자신감   : (데이터 없음)")
+        
+        # 영상 점수는 이미 s 딕셔너리에 계산되어 있음 (단, 가중치 재조정 필요)
+        # 기존: 미소(30), 시선(30), 자세(20), 정서(20) -> 합 100
+        # 변경: 미소(15), 시선(30), 자세(15), 정서(10) + 음성(30) -> 합 100
+        
+        # 영상 원본 점수(Raw Score) 역산 또는 재사용
+        # s['avg_smile'] 등은 40~100으로 보정된 값임. 이를 그대로 재사용
+        
+        w_smile = 0.15
+        w_gaze = 0.30
+        w_posture = 0.15
+        w_emotion = 0.10
+        w_audio = 0.30
+        
+        # 재계산 (Weighted Sum)
+        new_overall_score = (
+            (s['avg_smile'] * w_smile) + 
+            (s['gaze_ratio'] * w_gaze) + 
+            (s['posture_ratio'] * w_posture) + 
+            ((100 - s['avg_anxiety']) * 0.10) +  # 정서안정 원본 값 사용 주의 (100 - anxiety)
+            (final_audio_score * w_audio)
+        )
+        # 중요: 정서안정(anxiety)은 낮을수록 좋으므로 (100-anxiety) 점수를 씀.
+        # 위 코드에서 s['score_emotion'] 계산 시 이미 보정 들어갔지만, 여기선 원본 비율로 다시 계산함이 정확함.
+        # 편의상 s['avg_smile'] 등은 이미 40~100 보정된 값이므로 그대로 씀. 
+        # 단, 정서안정은 s['avg_anxiety']가 %값이므로 (100 - s['avg_anxiety']) * 0.6 + 40 공식 적용 필요.
+        # 위 _calculate_scores 함수에서 adj_emotion을 이미 계산했으므로 그걸 쓰는게 안전.
+        
+        # 안전한 재계산 (이미 보정된 40~100점 스케일 점수들 사용)
+        # adj_smile, adj_focus(gaze), adj_posture, adj_emotion
+        # _calculate_scores 리턴값 딕셔너리 구조를 보면:
+        # "avg_smile": adj_smile, "gaze_ratio": adj_focus, "posture_ratio": adj_posture
+        # "score_conf": adj_smile * 0.3 ... 이런 식임.
+        
+        # 따라서 딕셔너리의 'avg_smile', 'gaze_ratio' 등은 이미 adj_된(보정된) 값임.
+        # 정서안정은 주의: s['avg_anxiety']는 Raw Anxiety임. 
+        # adj_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40  <- 이 로직이 맞음. 
+        # _calculate_scores에서 adj값을 다 리턴해주지는 않고 섞여있음. 다시 계산하자.
+        
+        val_smile = s['avg_smile'] # 이미 보정됨
+        val_gaze = s['gaze_ratio'] # 이미 보정됨
+        val_posture = s['posture_ratio'] # 이미 보정됨
+        val_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40 # 수동 보정
+        
+        ultimate_score = (
+            (val_smile * 0.15) + 
+            (val_gaze * 0.30) + 
+            (val_posture * 0.15) + 
+            (val_emotion * 0.10) + 
+            (final_audio_score * 0.30)
+        )
 
+        print(f"   1. 시선집중     : {val_gaze:5.1f}점 x 0.30 = {val_gaze*0.30:4.1f}점")
+        print(f"   2. 음성자신감   : {final_audio_score:5.1f}점 x 0.30 = {final_audio_score*0.30:4.1f}점 | {audio_feedback}")
+        print(f"   3. 미소(자신감) : {val_smile:5.1f}점 x 0.15 = {val_smile*0.15:4.1f}점")
+        print(f"   4. 자세안정     : {val_posture:5.1f}점 x 0.15 = {val_posture*0.15:4.1f}점")
+        print(f"   5. 정서안정     : {val_emotion:5.1f}점 x 0.10 = {val_emotion*0.10:4.1f}점")
+        
         print(f"   -------------------------------------------")
-        print(f"   ∑ 최종 종합 합계: {s['overall_score']:.1f}점 (음성 점수 미포함)")
+        print(f"   ∑ 최종 종합 합계: {ultimate_score:.1f}점 (Audio & Video 통합)")
         print("="*50 + "\n")
 
     async def process_vision(self, frame, timestamp_ms):
@@ -461,45 +513,49 @@ async def start_remote_stt(track, session_id):
                     #    (예외처리: 데이터가 비어있거나 깨졌을 경우를 대비해 try-except 블록 사용)
                     audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
+                    # [중요] 침묵 감지 (Silence Detection)
+                    # RMS가 너무 낮으면(0.005 이하), 사용자가 고민 중이거나 듣고 있는 상태이므로
+                    # 자신감 점수를 계산하지 않고 건너뜀 (Skip) -> 평균 점수 하락 방지
                     if len(audio_np) > 0:
-                        # 2. 성량(Volume) 분석: RMS (Root Mean Square) 계산
-                        #    오디오의 에너지 크기를 측정하여 목소리가 얼마나 큰지 판단
-                        #    (제곱 -> 평균 -> 제곱근)
                         volume_rms = np.sqrt(np.mean(audio_np**2))
-                        #    0.0 ~ 0.5 범위를 0 ~ 100점으로 환산 (보정치 500 곱함)
-                        volume_score = min(volume_rms * 500, 100) 
-
-                        # 3. 발화 밀도(Speed/Density) 분석
-                        #    일정 크기(Threshold: 0.05) 이상의 소리가 전체 시간 중 얼마나 차지하는지 비율 계산
-                        #    말이 너무 느리거나 침묵이 길면 점수가 낮아짐
-                        threshold = 0.05
-                        speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
-                        speed_score = min(speaking_ratio * 200, 100) # 비율 0.5 이상이면 100점 (보정치 200)
-
-                        # 4. 최종 자신감 점수 합산 (성량 50% + 속도 50%)
-                        confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
-
-                        # [NEW] 점수 구간별 피드백 메시지 생성 (User Feedback)
-                        if confidence_score >= 70:
-                            feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
-                        elif confidence_score >= 60:
-                            feedback_msg = "👌 안정적입니다. (무난함)"
-                        else:
-                            feedback_msg = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
-
-                        # [DEBUG] 상세 수치 출력 (사용자 모니터링용)
-                        # - RMS: 소리의 평균 에너지 (0.01~0.1 사이 평범, 0.2 이상 큼)
-                        # - Ratio: 말하는 시간 비율 (0.2~0.5 사이 평범)
-                        logger.info(
-                            f"[{session_id}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
-                            f"(🔊성량: {volume_score:4.1f}점/RMS:{volume_rms:.4f}, "
-                            f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
-                        )
                         
-                        # [NEW] 최종 리포트를 위해 점수 누적 (VideoAnalysisTrack 찾아서 저장)
-                        if session_id in active_video_tracks:
-                            track_instance = active_video_tracks[session_id]
-                            track_instance.audio_scores.append(confidence_score)
+                        # [변경] 침묵 감지 기준 상향 (0.005 -> 0.02)
+                        # 작은 잡음이나 숨소리(Thinking Time)는 점수 집계에서 제외하여 평균 점수 하락 방지
+                        if volume_rms > 0.02:
+                            # 2. 성량(Volume) 분석
+                            volume_score = min(volume_rms * 500, 100) 
+
+                            # 3. 발화 밀도(Speed/Density) 분석
+                            threshold = 0.05
+                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
+                            speed_score = min(speaking_ratio * 200, 100)
+
+                            # 4. 최종 자신감 점수 합산
+                            confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
+
+                            # [NEW] 점수 구간별 피드백
+                            if confidence_score >= 70:
+                                feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
+                            elif confidence_score >= 60:
+                                feedback_msg = "👌 안정적입니다. (무난함)"
+                            else:
+                                feedback_msg = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+
+                            logger.info(
+                                f"[{session_id}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
+                                f"(🔊성량: {volume_score:4.1f}점/RMS:{volume_rms:.4f}, "
+                                f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
+                            )
+                            
+                            # [NEW] 최종 리포트를 위해 점수 누적
+                            if session_id in active_video_tracks:
+                                track_instance = active_video_tracks[session_id]
+                                track_instance.audio_scores.append(confidence_score)
+                        else:
+                            # 침묵 상황 (로그 생략 가능하지만 디버깅 위해 남김)
+                            # logger.debug(f"[{session_id}] 🤫 침묵 감지됨 (RMS: {volume_rms:.5f}) - 점수 반영 제외")
+                            pass
+
 
                 except Exception as e:
                     logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
