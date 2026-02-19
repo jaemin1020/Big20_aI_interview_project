@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 // html2canvas & jsPDF removed for vector print support
 
-const ResultPage = ({ results, report, interview, onReset }) => {
+const ResultPage = ({ results, report, interview, onReset, onBack }) => {
   const resultRef = useRef(null);
 
   // Helper to safely get text content
@@ -309,9 +309,15 @@ const ResultPage = ({ results, report, interview, onReset }) => {
 
         {/* Button Area */}
         <div className="no-print" style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '2rem' }}>
-          <PremiumButton onClick={onReset} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
-            처음으로 돌아가기
-          </PremiumButton>
+          {onBack ? (
+            <PremiumButton variant="secondary" onClick={onBack} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
+              목록으로 돌아가기
+            </PremiumButton>
+          ) : (
+            <PremiumButton onClick={onReset} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
+              처음으로 돌아가기
+            </PremiumButton>
+          )}
           <PremiumButton variant="secondary" onClick={handleDownloadPDF} style={{ padding: '1rem 3rem', minWidth: '200px' }}>
             📄 리포트 저장 (PDF)
           </PremiumButton>

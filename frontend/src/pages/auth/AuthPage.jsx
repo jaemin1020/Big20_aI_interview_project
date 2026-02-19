@@ -16,14 +16,17 @@ const AuthPage = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFile = (file) => {
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAccount({ ...account, profileImage: reader.result });
-      };
-      reader.readAsDataURL(file);
-    } else if (file) {
-      alert("이미지 파일만 업로드 가능합니다.");
+    if (file) {
+      // 이미지 형식 엄격 검사 (JPG, PNG만 허용)
+      if (file.type === 'image/png' || file.type === 'image/jpeg') {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAccount({ ...account, profileImage: reader.result });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert("이미지 파일은 JPG(JPEG) 또는 PNG 형식만 업로드 가능합니다.");
+      }
     }
   };
 
@@ -51,6 +54,8 @@ const AuthPage = ({
       handleFile(e.dataTransfer.files[0]);
     }
   };
+
+
 
   return (
     <div className="auth-container animate-fade-in" style={{
@@ -147,7 +152,7 @@ const AuthPage = ({
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImageChange}
-                accept="image/*"
+                accept="image/png, image/jpeg"
                 style={{ display: 'none' }}
               />
             </div>
@@ -237,6 +242,8 @@ const AuthPage = ({
                   <span style={{ color: 'var(--primary)' }}>이용약관</span> 및 <span style={{ color: 'var(--primary)' }}>개인정보 처리방침</span>에 동의합니다.
                 </label>
               </div>
+
+              {/* 프로필 이미지는 선택 사항이므로 필수 체크 대상에서 제외 */}
             </>
           )}
 
@@ -253,13 +260,7 @@ const AuthPage = ({
             {authMode === 'login' ? '로그인' : '회원가입 완료'}
           </PremiumButton>
 
-          {authMode === 'login' && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>아이디 찾기</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--glass-border)', cursor: 'default' }}>|</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>비밀번호 찾기</span>
-            </div>
-          )}
+
 
           <p style={{ textAlign: 'center', fontSize: '0.9rem', marginTop: '1rem', color: 'var(--text-muted)' }}>
             {authMode === 'login' ? '계정이 없으신가요?' : '이미 계정이 있으신가요?'}
