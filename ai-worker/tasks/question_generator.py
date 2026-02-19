@@ -129,12 +129,16 @@ def generate_next_question_task(interview_id: int):
                 is_transition = True
         
         # 시나리오 모듈 선택적 임포트
-        if is_transition:
-            from config.interview_scenario_transition import get_stage_by_name, get_next_stage
-            logger.info(f"✨ [AI-WORKER] Transition scenario selected (Major: {major})")
-        else:
+        try:
+            if is_transition:
+                from config.interview_scenario_transition import get_stage_by_name, get_next_stage
+                logger.info(f"✨ [AI-WORKER] Transition scenario selected (Major: {major})")
+            else:
+                from config.interview_scenario import get_stage_by_name, get_next_stage
+                logger.info("✅ [AI-WORKER] Standard scenario selected")
+        except ImportError as e:
+            logger.error(f"❌ Scenario import failed: {e}. Falling back to standard scenario.")
             from config.interview_scenario import get_stage_by_name, get_next_stage
-            logger.info("✅ [AI-WORKER] Standard scenario selected")
             
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 

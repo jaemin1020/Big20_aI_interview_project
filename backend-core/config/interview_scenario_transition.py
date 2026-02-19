@@ -8,6 +8,8 @@ INTERVIEW_STAGES = [
     # 1. 자기소개 및 전공-직무 매칭 질문 (템플릿)
     {
         "stage": "intro",
+        "display_name": "기본 질문",
+        "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
         "type": "template",
         "template": "{candidate_name} 지원자님, {major}를 전공하셨는데 어떤 계기로 {target_role} 분야에 관심을 갖게 되셨는지, 그 시작점을 포함해 자기소개 부탁드립니다.",
         "variables": ["candidate_name", "major", "target_role"],
@@ -17,6 +19,8 @@ INTERVIEW_STAGES = [
     # 2. 전공 지식의 활용 가능성 (AI 생성)
     {
         "stage": "major_synergy",
+        "display_name": "전공협업질문",
+        "intro_sentence": "다음은 전공협업질문입니다.",
         "type": "ai",
         "category": "narrative",
         "query_template": "전공 지식 직무 활용 시너지 인문학적 관점 기술 결합",
@@ -27,6 +31,8 @@ INTERVIEW_STAGES = [
     # 3. 전직/전환에 대한 확신 검증 (꼬리질문)
     {
         "stage": "conviction_check",
+        "display_name": "전직확신심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
         "parent": "major_synergy",
         "guide": "전공 분야로 돌아가지 않고 이 직무에서 장기적으로 성장할 수 있다는 확신을 보여준 구체적 증거(프로젝트, 학습량 등)를 요구하세요.",
@@ -36,6 +42,8 @@ INTERVIEW_STAGES = [
     # 4. 독학 과정의 기술적 한계 돌파 (AI 생성)
     {
         "stage": "learning_grit",
+        "display_name": "직무습득질문",
+        "intro_sentence": "다음은 직무습득질문입니다.",
         "type": "ai",
         "category": "skill",
         "query_template": "비전공자 기술 학습 난관 극복 독학 부트캠프",
@@ -46,6 +54,8 @@ INTERVIEW_STAGES = [
     # 5. 기술적 깊이 검증 (꼬리질문)
     {
         "stage": "technical_followup",
+        "display_name": "학습깊이심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
         "parent": "learning_grit",
         "guide": "방금 답변한 해결책에서 사용한 기술의 원리를 더 깊게(예: CS 기초 지식 등) 파고들어 학습 비전공자의 '학습 깊이'를 테스트하세요.",
@@ -55,6 +65,8 @@ INTERVIEW_STAGES = [
     # 6. 협업 및 커뮤니케이션 (AI 생성)
     {
         "stage": "collaboration",
+        "display_name": "협업소통질문",
+        "intro_sentence": "다음은 협업소통질문입니다.",
         "type": "ai",
         "category": "narrative",
         "query_template": "협업 방식 갈등 해결 소통 노하우 비전공자 관점",
@@ -65,6 +77,8 @@ INTERVIEW_STAGES = [
     # 7. 협업 꼬리질문 (AI 생성)
     {
         "stage": "collaboration_followup",
+        "display_name": "협업소통심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
         "parent": "collaboration",
         "guide": "기술적 이해도가 다른 팀원(예: 전공자 또는 비기술직군)과의 의견 충돌 시 이를 어떻게 논리적으로 설득할 것인지 구체적 상황을 가정해 질문하세요.",
@@ -74,6 +88,7 @@ INTERVIEW_STAGES = [
     # 8. 마지막 발언 (템플릿)
     {
         "stage": "final_statement",
+        "display_name": "최종 발언",
         "type": "template",
         "template": "{major}라는 기초 위에 {target_role}이라는 기술을 쌓아 올린 과정이 인상 깊었습니다. 마지막으로 포부 한 말씀 부탁드립니다.",
         "variables": ["candidate_name", "major", "target_role"],

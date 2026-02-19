@@ -17,7 +17,7 @@ from .parse_resume import parse_resume_final
 
 logger.info("✅ Task Module 'tasks.resume_pipeline' is being loaded.")
 
-@shared_task(bind=True, name="parse_resume_pdf", queue='gpu_queue')
+@shared_task(bind=True, name="parse_resume_pdf", queue='cpu_queue')
 def parse_resume_pdf(self, resume_id: int, file_path: str):
     """
     이력서 PDF 파일을 파싱하여 구조화된 데이터를 DB에 저장하고, 임베딩 생성을 요청합니다.
@@ -25,8 +25,9 @@ def parse_resume_pdf(self, resume_id: int, file_path: str):
     # 1. 파일 경로 정규화 (컨테이너 환경에 맞게 조정)
     # 백엔드에서 온 로컬 경로나 상대 경로를 컨테이너 내부의 /app/uploads 경로로 강제 변환
     filename = os.path.basename(file_path)
-    # /app/uploads는 docker-compose에서 마운트된 경로
-    normalized_path = os.path.join("/app/uploads", filename)
+    # backend-core/routes/resumes.py에서 RESUME_UPLOAD_DIR가 ./uploads/resumes 이므로
+    # 워커에서는 /app/uploads/resumes/ 로 마운트됨
+    normalized_path = os.path.join("/app/uploads/resumes", filename)
     
     logger.info(f"🚀 [START] Resume parsing ID: {resume_id}")
     logger.info(f"Original path: {file_path}")

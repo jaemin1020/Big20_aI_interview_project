@@ -13,7 +13,12 @@ for p in [app_root, backend_root]:
     while p in sys.path: sys.path.remove(p)
 
 sys.path.insert(0, backend_root) # backend가 2순위
-sys.path.insert(0, app_root)     # app_root가 최종 1순위
+sys.path.insert(0, app_root)     # app_root가 최종 1순위 (tasks, config 등이 위치)
+
+# [추가] config 폴더가 있는 위치를 명시적으로 보장
+config_parent = os.path.dirname(os.path.abspath(__file__))
+if config_parent not in sys.path:
+    sys.path.insert(0, config_parent)
 
 from celery import Celery
 

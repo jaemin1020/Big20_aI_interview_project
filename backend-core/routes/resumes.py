@@ -93,7 +93,7 @@ async def upload_resume(
         celery_app.send_task(
             "parse_resume_pdf",
             args=[resume.id, file_path],
-            queue='gpu_queue'
+            queue='cpu_queue'
         )
         logger.info(f"Resume {resume.id} 처리 파이프라인 전송 완료")
     except Exception as e:
