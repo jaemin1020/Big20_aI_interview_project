@@ -13,7 +13,12 @@ for p in [app_root, backend_root]:
     while p in sys.path: sys.path.remove(p)
 
 sys.path.insert(0, backend_root) # backend가 2순위
-sys.path.insert(0, app_root)     # app_root가 최종 1순위
+sys.path.insert(0, app_root)     # app_root가 최종 1순위 (tasks, config 등이 위치)
+
+# [추가] config 폴더가 있는 위치를 명시적으로 보장
+config_parent = os.path.dirname(os.path.abspath(__file__))
+if config_parent not in sys.path:
+    sys.path.insert(0, config_parent)
 
 from celery import Celery
 
@@ -53,8 +58,8 @@ app.conf.update(
     task_track_started=True,
     task_time_limit=600,
     result_expires=3600,
-    worker_max_tasks_per_child=10, # 메모리 누수 방지 (64GB 효율 관리)
-    worker_pool='solo',  # CUDA 호환성을 위해 solo pool 사용
+    worker_max_tasks_per_child=50, # 메모리 관리 효율화
+    # worker_pool='solo' 제거 (CPU/GPU 워커가 각각 다른 풀을 사용하도록 docker-compose에서 결정)
     
     # [큐 라우팅] 역할별 전용 일꾼 시스템 구축
     task_default_queue='cpu_queue',
@@ -64,12 +69,12 @@ app.conf.update(
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
-        'tasks.stt.*': {'queue': 'gpu_queue'}, 
+        'tasks.stt.*': {'queue': 'cpu_queue'}, # STT는 CPU 기반으로 동작함
         
         # CPU 사용 태스크 (답변 분석, 비전, 기타)
         'tasks.evaluator.*': {'queue': 'cpu_queue'},
         'tasks.vision.*': {'queue': 'cpu_queue'},
-        'tasks.resume_parser.*': {'queue': 'gpu_queue'},
+        'tasks.resume_parser.*': {'queue': 'cpu_queue'}, # 파싱은 CPU 작업임
         'tasks.tts.*': {'queue': 'cpu_queue'},
     }
 )
@@ -79,11 +84,11 @@ if __name__ == "__main__":
     
     # 모델 Preload (첫 요청 지연 방지)
     try:
-        from tasks.stt import load_stt_pipeline as load_stt
+        from tasks.stt import load_stt_model
         from tasks.resume_embedding import load_embedding_model
         
         logger.info("Preloading models...")
-        load_stt()
+        load_stt_model()
         load_embedding_model()
         logger.info("Models preloaded successfully.")
     except Exception as e:

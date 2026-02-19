@@ -12,8 +12,8 @@ def chunk_resume(parsed_data):
     # chunk_overlap=50: 문맥 유지
     # ====================================================
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=200,
-        chunk_overlap=70,
+        chunk_size=600,
+        chunk_overlap=100,
         separators=["\n\n", "\n", ".", " ", ""]
     )
 

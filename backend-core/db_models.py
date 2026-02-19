@@ -335,3 +335,14 @@ class EvaluationReportResponse(SQLModel):
     company_name: Optional[str] = None
     candidate_name: Optional[str] = None
     interview_date: Optional[datetime] = None
+    
+    # [추가] 상세 피드백 필드 (details_json 파싱 결과)
+    technical_feedback: Optional[str] = None
+    experience_feedback: Optional[str] = None
+    problem_solving_feedback: Optional[str] = None
+    communication_feedback: Optional[str] = None
+    responsibility_feedback: Optional[str] = None
+    growth_feedback: Optional[str] = None
+    
+    strengths: Optional[List[str]] = None
+    improvements: Optional[List[str]] = None

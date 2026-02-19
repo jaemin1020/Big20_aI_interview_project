@@ -1,6 +1,6 @@
 import sys
 import os
-import time
+import re
 import gc 
 import logging
 import torch
@@ -48,27 +48,49 @@ PROMPT_TEMPLATE = """[|system|]
 
 [작성 지침 - 절대 규칙]
 1. **단 두 문장, 150자 이내**: 모든 질문은 반드시 **최대 두 문장(150자 이내)**으로 생성하라.
-2. **맥락별 인용 우선순위**: 
-   - 일반 질문: [이력서 내용] 인용 + 질문
-   - 꼬리 질문(followup): **[지원자의 최근 답변]** 속 핵심 키워드(기술명, 수치, 조치 사항 등)를 반드시 인용 + 그에 대한 적절한 수준의 구체적 확인 질문
-3. **사족 금지**: "답변 잘 들었습니다" 등의 추임새는 0점 처리한다. 바로 인용문으로 시작하라.
-4. **실무형 난이도**: 너무 난해하거나 학술적인 질문 대신, 실무 단계에서 겪을 법한 **'구체적인 상황'이나 '본인의 역할'**에 대해 물어보라.
+2. **구분 확실한 질문 구성**: 지원자가 '실제로 수행한 경험'과 '앞으로의 포부'를 엄격히 구분하라. "~ 언급하신 포부를 보았습니다" 또는 "~ 프로젝트 경험을 확인했습니다"와 같이 근거를 정확히 하라.
+3. **출처 명시 및 자연스러운 시작**: 질문 시작 시 반드시 근거 출처를 밝혀라(예: "자기소개서 1번 문항을 보니", "이력서의 프로젝트 경험 중..."). 
+4. **금지 사항 (위반 시 탈락)**:
+    - **말머리 금지**: "답변:", "요약:", "질문:", "추가적으로 궁금한 점:", "답변 잘 들었습니다" 같은 사족이나 라벨을 절대 붙이지 마라.
+    - **특수문자 금지**: 대괄호([]), 소괄호(()), 별표(**), 물결(~) 등 어떤 특수 기호도 사용하지 말고 순수 텍스트로만 말하라.
+    - **중복 표현 금지**: "(이전 답변에서 언급한)" 같은 부연 설명을 괄호로 넣지 마라. 문맥 속에 자연스럽게 녹여라.
+5. **꼬리 질문(followup) 규칙**: 반드시 지원자의 최근 답변 내용을 **한 문장으로 아주 짧게 요약**한 뒤, 그와 연관된 심층 질문을 던져라. 예: "방금 비동기 병렬 처리를 도입했다고 하셨는데, 구체적으로 어떤 라이브러리를 사용하셨나요?"
 [|endofturn|]
 [|user|]
 # 평가 단계: {stage}
-# 평가 의도: {guide}
+# 시나리오 가이드: {guide}
 # 지원자 고유 정보 및 근거 (RAG + 대화 로그):
 {context}
 
 # 요청:
-지원자 {name}님의 이력서와 발언을 바탕으로, 그의 실무 역량을 편안하게 검증할 수 있는 **구체적인** 질문 1개만 생성해줘.
+지원자 {name}님의 정보를 바탕으로, 실무 역량을 검증할 수 있는 **깔끔하고 구체적인** 질문 1개만 생성해줘.
+
+[출력 규칙 - 절대 엄수]
+1. 오직 질문만 출력하라. (사족, 인사말, 말머리 절대 금지)
+2. 대괄호([]), 소괄호(()), 별표(**), 따옴표("") 등 모든 특수문자를 제거한 순수 텍스트만 출력하라.
+3. "질문:", "다음 질문입니다:" 와 같은 라벨을 절대 붙이지 마라.
+4. 반드시 최대 두 문장(150자) 이내로 작성하라.
 [|endofturn|]
 [|assistant|]
 """
 
 # -----------------------------------------------------------
-# [3. 질문 생성 핵심 함수]
+# [3. 질문 정제 프롬프트 (Self-Correction)]
 # -----------------------------------------------------------
+REFINER_PROMPT = """[|system|]
+너는 전문 교정가이자 면접 지원 전문가이다. 다음 면접 질문에서 불필요한 라벨, 특수문자, 사족을 제거하여 완벽하고 깔끔한 '순수 질문 텍스트'로 다듬어라.
+
+[다듬기 규칙 - 절대 엄수]
+1. 말머리 및 라벨 제거: "답변:", "요약:", "질문:", "추가적으로 궁금한 점:", "답변 잘 들었습니다" 등 질문 본문 외의 모든 설명을 삭제하라.
+2. 기호 제거: 대괄호([]), 소괄호(()), 별표(**), 물결(~) 등 모든 특수 기호를 삭제하라. 괄호 안의 내용이 중요하다면 괄호를 벗기고 문장 속에 자연스럽게 포함시켜라.
+3. 시작 문장 교정: 만약 질문이 어색하게 시작한다면 "자기소개서에서 ~라고 언급하신 부분을 보았습니다." 또는 "방금 ~라고 답변하셨는데," 와 같이 자연스럽게 교정하라.
+4. 오직 질문만 출력: 가급적 두 문장 이내의 순수 텍스트만 출력하라.
+[|endofturn|]
+[|user|]
+원문: {raw_question}
+[|endofturn|]
+[|assistant|]
+"""
 # -----------------------------------------------------------
 # [3. 질문 생성 핵심 함수]
 # [기존 일괄 생성 태스크 삭제됨 - 실시간 생성 모드로 통합]
@@ -85,7 +107,6 @@ def generate_next_question_task(interview_id: int):
         Interview, Transcript, Speaker, Question, Resume
 
     )
-    from config.interview_scenario import get_stage_by_name, get_next_stage
     from utils.exaone_llm import get_exaone_llm
     
     with Session(engine) as session:
@@ -93,6 +114,37 @@ def generate_next_question_task(interview_id: int):
         if not interview: 
             logger.error(f"Interview {interview_id} not found.")
             return {"status": "error", "message": "Interview not found"}
+
+        # [추가] 직무 전환 여부 확인 및 시나리오 분기
+        resume = session.get(Resume, interview.resume_id)
+        major = ""
+        if resume and resume.structured_data:
+            education = resume.structured_data.get("education", [])
+            if education and isinstance(education, list) and len(education) > 0:
+                major = education[0].get("major", "")
+        
+        # transition 여부 판별 (백엔드와 동일한 키워드 기준)
+        is_transition = False
+        target_role = interview.position or ""
+        if major and target_role:
+            tech_role_keywords = ['개발', '엔지니어', '프로그래머', 'IT', 'SW', '소프트웨어', '데이터', '인공지능', 'AI', '보안', '시스템']
+            tech_major_keywords = ['컴퓨터', '소프트웨어', '정보통신', '전기', '전자', 'IT', '데이터', '인공지능', 'AI', '수학', '통계', '산업공학']
+            is_tech_role = any(kw in target_role for kw in tech_role_keywords)
+            is_tech_major = any(kw in major for kw in tech_major_keywords)
+            if is_tech_role and not is_tech_major:
+                is_transition = True
+        
+        # 시나리오 모듈 선택적 임포트
+        try:
+            if is_transition:
+                from config.interview_scenario_transition import get_stage_by_name, get_next_stage
+                logger.info(f"✨ [AI-WORKER] Transition scenario selected (Major: {major})")
+            else:
+                from config.interview_scenario import get_stage_by_name, get_next_stage
+                logger.info("✅ [AI-WORKER] Standard scenario selected")
+        except ImportError as e:
+            logger.error(f"❌ Scenario import failed: {e}. Falling back to standard scenario.")
+            from config.interview_scenario import get_stage_by_name, get_next_stage
             
         # 🚨 [Race Condition 방지] 중복 생성 체크
         # 마지막 AI 발화 이후에 사용자 답변이 아직 없는 상태에서, 
@@ -166,7 +218,20 @@ def generate_next_question_task(interview_id: int):
             next_stage_data = get_next_stage(last_stage_name)
 
         if not next_stage_data:
-            logger.info("Scenario Completed.")
+            logger.info(f"🏁 Scenario Completed for Interview {interview_id}. Updating status to COMPLETED.")
+            try:
+                interview.status = "COMPLETED" # InterviewStatus.COMPLETED
+                interview.end_time = datetime.utcnow()
+                session.add(interview)
+                session.commit()
+                
+                # 리포트 생성 태스크 즉시 트리거
+                from tasks.evaluator import generate_final_report
+                generate_final_report.apply_async(args=[interview_id])
+                logger.info(f"📊 Triggered final report generation for Interview {interview_id}")
+            except Exception as e:
+                logger.error(f"Failed to update interview status to COMPLETED: {e}")
+                
             return {"status": "completed"}
 
         stage_name = next_stage_data["stage"]
@@ -240,26 +305,37 @@ def generate_next_question_task(interview_id: int):
                     q3_data = next((item for item in self_intro if "[질문3]" in item.get("question", "")), None)
                     if not q3_data and len(self_intro) >= 3: q3_data = self_intro[2]
                     if q3_data:
-                        narrative_context = f"[자기소개서 3번 내용 - 협업]\n질문: {q3_data.get('question')}\n답변: {q3_data.get('answer')}\n\n"
+                        narrative_context = f"자기소개서 질문 3번 내용 (협업): {q3_data.get('answer')}\n\n"
 
                 elif stage_name == "responsibility":
                     self_intro = sd.get("self_intro", [])
                     q1_data = next((item for item in self_intro if "[질문1]" in item.get("question", "")), None)
                     if not q1_data and len(self_intro) >= 1: q1_data = self_intro[0]
                     if q1_data:
-                        narrative_context = f"[자기소개서 1번 내용 - 가치관]\n질문: {q1_data.get('question')}\n답변: {q1_data.get('answer')}\n\n"
+                        narrative_context = f"자기소개서 질문 1번 내용 (가치관): {q1_data.get('answer')}\n\n"
 
                 elif stage_name == "growth":
                     self_intro = sd.get("self_intro", [])
                     q2_data = next((item for item in self_intro if "[질문2]" in item.get("question", "")), None)
                     if not q2_data and len(self_intro) >= 2: q2_data = self_intro[1]
                     if q2_data:
-                        narrative_context = f"[자기소개서 2번 내용 - 성장의지]\n질문: {q2_data.get('question')}\n답변: {q2_data.get('answer')}\n\n"
+                        narrative_context = f"자기소개서 질문 2번 내용 (성장의지): {q2_data.get('answer')}\n\n"
 
             # Retriever 기반 컨텍스트 검색
-            retriever = get_retriever(resume_id=interview.resume_id, top_k=5)
+            retriever = get_retriever(resume_id=interview.resume_id, top_k=10)
             retrieved_docs = retriever.invoke(query)
-            rag_context = "\n".join([f"- {doc.page_content}" for doc in retrieved_docs]) if retrieved_docs else "이력서 세부 근거 없음"
+            
+            # [수정] 카테고리 정보를 포함하여 지식의 성격(경험 vs 계획)을 명시
+            rag_context_list = []
+            if retrieved_docs:
+                for doc in retrieved_docs:
+                    cat = doc.metadata.get('category', 'unknown')
+                    # 카테고리명을 더 직관적으로 변환하여 LLM에 전달
+                    cat_name = "경험 및 활동 기록" if cat in ['project', 'experience', 'activity', 'award'] else "자기소개 및 계획서 내용"
+                    rag_context_list.append(f"- {cat_name}: {doc.page_content}")
+                rag_context = "\n".join(rag_context_list)
+            else:
+                rag_context = "이력서 세부 근거 없음"
 
             # [핵심 로직] 2. 프로필 + 이력서(RAG) + '방금 한 답변'을 섞어서 LLM에게 전달
             if stage_type == "followup":
@@ -276,6 +352,12 @@ def generate_next_question_task(interview_id: int):
                 # 일반 AI 질문: 프로필 + RAG 결합
                 context_text = f"{profile_summary}{narrative_context}[이력서 세부 내용]\n{rag_context}"
 
+            # [추가] 실시간 디버깅 및 사용자 확인을 위한 로그 출력
+            logger.info("========================================")
+            logger.info(f"🔍 [LLM INPUT CONTEXT] (Interview ID: {interview_id}, Stage: {stage_name})")
+            logger.info(context_text)
+            logger.info("========================================")
+
             # 3. 지원자 정보 정제
             resume = session.get(Resume, interview.resume_id)
             candidate_name = "지원자"
@@ -285,32 +367,71 @@ def generate_next_question_task(interview_id: int):
                 candidate_name = header.get("name") or header.get("candidate_name") or candidate_name
                 target_role = header.get("target_role") or target_role
 
-            # 4. LCEL 체인 정의 및 실행 (Prompt | LLM | Parser)
+            # 4. LCEL 체인 정의 및 실행 (1단계: 질문 생성)
             prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
-
             chain = prompt | llm | output_parser
 
-            
-            logger.info(f"🔗 Executing LCEL Chain for stage: {stage_name}")
+            logger.info(f"🔗 Executing One-Shot Generation Chain for stage: {stage_name}")
             content = chain.invoke({
-                "position": target_role,
-                "name": candidate_name,
+                "context": context_text,
+                "position": interview.position,
                 "stage": stage_name,
-                "guide": next_stage_data.get("guide", "역량을 확인하기 위한 질문을 해주세요."),
-                "context": context_text
+                "guide": next_stage_data.get("guide", ""),
+                "name": candidate_name
             })
             
-            if not content:
-                content = f"{candidate_name}님, 준비하신 내용을 토대로 해당 역량에 대해 더 말씀해주실 수 있나요?"
+            logger.info(f"✅ Generated Question (One-Shot): {content}")
+
+            # [최종 정제] 강조 기호 및 불필요한 공백 제거
+            content = re.sub(r'[\*\*_~\[\]\(\)]', '', content)
+            content = " ".join(content.split())
+            
+            if not content or len(content) < 5:
+                content = f"{candidate_name}님, 앞서 말씀하신 경험과 관련하여 더 구체적인 상황을 설명해주실 수 있을까요?"
+            
+            # 🧹 메모리 관리
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             
             # 5. 결과 저장
             category_raw = next_stage_data.get("category", "technical")
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
             
+            # [추가] 면접 단계별 한국어 명칭 및 안내 문구 가져오기
+            try:
+                if is_transition:
+                    from config.interview_scenario_transition import INTERVIEW_STAGES as TRANS_STAGES
+                    target_stages = TRANS_STAGES
+                else:
+                    from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                    target_stages = STD_STAGES
+            except ImportError:
+                from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                target_stages = STD_STAGES
+
+            stage_display = "심층 면접"
+            intro_msg = ""
+            for s in target_stages:
+                if s["stage"] == stage_name:
+                    stage_display = s.get("display_name", stage_display)
+                    intro_msg = s.get("intro_sentence", "")
+                    break
+            
+            # 꼬리질문의 경우 고정된 인트로 추가 (중복 방지를 위해 LLM에게는 시키지 않음)
+            if stage_type == "followup":
+                intro_msg = "추가적으로 궁금한 점이 있습니다."
+            elif intro_msg == "추가적으로 궁금한 점이 있습니다.":
+                # 메인 질문인데 시나리오에 잘못 들어가 있는 경우 제거
+                intro_msg = ""
+
+            # 질문 앞에 [단계] 및 안내 문구 추가
+            final_content = f"[{stage_display}] {intro_msg} {content}" if intro_msg else f"[{stage_display}] {content}"
+            
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
-            save_generated_question(interview_id, content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
-            return {"status": "success", "stage": stage_name, "question": content}
+            save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
+            return {"status": "success", "stage": stage_name, "question": final_content}
         except Exception as e:
             logger.error(f"실시간 질문 생성 실패: {e}")
             return {"status": "error", "error": str(e)}

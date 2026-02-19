@@ -62,12 +62,14 @@ def recognize_audio_task(audio_b64: str):
             logger.error(f"[STT] {error_msg}")
             return {"status": "error", "message": error_msg}
 
+    # [추가] 알려진 환각(Hallucination) 문구 리스트
+    HALLUCINATIONS = ["겨울이 이렇게", "넘치고 넘치고", "시청해 주셔서", "감사합니다", "청취해 주셔서"]
+
     input_path = None
     try:
         if not audio_b64:
             return {"status": "error", "message": "Empty audio data"}
             
-        # Base64 헤더 처리 (data:audio/webm;base64,...)
         if "," in audio_b64:
             audio_b64 = audio_b64.split(",")[1]
             
@@ -76,35 +78,42 @@ def recognize_audio_task(audio_b64: str):
         except Exception as e:
             return {"status": "error", "message": f"Base64 decode failed: {e}"}
         
-        # 1. raw PCM 확인 (media-server에서 보낸 실시간 2초 chunks 처리 최적화)
-        # 16000Hz * 1ch * 2bytes(int16) * 2sec = 64000 bytes
-        if len(audio_bytes) == 64000:
-            try:
-                # np.int16 -> np.float32 (Whisper 권장 포맷)
-                audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                segments, info = stt_model.transcribe(audio_np, beam_size=5, language="ko")
-                full_text = "".join([s.text for s in segments]).strip()
-                if full_text:
-                    logger.info(f"STT Success (Raw): {full_text[:50]}...")
-                    return {"status": "success", "text": full_text}
-            except Exception as e:
-                logger.warning(f"Raw PCM processing failed, falling back to file mode: {e}")
+        # 1. WAV -> PCM 변환 (메모리 내 처리로 속도 향상)
+        try:
+            import io
+            import wave
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav:
+                if wav.getnchannels() > 0:
+                    frames = wav.readframes(wav.getnframes())
+                    audio_np = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+                    
+                    segments, info = stt_model.transcribe(audio_np, beam_size=1, language="ko")
+                    full_text = "".join([s.text for s in segments]).strip()
+                    
+                    # [필터] 환각 문구 제거 로직
+                    if any(h in full_text for h in HALLUCINATIONS) and len(full_text) < 15:
+                        logger.warning(f"🚫 환각 감지 및 필터링: {full_text}")
+                        return {"status": "success", "text": ""}
+                        
+                    if full_text:
+                        logger.info(f"STT Success (In-Memory): {full_text[:50]}...")
+                        return {"status": "success", "text": full_text}
+                    return {"status": "success", "text": ""} # 빈 텍스트 응답
+        except Exception as e:
+            logger.warning(f"In-memory processing failed, falling back to file: {e}")
 
-        # 2. 파일 기반 처리 (녹음 파일 업로드 등 일반적인 경우)
+        # 2. 파일 기반 처리 (최후의 보루)
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             input_path = tmp.name
         
-        segments, info = stt_model.transcribe(
-            input_path, 
-            beam_size=5, 
-            language="ko", 
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=500)
-        )
-        
+        segments, info = stt_model.transcribe(input_path, beam_size=1, language="ko")
         full_text = "".join([s.text for s in segments]).strip()
-        logger.info(f"STT Success (File): {full_text[:50]}...")
+        
+        if any(h in full_text for h in HALLUCINATIONS) and len(full_text) < 15:
+            return {"status": "success", "text": ""}
+
+        logger.info(f"STT Success (File Fallback): {full_text[:50]}...")
         return {"status": "success", "text": full_text}
         
     except Exception as e:

@@ -35,8 +35,10 @@ class ExaoneLLM(LLM):
         if hasattr(self, "_initialized") and self._initialized:
             return
         
-        # CPU 환경에서는 EXAONE 로딩 건너뛰기 (libcuda.so.1 에러 방지)
+        # CPU 환경에서도 GGUF는 실행 가능하므로 로딩 허용
         use_gpu = os.getenv("USE_GPU", "true").lower() == "true"
+        gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
+        
         if not use_gpu:
             logger.warning("⚠️ USE_GPU=false 감지됨. EXAONE 엔진 로딩을 건너뜁니다 (CPU 모드).")
             logger.warning("⚠️ 이 워커에서는 EXAONE 기반 작업을 수행할 수 없습니다.")
@@ -54,8 +56,10 @@ class ExaoneLLM(LLM):
         else:
             target_path = MODEL_PATH
 
+        # Context window 설정 (기본 8192로 상향)
+        n_ctx = int(os.getenv("N_CTX", "8192"))
+        
         try:
-            gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
             # 🚨 CPU 환경에서 CUDA 빌드된 llama-cpp 로딩 시 발생하는 크래시 방지를 위해 지연 임포트
             from llama_cpp import Llama
             
@@ -63,11 +67,11 @@ class ExaoneLLM(LLM):
             ExaoneLLM.llm = Llama(
                 model_path=target_path,
                 n_gpu_layers=gpu_layers,
-                n_ctx=4096,
+                n_ctx=n_ctx,
                 n_batch=512,
                 verbose=False
             )
-            logger.info(f"✅ EXAONE Engine Loaded (n_gpu_layers: {gpu_layers})")
+            logger.info(f"✅ EXAONE Engine Loaded (n_gpu_layers: {gpu_layers}, n_ctx: {n_ctx})")
         except Exception as e:
             logger.error(f"❌ 엔진 로드 실패: {e}")
             raise e

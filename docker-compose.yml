@@ -12,7 +12,7 @@ services:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
     ports:
-      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+      - "15432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
 
     networks:
       - interview_network
@@ -111,8 +111,8 @@ services:
       dockerfile: Dockerfile
     working_dir: /app
     container_name: interview_worker_cpu
-    # cpu_queue와 기본 celery 큐를 함께 처리
-    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=solo
+    # cpu_queue와 기본 celery 큐를 함께 처리 (STT 동시 처리를 위해 threads 풀 사용)
+    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --concurrency=4
     deploy:
       resources:
         limits:

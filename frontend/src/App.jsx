@@ -278,14 +278,20 @@ function App() {
       const newInterview = await createInterview(interviewPosition, null, parsedResumeData?.id, null);
       setInterview(newInterview);
 
-      // 2. Get Questions
-      let qs = await getInterviewQuestions(newInterview.id);
+      // 2. Get Questions (백엔드 커밋 시간을 위해 2초 대기 후 첫 요청)
+      await new Promise(r => setTimeout(r, 2000));
+      let data = await getInterviewQuestions(newInterview.id);
+      console.log("🚀 [Session Init] Initial Data received:", data);
+      let qs = data.questions || [];
 
-      // Simple retry logic
-      if (!qs || qs.length === 0) {
-        console.log("Questions not ready, retrying in 3s...");
+      // Simple retry logic (최대 5번 재시도)
+      let retryCount = 0;
+      while ((!qs || qs.length === 0) && retryCount < 5) {
+        console.log(`Questions not ready (attempt ${retryCount + 1}), retrying in 3s...`);
         await new Promise(r => setTimeout(r, 3000));
-        qs = await getInterviewQuestions(newInterview.id);
+        data = await getInterviewQuestions(newInterview.id);
+        qs = data.questions || [];
+        retryCount++;
       }
 
       if (!qs || qs.length === 0) {
@@ -303,7 +309,9 @@ function App() {
         setUser(null);
         setStep('auth');
       } else {
-        alert(`면접 세션 생성 실패: ${err.message || "서버 오류"}`);
+        const errorDetail = err.response?.data?.detail || err.message || "서버 오류";
+        console.error("🚀 [Detailed Error]:", err.response?.data);
+        alert(`면접 세션 생성 실패: ${errorDetail}`);
       }
     } finally {
       setIsLoading(false);
@@ -317,9 +325,13 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
-          console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-          setTranscript(prev => prev + ' ' + data.text);
-
+          const newText = data.text.trim();
+          console.log('[STT Received]:', newText);
+          setTranscript(prev => {
+            // 중복 방지 (직전 텍스트와 같으면 무시)
+            if (prev.endsWith(newText)) return prev;
+            return prev ? `${prev} ${newText}` : newText;
+          });
         } else if (data.type === 'vision_analysis') {
           // [NEW] Update Vision Data State
           setVisionData(data.data);
@@ -342,26 +354,32 @@ function App() {
         video: true,
         audio: true
       });
-      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => t.kind));
+      console.log('[WebRTC] Media stream obtained:', stream.getTracks().map(t => ({ kind: t.kind, label: t.label })));
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        console.log('[WebRTC] Local video srcObject set.');
+      } else {
+        console.warn('[WebRTC] videoRef.current is missing during stream setup!');
       }
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
-        console.log('[WebRTC] Added track:', track.kind, track.label);
+        console.log('[WebRTC] Added track to PC:', track.kind, track.label);
       });
     } catch (err) {
-      console.warn('[WebRTC] Camera failed, trying audio-only:', err);
+      console.error('[WebRTC] navigator.mediaDevices.getUserMedia FAILED:', err);
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[WebRTC] Audio-only stream obtained.');
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
         if (videoRef.current) {
           videoRef.current.srcObject = audioStream;
         }
-        alert('카메라 접근 거부됨. 음성만 사용합니다.');
+        alert('카메라를 인식할 수 없거나 권한이 거부되었습니다. 음성으로만 면접을 진행합니다.');
       } catch (audioErr) {
-        alert('마이크 접근 실패. 마이크 권한과 연결 상태를 확인해주세요.');
+        console.error('[WebRTC] Audio-only also FAILED:', audioErr);
+        alert('마이크와 카메라를 모두 인식할 수 없습니다. 장비 연결을 확인하고 브라우저 권한을 허용해 주세요.');
         throw audioErr;
       }
     }
@@ -369,11 +387,12 @@ function App() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // ICE Wait
-    console.log('[WebRTC] Waiting for ICE gathering to complete...');
+    // ICE Wait (Timeout added)
+    console.log('[WebRTC] Waiting for ICE gathering (Current state:', pc.iceGatheringState, ')');
     await new Promise((resolve) => {
       if (pc.iceGatheringState === 'complete') { resolve(); return; }
       const checkState = () => {
+        console.log('[WebRTC] ICE Gathering State Change:', pc.iceGatheringState);
         if (pc.iceGatheringState === 'complete') {
           pc.removeEventListener('icegatheringstatechange', checkState);
           resolve();
@@ -381,11 +400,13 @@ function App() {
       };
       pc.addEventListener('icegatheringstatechange', checkState);
       setTimeout(() => {
+        console.warn('[WebRTC] ICE gathering timed out (1.5s)');
         pc.removeEventListener('icegatheringstatechange', checkState);
         resolve();
-      }, 1000);
+      }, 1500);
     });
 
+    console.log('[WebRTC] Sending offer to media-server...');
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
       body: JSON.stringify({
@@ -396,13 +417,17 @@ function App() {
       headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) throw new Error(`WebRTC offer failed: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[WebRTC] Offer fetch error:', response.status, errorText);
+      throw new Error(`WebRTC offer failed: ${response.status}`);
+    }
 
     const answer = await response.json();
-    console.log('[WebRTC] Received Answer SDP:', answer.sdp);
+    console.log('[WebRTC] Received Answer SDP from server.');
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('[WebRTC] Connection established successfully');
-    setIsMediaReady(true); // 모든 연결 완료 시 준비 상태로 변경
+    console.log('[WebRTC] WebRTC connection handshake complete.');
+    setIsMediaReady(true);
   };
 
   const toggleRecording = async () => {
@@ -461,49 +486,32 @@ function App() {
         };
 
         mediaRecorder.onstop = async () => {
-          console.log('[STT] Processing audio...');
-          setIsLoading(true);
+          console.log('[STT] Batch recording stopped. Real-time transcript status check...');
+
+          // 실시간 자막이 이미 충분히 확보되었다면 대용량 파일 전송 스킵 (최적화)
+          if (transcript.length > 50) {
+            console.log('[STT] ✅ Real-time transcript seems sufficient. Skipping heavy batch POST.');
+            setIsLoading(false);
+            return;
+          }
 
           const blob = new Blob(chunks, { type: 'audio/webm' });
 
           try {
-            console.log('[STT] Sending audio for recognition...');
+            console.log('[STT] Sending batch audio as fallback...');
             const result = await recognizeAudio(blob);
-            console.log('[STT] Recognition result:', result);
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
-              // 실시간 텍스트가 이미 있다면 중복 방지를 위해 비교하거나 보완
               setTranscript(prev => {
-                if (prev.trim().length > recognizedText.length) return prev;
+                // 실시간 텍스트가 이미 더 길다면(더 많은 정보를 담고 있다면) 유지
+                if (prev.length > recognizedText.length) return prev;
                 return recognizedText;
               });
-
-              console.log('[STT] ✅ Batch Recognition Success:', recognizedText);
-
-              // 자동 저장: DB에 transcript 저장
-              if (interview && questions && questions[currentIdx]) {
-                try {
-                  console.log('[STT] Auto-saving transcript to DB...');
-                  await createTranscript(
-                    interview.id,
-                    'User',
-                    recognizedText,
-                    questions[currentIdx].id
-                  );
-                  console.log('[STT] ✅ Transcript saved to DB');
-                } catch (saveError) {
-                  console.error('[STT] ❌ Failed to save transcript:', saveError);
-                  // 저장 실패해도 transcript는 화면에 표시
-                }
-              }
-            } else {
-              setTranscript('음성이 인식되지 않았습니다.');
-              console.warn('[STT] ⚠️ Empty result');
+              console.log('[STT] ✅ Fallback Batch Recognition Success');
             }
           } catch (error) {
-            console.error('[STT] ❌ Error:', error);
-            setTranscript('음성 인식 중 오류가 발생했습니다.');
+            console.error('[STT] ❌ Fallback Error:', error);
           } finally {
             setIsLoading(false);
           }
@@ -563,8 +571,8 @@ function App() {
       }
     }
 
-    if (wsRef.current) wsRef.current.close();
-    if (pcRef.current) pcRef.current.close();
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
 
     try {
       await completeInterview(interview.id);
@@ -602,12 +610,22 @@ function App() {
           wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
         }
       } else {
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기 - LLM 생성 시간 고려)
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
-        for (let i = 0; i < 150; i++) { // 2초 간격으로 150번 시도 (총 300초/5분)
+        for (let i = 0; i < 60; i++) { // 2초 간격으로 60번 시도 (최대 2분으로 단축)
           await new Promise(r => setTimeout(r, 2000));
-          const updatedQs = await getInterviewQuestions(interview.id);
+          const data = await getInterviewQuestions(interview.id);
+          const updatedQs = data.questions || [];
+          const currentStatus = data.status;
+
+          // [핵심] 서버에서 면접이 종료되었다고 알려주면 즉시 루프 탈출
+          if (currentStatus === 'COMPLETED') {
+            console.log('[nextQuestion] Server signaled COMPLETED status. Finalizing.');
+            setQuestions(updatedQs);
+            foundNew = false; // 더 이상의 질문은 없음
+            break;
+          }
 
           const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
           const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
@@ -615,7 +633,7 @@ function App() {
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
             setQuestions(updatedQs);
-            setCurrentIdx(nextIdx);
+            setCurrentIdx(prev => prev + 1);
             setTranscript('');
             foundNew = true;
 
@@ -628,11 +646,17 @@ function App() {
         }
 
         if (!foundNew) {
-          // 더 이상 질문이 없으면 면접 종료
-          console.log('[nextQuestion] No more questions found. Finishing interview.');
-          setStep('loading');
-          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-          await finishInterview();
+          // [수정] 폴링 타임아웃 시 무조건 종료하지 않고, 서버 상태가 COMPLETED일 때만 자동 종료
+          const finalCheck = await getInterviewQuestions(interview.id);
+          if (finalCheck.status === 'COMPLETED') {
+            console.log('[nextQuestion] Server confirmed COMPLETED. Finishing.');
+            setStep('loading');
+            if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+            await finishInterview();
+          } else {
+            console.warn('[nextQuestion] Polling timed out but interview not marked as COMPLETED by server.');
+            alert('AI 면접관의 다음 질문 생성이 지연되고 있습니다. 잠시 후 다시 [다음 질문] 버튼을 눌러주세요.');
+          }
         }
         setIsLoading(false);
       }
@@ -823,6 +847,7 @@ function App() {
             isRecording={isRecording}
             isMediaReady={isMediaReady}
             transcript={transcript}
+            setTranscript={setTranscript}
             toggleRecording={toggleRecording}
             nextQuestion={nextQuestion}
             onFinish={finishInterview}

@@ -9,6 +9,7 @@ const InterviewPage = ({
   audioUrl,
   isRecording,
   transcript,
+  setTranscript,
   toggleRecording,
   nextQuestion,
   onFinish,
@@ -61,7 +62,11 @@ const InterviewPage = ({
       else if (question) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
-          const utterance = new SpeechSynthesisUtterance(question);
+
+          // [추가] [...] 태그 제거 로직
+          const cleanText = question.includes(']') ? question.split(']').slice(1).join(']').trim() : question;
+
+          const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.lang = 'ko-KR';
           utterance.rate = 1.0;
           utterance.pitch = 1.0;
@@ -108,6 +113,15 @@ const InterviewPage = ({
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (transcript.trim() && !isLoading) {
+        nextQuestion();
+      }
+    }
   };
 
   return (
@@ -181,6 +195,21 @@ const InterviewPage = ({
                 fontWeight: '700',
                 fontSize: '0.9rem'
               }}>Q{currentIdx + 1}</span>
+
+              {/* [추가] 면접 단계 배지 표시 */}
+              {question?.startsWith('[') && question.includes(']') && (
+                <span style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'var(--primary)',
+                  padding: '2px 10px',
+                  borderRadius: '6px',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  border: '1px solid var(--primary)'
+                }}>
+                  {question.split(']')[0].substring(1)}
+                </span>
+              )}
             </div>
 
             <h2 style={{
@@ -190,7 +219,7 @@ const InterviewPage = ({
               color: 'var(--text-main)',
               wordBreak: 'keep-all'
             }}>
-              {question}
+              {question?.includes(']') ? question.split(']').slice(1).join(']').trim() : question}
             </h2>
           </div>
 
@@ -311,7 +340,9 @@ const InterviewPage = ({
           padding: '1.2rem 2rem',
           border: '1px solid var(--glass-border)',
           position: 'relative',
-          overflowY: 'auto'
+          overflowY: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
           <h4 style={{
             color: isRecording ? '#ef4444' : 'var(--text-muted)',
@@ -320,16 +351,28 @@ const InterviewPage = ({
             fontWeight: '600',
             textTransform: 'uppercase'
           }}>
-            {isRecording ? '🎤 실시간 인식 중...' : '답변 대기 중'}
+            {isRecording ? '🎤 실시간 인식 중...' : '답변 입력'}
           </h4>
-          <p style={{
-            margin: 0,
-            fontSize: '1.1rem',
-            lineHeight: '1.5',
-            color: transcript ? 'var(--text-main)' : 'var(--text-muted)',
-          }}>
-            {transcript || '답변을 시작하려면 아래 녹음 버튼을 눌러주세요.'}
-          </p>
+          <textarea
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            onKeyDown={handleKeyDown}
+            readOnly={isRecording}
+            placeholder={isRecording ? '음성 인식 대기 중...' : '마이크를 사용할 수 없는 경우 이곳에 직접 답변을 입력하고 Enter를 눌러주세요.'}
+            style={{
+              flex: 1,
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: transcript ? 'var(--text-main)' : 'var(--text-muted)',
+              fontSize: '1.1rem',
+              lineHeight: '1.5',
+              resize: 'none',
+              fontFamily: 'inherit',
+              padding: 0
+            }}
+          />
         </div>
 
         {/* Status Indicator */}
@@ -397,7 +440,7 @@ const InterviewPage = ({
             onClick={nextQuestion}
             style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
           >
-            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 제출'}
+            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
           </PremiumButton>
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (
