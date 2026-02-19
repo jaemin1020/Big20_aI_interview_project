@@ -175,19 +175,65 @@ async def get_resume(
         raise HTTPException(status_code=403, detail="Not authorized to access this resume")
         
     # 모든 기술 스택 통합
+    # 모든 기술 스택 통합
     all_skills = []
-    if resume.structured_data and "skills" in resume.structured_data:
-        for cat, skills_list in resume.structured_data["skills"].items():
-            if isinstance(skills_list, list):
-                all_skills.extend(skills_list)
+    
+    # [수정: 2026-02-10] structured_data 타입 처리 로직 개선
+    # 이유: PostgreSQL DB에서 JSONB 컬럼이 간혹 문자열(String) 형태로 반환되는 이슈 발생 
+    #       (AttributeError: 'str' object has no attribute 'get' 에러 유발).
+    # 해결: 데이터 타입이 문자열인 경우 json.loads()로 명시적 파싱을 수행하여 
+    #       항상 딕셔너리(Dict) 형태로 처리하도록 안전 장치(Fail-safe) 추가.
+    import json
+    parsed_data = {}
+    
+    try:
+        if resume.structured_data:
+            temp_data = resume.structured_data
+            # 문자열인 경우 파싱 (이중 인코딩 대응)
+            if isinstance(temp_data, str):
+                try:
+                    temp_data = json.loads(temp_data)
+                    # 한 번 더 파싱했는데도 문자열이면 또 파싱 시도 (이중 인코딩)
+                    if isinstance(temp_data, str):
+                        temp_data = json.loads(temp_data)
+                except Exception as parse_error:
+                    print(f"JSON parse error: {parse_error}")
+            
+            # 최종 결과가 딕셔너리인지 확인
+            if isinstance(temp_data, dict):
+                parsed_data = temp_data
+            else:
+                print(f"Warning: structured_data is not a dict after parsing: {type(temp_data)}")
+    except Exception as e:
+        print(f"Error processing structured_data: {e}")
+        parsed_data = {}
+    
+    # 모든 기술 스택 통합
+    all_skills = []
+    if "skills" in parsed_data:
+        skills_data = parsed_data["skills"]
+        if isinstance(skills_data, dict):
+            for cat, skills_list in skills_data.items():
+                if isinstance(skills_list, list):
+                    all_skills.extend(skills_list)
                 
+    # [수정: 2026-02-10] target_position 타입 안전 처리
+    # 이유: target_position이 문자열("Unknown")일 수도 있고 딕셔너리일 수도 있음.
+    #       문자열인데 .get()을 호출하면 AttributeError 발생.
+    target_pos_data = parsed_data.get("target_position")
+    position_value = None
+    if isinstance(target_pos_data, dict):
+        position_value = target_pos_data.get("position")
+    elif isinstance(target_pos_data, str):
+        position_value = target_pos_data
+        
     return {
         "id": resume.id,
         "file_name": resume.file_name,
         "processing_status": resume.processing_status,
         "processed_at": resume.processed_at,
-        "structured_data": resume.structured_data,
-        "position": resume.structured_data.get("target_position") if resume.structured_data else None,
+        "structured_data": parsed_data,
+        "position": position_value,
         "skills": list(set(all_skills))  # 중복 제거
     }
 

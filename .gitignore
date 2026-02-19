@@ -223,6 +223,19 @@ uploads/
 docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
+# Test audio files
+*.wav
+*.mp3
+*.webm
+!ai-worker/poc/libs/StyleTTS2-Vocos/Outputs/**/*.wav
+
+# Large model files (exceed GitHub 100MB limit)
+*.onnx
+*.pth
+*.bin
+*.safetensors
+*.pt
+
 .agent/
 
 lsj/

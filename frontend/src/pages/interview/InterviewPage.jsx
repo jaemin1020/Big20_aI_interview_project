@@ -15,7 +15,8 @@ const InterviewPage = ({
   onFinish,
   videoRef,
   isLoading,
-  isMediaReady
+  isMediaReady,
+  visionData // [NEW] Receive vision data
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   const [showTooltip, setShowTooltip] = React.useState(false);
@@ -106,7 +107,6 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-
   }, [timeLeft, nextQuestion, isRecording]);
 
   const formatTime = (seconds) => {
@@ -225,6 +225,7 @@ const InterviewPage = ({
 
           {/* Right: Video Area */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Video Container to ensure absolute positioning works relative to this */}
             <div style={{ position: 'relative', width: '100%', paddingTop: '75%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: '#000' }}>
               <video
                 ref={videoRef}
@@ -233,6 +234,52 @@ const InterviewPage = ({
                 muted
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
+
+              {/* [NEW] Vision HUD Overlay */}
+              {visionData && (
+                <>
+                  {/* 1. Gaze Status (Top Left) */}
+                  <div style={{
+                    position: 'absolute', top: '1rem', left: '1rem',
+                    padding: '6px 12px', borderRadius: '12px',
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                    color: visionData.gaze === 'center' ? '#4ade80' : '#f87171',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.9rem', fontWeight: 'bold'
+                  }}>
+                    {visionData.gaze === 'center' ? '👀 정면 응시' : `👀 시선 이탈 (${visionData.gaze})`}
+                  </div>
+
+                  {/* 2. Emotion Score (Top Right) below recording lamp */}
+                  <div style={{
+                    position: 'absolute', top: '3.5rem', right: '0.8rem',
+                    padding: '6px 12px', borderRadius: '12px',
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                    color: visionData.emotion === 'anxious' ? '#f87171' : '#facc15',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.9rem', fontWeight: 'bold',
+                    textAlign: 'right'
+                  }}>
+                    <div>{visionData.emotion === 'happy' ? '😊 미소' : (visionData.emotion === 'anxious' ? '😟 긴장' : '😐 평온')}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>미소: {Math.round(visionData.scores.smile * 100)}%</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>긴장: {Math.round(visionData.scores.anxiety * 100)}%</div>
+                  </div>
+
+                  {/* 3. Posture/Head (Bottom Center) */}
+                  {visionData.head === 'unstable' && (
+                    <div style={{
+                      position: 'absolute', bottom: '1rem', left: '50%', transform: 'translateX(-50%)',
+                      padding: '6px 12px', borderRadius: '12px',
+                      background: 'rgba(239, 68, 68, 0.8)', color: 'white',
+                      fontSize: '0.9rem', fontWeight: 'bold'
+                    }}>
+                      🚫 고개 흔들림 감지
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Recording Status Lamp */}
               <div style={{
                 position: 'absolute',
                 top: '0.8rem',

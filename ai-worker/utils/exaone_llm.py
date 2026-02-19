@@ -40,8 +40,10 @@ class ExaoneLLM(LLM):
         gpu_layers = int(os.getenv("N_GPU_LAYERS", "-1"))
         
         if not use_gpu:
-            logger.info("ℹ️ CPU mode detected. Loading EXAONE on CPU (this may be slow).")
-            gpu_layers = 0 # GPU 사용 안함 강제 설정
+            logger.warning("⚠️ USE_GPU=false 감지됨. EXAONE 엔진 로딩을 건너뜁니다 (CPU 모드).")
+            logger.warning("⚠️ 이 워커에서는 EXAONE 기반 작업을 수행할 수 없습니다.")
+            ExaoneLLM._initialized = True
+            return
             
         logger.info(f"🚀 Loading EXAONE Engine from: {MODEL_PATH}")
         

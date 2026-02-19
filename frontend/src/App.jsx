@@ -75,6 +75,7 @@ function App() {
   const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
   const [parsedResumeData, setParsedResumeData] = useState(null);
+  const [visionData, setVisionData] = useState(null); // [NEW] Vision Analysis Data
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -115,7 +116,14 @@ function App() {
           if (savedQuestions) {
             try { setQuestions(JSON.parse(savedQuestions)); } catch (e) { console.error(e); }
           }
-          if (savedCurrentIdx) setCurrentIdx(Number(savedCurrentIdx));
+          if (savedCurrentIdx) {
+            const idx = Number(savedCurrentIdx);
+            setCurrentIdx(idx);
+            // 초기 복구 시에도 필요하다면 서버에 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: idx }));
+            }
+          }
           if (savedReport) {
             try { setReport(JSON.parse(savedReport)); } catch (e) { console.error(e); }
           }
@@ -318,8 +326,11 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'stt_result' && data.text) {
           console.log('[STT Received]:', data.text, '| Recording:', isRecordingRef.current);
-
           setTranscript(prev => prev + ' ' + data.text);
+
+        } else if (data.type === 'vision_analysis') {
+          // [NEW] Update Vision Data State
+          setVisionData(data.data);
         }
       } catch (err) {
         console.error('[WebSocket] Parse error:', err);
@@ -365,7 +376,23 @@ function App() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.log('[WebRTC] Sending offer to server...');
+
+    // ICE Wait
+    console.log('[WebRTC] Waiting for ICE gathering to complete...');
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') { resolve(); return; }
+      const checkState = () => {
+        if (pc.iceGatheringState === 'complete') {
+          pc.removeEventListener('icegatheringstatechange', checkState);
+          resolve();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange', checkState);
+      setTimeout(() => {
+        pc.removeEventListener('icegatheringstatechange', checkState);
+        resolve();
+      }, 1000);
+    });
 
     const response = await fetch('http://localhost:8080/offer', {
       method: 'POST',
@@ -377,25 +404,26 @@ function App() {
       headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) {
-      throw new Error(`WebRTC offer failed: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`WebRTC offer failed: ${response.status}`);
 
     const answer = await response.json();
+    console.log('[WebRTC] Received Answer SDP:', answer.sdp);
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
     console.log('[WebRTC] Connection established successfully');
     setIsMediaReady(true); // 모든 연결 완료 시 준비 상태로 변경
   };
 
   const toggleRecording = async () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+    if (isRecording) {
+      console.log('[STT] Stopping recording...');
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
 
-      // WebSocket으로 녹음 중지 알림 (서버 사이드 STT 종료 트리거가 있다면)
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
+        // WebSocket으로 녹음 중지 알림
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
+        }
       }
-
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
@@ -404,7 +432,6 @@ function App() {
         alert('장비가 아직 준비되지 않았습니다. 잠시만 기다려주세요.');
         return;
       }
-
       console.log('[STT] Starting recording...');
       setTranscript('');
       setIsRecording(true);
@@ -416,7 +443,6 @@ function App() {
       }
 
       try {
-        // 비디오 스트림에서 오디오 트랙 가져오기
         const stream = videoRef.current?.srcObject;
         if (!stream) {
           throw new Error('No media stream available');
@@ -455,7 +481,6 @@ function App() {
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
-
               // 실시간 텍스트가 이미 있다면 중복 방지를 위해 비교하거나 보완
               setTranscript(prev => {
                 if (prev.trim().length > recognizedText.length) return prev;
@@ -575,9 +600,15 @@ function App() {
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
-        setCurrentIdx(prev => prev + 1);
+        const nextIdx = currentIdx + 1;
+        setCurrentIdx(nextIdx);
         setTranscript('');
         setIsLoading(false);
+
+        // [추가] WebSocket으로 질문 전환 알림
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+        }
       } else {
         // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기)
         console.log('[nextQuestion] Polling for next AI-generated question...');
@@ -600,10 +631,16 @@ function App() {
           const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
+            const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
             setTranscript('');
             foundNew = true;
+
+            // [추가] WebSocket으로 신규 질문 전환 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+            }
             break;
           }
         }
@@ -678,10 +715,6 @@ function App() {
               alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
               return;
             }
-            // 관리자 페이지에서는 로고 클릭 시 현재 페이지 유지
-            if (step === 'recruiter_main') {
-              return;
-            }
             setStep('main');
           }}
           isInterviewing={step === 'interview'}
@@ -691,7 +724,6 @@ function App() {
           onProfileManagement={() => setStep('profile')}
           onLogin={() => { setAuthMode('login'); setStep('auth'); }}
           onRegister={() => { setAuthMode('register'); setStep('auth'); }}
-          hideMenuButtons={step === 'recruiter_main'}
           pageTitle={
             step === 'history' ? '면접 이력' :
               step === 'result' ? '면접 결과' :
@@ -703,31 +735,29 @@ function App() {
         />
       )}
 
-      {/* Theme Toggle Button (관리자 페이지 제외) */}
-      {step !== 'recruiter_main' && (
-        <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            style={{
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              background: 'var(--glass-bg)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid var(--glass-border)',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-              cursor: 'pointer',
-              fontSize: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            {isDarkMode ? '☀️' : '🌑'}
-          </button>
-        </div>
-      )}
+      {/* Theme Toggle Button */}
+      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '50%',
+            background: 'var(--glass-bg)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            fontSize: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          {isDarkMode ? '☀️' : '🌑'}
+        </button>
+      </div>
 
       <div style={{
         flex: 1,
@@ -786,17 +816,6 @@ function App() {
 
 
 
-
-        {step === 'recruiter_main' && (
-          <RecruiterMainPage
-            user={user}
-            onLogout={handleLogout}
-            onNavigate={(page) => setStep(page)}
-          />
-        )}
-
-
-
         {step === 'landing' && (
           <LandingPage
             startInterview={startInterviewFlow}
@@ -834,6 +853,7 @@ function App() {
             onFinish={finishInterview}
             videoRef={videoRef}
             isLoading={isLoading}
+            visionData={visionData} // [NEW] Pass vision data
           />
         )}
 
@@ -851,6 +871,8 @@ function App() {
             }}
           />
         )}
+
+
 
         {step === 'loading' && (
           <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
@@ -897,9 +919,19 @@ function App() {
             user={user}
           />
         )}
+
+        {step === 'recruiter_main' && (
+          <RecruiterMainPage
+            user={user}
+            onLogout={handleLogout}
+            onNavigate={(page) => setStep(page)}
+          />
+        )}
+
       </div>
     </div>
   );
 }
 
 export default App;
+

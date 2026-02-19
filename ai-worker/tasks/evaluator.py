@@ -84,13 +84,13 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             generate_next_question_task.apply_async(args=[interview_id], queue='gpu_queue')
             logger.info(f"🚀 [ROUTED] send next question task to gpu_queue for Interview {interview_id}")
         else:
-            logger.error(f"Could not find interview_id for transcript {transcript_id}")
+            logger.error(f"인터뷰 ID를 찾을 수 없습니다: {transcript_id}")
     except Exception as e:
-        logger.error(f"Failed to trigger next question task: {e}")
-    logger.info(f"Analyzing Transcript {transcript_id} for Question {question_id}")
+        logger.error(f"다음 질문 생성 트리거 실패: {e}")
+    logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
     
     if not answer_text or not answer_text.strip():
-        logger.warning(f"Empty answer for transcript {transcript_id}. Skipping LLM evaluation.")
+        logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
         return {
             "technical_score": 0,
             "communication_score": 0,
@@ -152,7 +152,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             update_question_avg_score(question_id, answer_quality)
 
         duration = time.time() - start_ts
-        logger.info(f"Evaluation Completed ({duration:.2f}s)")
+        logger.info(f"답변 평가 완료 ({duration:.2f}초)")
         return result
 
     except Exception as e:
@@ -189,7 +189,7 @@ def generate_final_report(interview_id: int):
             position = interview.position if interview else "지원 직무"
 
         if not transcripts:
-            logger.warning(f"⚠️ No transcripts found for Interview {interview_id}. Returning early.")
+            logger.warning("이 인터뷰에 대한 대화 내역을 찾을 수 없습니다.")
             create_or_update_evaluation_report(
                 interview_id,
                 technical_score=0, communication_score=0, cultural_fit_score=0,
@@ -240,7 +240,7 @@ def generate_final_report(interview_id: int):
             try:
                 result = parser.parse(raw_output)
             except Exception as parse_err:
-                logger.error(f"Final report parsing failed: {parse_err}")
+                logger.error(f"최종 리포트 파싱 실패: {parse_err}")
                 json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
                 if json_match:
                     result = json.loads(json_match.group())
@@ -299,7 +299,7 @@ def generate_final_report(interview_id: int):
             details_json=details
         )
         update_interview_overall_score(interview_id, score=overall)
-        logger.info(f"✅ Final Report Generated for Interview {interview_id} with Senior Persona")
+        logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
 
     except Exception as e:
         logger.error(f"❌ Error in generate_final_report: {e}")

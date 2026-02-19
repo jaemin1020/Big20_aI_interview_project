@@ -1,119 +1,127 @@
-
-from celery import shared_task
 import os
+import time
 import logging
 import base64
 import tempfile
-import soundfile as sf
-import numpy as np
-import re
+import scipy.io.wavfile as wavfile
+from abc import ABC, abstractmethod
+from celery import shared_task
 
-# Configure logging
+# 로깅 설정
 logger = logging.getLogger("TTS-Task")
 
-class SupertonicWrapper:
+class TTSBase(ABC):
+    @abstractmethod
+    def load_model(self):
+        pass
+    
+    @abstractmethod
+    def generate_speech(self, text: str, output_path: str, language: str = "Korean") -> dict:
+        pass
+
+class SupertonicTTS(TTSBase):
+    """
+    Supertonic 2 음성 합성 엔진 (한국어 자막 지원)
+    """
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self):
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+        self._initialized = True
         self.tts = None
-        try:
-            # Import supertonic directly with native class
-            from supertonic import TTS
-            
-            # Using auto_download=True to handle model management internally.
-            # This is robust because it checks the cache first, not needing redundant downloads.
-            self.tts = TTS(auto_download=True)
-            logger.info("Supertonic TTS engine initialized via Library.")
-            
-        except ImportError:
-            logger.error("supertonic package not installed. Please install it via pip install supertonic.")
-            self.tts = None
-        except Exception as e:
-            logger.error(f"Failed to initialize Supertonic TTS: {e}")
-            self.tts = None
-
-    def synthesize(self, text, output_file, speed=1.0):
-        if not self.tts:
-            logger.error("TTS Engine not loaded")
-            return False
-            
-        try:
-            # Assuming 'synthesize' or similar method exists on the TTS instance.
-            # The exact method might vary, but 'synthesize' is standard.
-            # If the library returns audio data (numpy array), handle it.
-            
-            # Note: Some libraries use generate() or speak().
-            # Based on common usage patterns and similar libs:
-            audio_data = self.tts.synthesize(text, speed=speed)
-            
-            if isinstance(audio_data, (np.ndarray, list)):
-                # Default sample rate for Supertonic is typically 24000
-                # But let's check if the tts object exposes fs or sample_rate
-                fs = getattr(self.tts, 'sample_rate', 24000) 
-                sf.write(output_file, audio_data, fs)
-            elif isinstance(audio_data, str) and os.path.exists(audio_data):
-                import shutil
-                shutil.move(audio_data, output_file)
-            else:
-                # If audio_data is something else, log it.
-                logger.warning(f"Unexpected return type from synthesis: {type(audio_data)}")
-                return False
-
+        
+    def load_model(self):
+        if self.tts is not None:
             return True
-
+            
+        try:
+            from supertonic import TTS
+            self.tts = TTS(model="supertonic-2", auto_download=True)
+            logger.info("✅ Supertonic 2 모델 로드 완료")
+            return True
         except Exception as e:
-            logger.error(f"Synthesis error: {e}")
+            logger.error(f"❌ Supertonic 2 로드 실패: {e}")
             return False
+    
+    def generate_speech(self, text: str, output_path: str, language: str = "Korean") -> dict:
+        if self.tts is None and not self.load_model():
+            return {"success": False, "error": "모델 로드 실패"}
+        
+        try:
+            gen_start = time.time()
+            lang_code = "ko" if language.lower() in ["korean", "ko"] else "en"
+            
+            # 목소리 스타일 설정 (M1: 남성 권장)
+            voice_style = self.tts.get_voice_style("M1")
+            
+            audio, _ = self.tts.synthesize(
+                text=text,
+                voice_style=voice_style,
+                lang=lang_code
+            )
+            
+            self.tts.save_audio(audio, output_path)
+            gen_time_ms = (time.time() - gen_start) * 1000
+            
+            return {
+                "success": True,
+                "output_path": output_path,
+                "duration_ms": gen_time_ms,
+                "sample_rate": self.tts.sample_rate,
+            }
+        except Exception as e:
+            logger.error(f"❌ 음성 생성 실패: {e}")
+            return {"success": False, "error": str(e)}
 
-# Global instance
+# 전역 엔진 인스턴스
 tts_engine = None
 
 def load_tts_engine():
     global tts_engine
     if tts_engine is None:
-        tts_engine = SupertonicWrapper()
+        tts_engine = SupertonicTTS()
+        tts_engine.load_model()
 
-# Initialize on module load
+# 초기화
 load_tts_engine()
 
 @shared_task(name="tasks.tts.synthesize")
 def synthesize_task(text: str, language="ko", speed=1.0):
     """
-    Synthesize text to speech returning base64 encoded audio.
+    텍스트를 음성으로 변환하여 Base64로 반환하는 Celery 태스크
     """
     global tts_engine
-    
-    if tts_engine is None or tts_engine.tts is None:
+    if tts_engine is None:
         load_tts_engine()
-        if tts_engine is None or tts_engine.tts is None:
-             return {"status": "error", "message": "TTS Engine initialization failed"}
-
+        
     temp_path = None
     try:
-        # Create temp file for output
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             temp_path = tmp.name
             
-        # [추가] [...] 형태의 태그 제거 (음성으로 읽지 않음)
-        clean_text = re.sub(r'\[.*?\]', '', text).strip()
+        result = tts_engine.generate_speech(text, temp_path, language=language)
         
-        success = tts_engine.synthesize(clean_text, temp_path, speed=speed)
-        
-        if not success:
-             return {"status": "error", "message": "Synthesis failed"}
+        if not result["success"]:
+            return {"status": "error", "message": result.get("error", "Synthesis failed")}
 
-        # Read back and encode
         with open(temp_path, "rb") as f:
-            audio_bytes = f.read()
-            audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
             
-        return {"status": "success", "audio_base64": audio_b64}
-
+        return {
+            "status": "success", 
+            "audio_base64": audio_b64,
+            "duration_ms": result.get("duration_ms")
+        }
     except Exception as e:
         logger.error(f"TTS Task Error: {e}")
         return {"status": "error", "message": str(e)}
-        
     finally:
         if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except:
-                pass
+            try: os.remove(temp_path)
+            except: pass

@@ -61,7 +61,7 @@ async def create_transcript(
                     question.rubric_json,
                     question.id
                 ],
-                queue='gpu_queue'
+                queue="gpu_queue"  # GPU 워커가 고수준 분석을 수행하도록 명시
             )
             logger.info(f"Evaluation task sent for transcript {transcript.id}")
     

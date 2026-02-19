@@ -39,7 +39,6 @@ export const login = async (username, password) => {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
     });
-
     if (response.data.access_token) {
         localStorage.setItem('token', response.data.access_token);
     }

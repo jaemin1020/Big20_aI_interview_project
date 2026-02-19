@@ -38,16 +38,24 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
 
         // Visualization Setup
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // 브라우저 정책으로 Suspended 상태일 경우 Resume
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
         analyser.smoothingTimeConstant = 0.8;
         analyser.fftSize = 1024;
 
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
+        microphone.connect(analyser); // Source -> Analyser
+
+        // ScriptProcessor 초기화 (audioLevel 갱신용)
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+        analyser.connect(javascriptNode); // Analyser -> Node
+        javascriptNode.connect(audioContext.destination); // Node -> Destination (필수)
 
         javascriptNode.onaudioprocess = () => {
           const array = new Uint8Array(analyser.frequencyBinCount);
@@ -60,8 +68,8 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
         };
 
       } catch (err) {
-        console.error("Microphone access failed:", err);
-        alert("마이크 접근이 차단되었거나 찾을 수 없습니다.");
+        console.error("❌ Microphone access failed:", err);
+        alert("마이크 접근이 차단되었거나 찾을 수 없습니다. 설정에서 권한을 확인해주세요.");
       }
     };
 
@@ -95,52 +103,61 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
 
   // 2. Recording & STT Logic
   const handleStartTest = () => {
-    if (!audioStream) return;
+    if (!audioStream) {
+      console.error("No audio stream available");
+      return;
+    }
 
     setTranscript('');
     setIsRecognitionOk(false);
     setIsRecording(true);
 
-    const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
-    mediaRecorderRef.current = mediaRecorder;
+    try {
+      const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
 
-    const chunks = [];
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
+      const chunks = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
 
-    mediaRecorder.onstop = async () => {
-      setIsProcessing(true);
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      try {
-        console.log("Sending audio for recognition...");
-        const result = await recognizeAudio(blob);
-        console.log("Recognition Result:", result);
+      mediaRecorder.onstop = async () => {
+        setIsProcessing(true);
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        try {
+          console.log("Sending audio for recognition...");
+          const result = await recognizeAudio(blob);
+          console.log("Recognition Result:", result);
 
-        if (result.text && result.text.trim()) {
-          setTranscript(result.text);
-          setIsRecognitionOk(true);
-        } else {
-          setTranscript("음성이 인식되지 않았습니다. 다시 시도해주세요.");
+          if (result.text && result.text.trim()) {
+            setTranscript(result.text);
+            setIsRecognitionOk(true);
+          } else {
+            setTranscript("음성이 인식되지 않았습니다. 다시 시도해주세요.");
+          }
+        } catch (err) {
+          console.error("STT Error:", err);
+          setTranscript("인식 오류가 발생했습니다. (서버 연결 확인 필요)");
+        } finally {
+          setIsProcessing(false);
+          setIsRecording(false); // Ensure reset
         }
-      } catch (err) {
-        console.error("STT Error:", err);
-        setTranscript("인식 오류가 발생했습니다. (서버 연결 확인 필요)");
-      } finally {
-        setIsProcessing(false);
-        setIsRecording(false); // Ensure reset
-      }
-    };
+      };
 
-    mediaRecorder.start();
+      mediaRecorder.start();
 
-    // Auto-stop after 4 seconds
-    setTimeout(() => {
-      if (mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        setIsRecording(false);
-      }
-    }, 4000);
+      // Auto-stop after 4 seconds
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+          setIsRecording(false);
+        }
+      }, 4000);
+    } catch (err) {
+      console.error("MediaRecorder Start Error:", err);
+      alert("녹음을 시작할 수 없습니다. (MediaRecorder Error)");
+      setIsRecording(false);
+    }
   };
 
   // Video Step Logic
