@@ -185,7 +185,21 @@ def synthesize_task(text: str, language="ko", speed=1.0):
             return {"status": "error", "message": result.get("error", "Synthesis failed")}
 
         with open(temp_path, "rb") as f:
-            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
+            audio_bytes = f.read()
+            audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+        # [추가] question_id가 있으면 공유 볼륨에 직접 저장 (백엔드가 이URL로 서빙)
+        if question_id is not None:
+            try:
+                import pathlib
+                tts_dir = pathlib.Path("/app/uploads/tts")
+                tts_dir.mkdir(parents=True, exist_ok=True)
+                out_path = tts_dir / f"q_{question_id}.wav"
+                with open(out_path, "wb") as f:
+                    f.write(audio_bytes)
+                logger.info(f"[TTS] 저장 완료: {out_path} ({len(audio_bytes)} bytes)")
+            except Exception as save_err:
+                logger.warning(f"[TTS] 파일 저장 실패 (무시): {save_err}")
             
         return {
             "status": "success", 

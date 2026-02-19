@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import List
 import logging
 import os
+import base64
+from pathlib import Path
 
 from database import get_session
 from db_models import (
@@ -18,9 +20,55 @@ from utils.auth_utils import get_current_user
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
 
-# Celery 설정 (main.py와 공유 필요, 또는 별도 설정 파일로 분리 추천)
-# 여기서는 동일하게 설정
+# Celery
 celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+
+# TTS 오디오 저장 디렉토리 (백엔드와 ai-worker 공유 볼륨)
+TTS_UPLOAD_DIR = Path("/app/uploads/tts")
+TTS_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# 백엔드 외부 URL (VITE_API_URL 환경변수 사용 불가 시 기본값)
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+
+
+def _fire_tts_for_question(question_id: int, question_text: str) -> None:
+    """
+    질문에 대한 TTS 태스크를 비동기로 실행하고 WAV 파일을 uploads/tts/에 저장습니다.
+    audio_url 형식: {BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav
+    """
+    filename = f"q_{question_id}.wav"
+    filepath = TTS_UPLOAD_DIR / filename
+
+    # 이미 생성된 파일이면 스킵
+    if filepath.exists():
+        return
+
+    # [...] 미리보 태그 제거 (TTS가 읽는 클린 텍스트)
+    clean_text = question_text
+    if question_text.startswith('[') and ']' in question_text:
+        parts = question_text.split(']', 1)
+        if len(parts) > 1:
+            clean_text = parts[1].strip()
+
+    try:
+        task = celery_app.send_task(
+            "tasks.tts.synthesize",
+            args=[clean_text],
+            kwargs={"language": "ko"},
+            queue="cpu_queue"
+        )
+        result = task.get(timeout=60)  # 최대 60초 대기
+        if result and result.get("status") == "success":
+            audio_b64 = result.get("audio_base64", "")
+            if audio_b64:
+                audio_bytes = base64.b64decode(audio_b64)
+                with open(filepath, "wb") as f:
+                    f.write(audio_bytes)
+                logger.info(f"[TTS] 파일 저장 완료: {filename} ({len(audio_bytes)} bytes)")
+        else:
+            logger.warning(f"[TTS] question_id={question_id} 실패: {result}")
+    except Exception as e:
+        logger.warning(f"[TTS] question_id={question_id} 생성 실패 (브라우저 TTS로 fallback): {e}")
 
 # 면접 생성
 @router.post("", response_model=InterviewResponse)
@@ -106,6 +154,19 @@ async def create_interview(
             )
             db.add(question)
             db.flush() # ID 생성을 위해 메모리 상에서만 반영
+
+            # [추가] TTS 태스크를 백그라운드에서 비동기 호출 (결과 대기 없음)
+            # 나중에 질문 조회 시 파일 존재 여부로 audio_url 제공
+            try:
+                celery_app.send_task(
+                    "tasks.tts.synthesize",
+                    args=[question_text.split(']', 1)[-1].strip() if ']' in question_text else question_text],
+                    kwargs={"language": "ko", "question_id": question.id},
+                    queue="cpu_queue"
+                )
+                logger.info(f"[TTS] question_id={question.id} TTS 태스크 fire-and-forget 전송")
+            except Exception as e:
+                logger.warning(f"[TTS] 태스크 전송 실패 (무시): {e}")
             
             # 2-2. Transcript 객체 생성
             transcript = Transcript(
@@ -226,10 +287,19 @@ async def get_interview_questions(
     ).order_by(Transcript.id)
 
     results = db.exec(stmt).all()
-    
+
     # 인터뷰 상태 정보 가져오기
     interview = db.get(Interview, interview_id)
-    
+
+    def get_audio_url(question_id: int) -> str | None:
+        """TTS 파일 존재 시 URL 반환, 없으면 None"""
+        if question_id is None:
+            return None
+        filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
+        if filepath.exists():
+            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav"
+        return None
+
     return {
         "status": interview.status if interview else "UNKNOWN",
         "questions": [
@@ -238,7 +308,7 @@ async def get_interview_questions(
                 "content": t.text,
                 "order": t.order,
                 "timestamp": t.timestamp,
-                "audio_url": None # 오디오 URL은 필요 시 Question 테이블에서 따로 가져올 수 있음
+                "audio_url": get_audio_url(t.question_id)
             }
             for t in results
         ]
@@ -519,7 +589,20 @@ async def create_realtime_interview(
             )
             db.add(question)
             db.flush() # question.id를 얻기 위해 flush
-            
+
+            # [추가] TTS 태스크 fire-and-forget
+            try:
+                clean_q = question_text.split(']', 1)[-1].strip() if ']' in question_text else question_text
+                celery_app.send_task(
+                    "tasks.tts.synthesize",
+                    args=[clean_q],
+                    kwargs={"language": "ko", "question_id": question.id},
+                    queue="cpu_queue"
+                )
+                logger.info(f"[TTS] realtime question_id={question.id} TTS 태스크 전송")
+            except Exception as e:
+                logger.warning(f"[TTS] 태스크 전송 실패 (무시): {e}")
+
             # Transcript 에 AI 발화 기록
             transcript = Transcript(
                 interview_id=new_interview.id,
@@ -529,6 +612,7 @@ async def create_realtime_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
+
         
         # 일괄 커밋
         db.commit()
