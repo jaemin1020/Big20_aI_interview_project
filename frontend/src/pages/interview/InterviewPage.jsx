@@ -57,11 +57,9 @@ const InterviewPage = ({
 
     // TTS 재생 로직 (currentIdx가 바뀔 때만 실행 - audioUrl/question 변경으로 재실행 방지)
     const playTTS = () => {
-      const currentAudioUrl = audioUrlRef.current;
-      const currentQuestion = questionRef.current;
+      console.log(`🔊 [TTS Play Attempt] URL: ${audioUrl ? 'PRESENT' : 'MISSING'}, Question: ${question?.substring(0, 30)}...`);
 
-      // 1. 서버 제공 오디오 URL이 있는 경우
-      if (currentAudioUrl) {
+      if (audioUrl) {
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
@@ -81,7 +79,13 @@ const InterviewPage = ({
         });
       }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
-      else if (currentQuestion) {
+      else if (question) {
+        console.log(`⏳ [Waiting for Server Audio] audioUrl is missing... Do NOT use fallback.`);
+        // [수정] 기계음 선점 방지를 위해 Fallback 비활성화
+        // 서버에서 생성된 음성이 올 때까지 침묵 유지 (App.jsx에서 오디오 준비 후 질문 전환)
+
+        /* 
+        console.log(`📢 [Browser Fallback] audioUrl is missing, using Web Speech API`);
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
 
@@ -103,6 +107,7 @@ const InterviewPage = ({
         } else {
           setIsTimerActive(true); // TTS 지원 안 하면 바로 시작
         }
+        */
       } else {
         setIsTimerActive(true); // 읽을 질문도 없으면 바로 시작
       }
@@ -159,31 +164,33 @@ const InterviewPage = ({
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
 
       {/* Loading Overlay */}
-      {isLoading && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '20px',
-          color: 'white'
-        }}>
-          <div className="spinner" style={{ marginBottom: '1.5rem', width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-          <h3 style={{ fontSize: '1.5rem', fontWeight: '700' }}>AI 면접관이 다음 질문을 생각 중입니다...</h3>
-          <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>이력서 내용을 바탕으로 질문을 생성하고 있습니다. 잠시만 기다려주세요.</p>
-          <style>{`
+      {
+        isLoading && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '20px',
+            color: 'white'
+          }}>
+            <div className="spinner" style={{ marginBottom: '1.5rem', width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: '700' }}>AI 면접관이 다음 질문을 생각 중입니다...</h3>
+            <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>이력서 내용을 바탕으로 질문을 생성하고 있습니다. 잠시만 기다려주세요.</p>
+            <style>{`
             @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
           `}</style>
-        </div>
-      )}
+          </div>
+        )
+      }
 
       {/* Progress Bar & Timer Container */}
       <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
