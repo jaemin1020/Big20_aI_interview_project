@@ -92,29 +92,25 @@ def generate_next_question_task(interview_id: int):
                     logger.info(f"Skipping duplicate request for interview {interview_id}")
                     return {"status": "skipped"}
 
-            # 3. 전공/직무 기반 시나리오 결정
+            # [수정] 3. 전공/직무 기반 시나리오 결정
             major = ""
             if interview.resume and interview.resume.structured_data:
                 sd = interview.resume.structured_data
                 if isinstance(sd, str):
-                    import json
                     sd = json.loads(sd)
                 edu = sd.get("education", [])
-                # education[0]은 PDF 표의 헤더 행일 수 있으므로 실제 major가 있는 첫 항목 탐색
                 major = next((e.get("major", "") for e in edu if e.get("major", "").strip()), "")
 
             is_transition = check_if_transition(major, interview.position)
             get_next_stage_func = get_next_stage_transition if is_transition else get_next_stage_normal
 
-            # [수정 핵심] 마지막 AI 발화의 question_type으로 현재 stage 판별
-            # ai-worker Transcript 모델에는 question relationship이 없고 question_id만 있으므로
-            # question_id로 Question을 직접 조회합니다.
+            # 마지막 AI 발화의 question_type으로 현재 stage 판별
             if last_ai_transcript and last_ai_transcript.question_id:
                 last_question = session.get(Question, last_ai_transcript.question_id)
                 last_stage_name = last_question.question_type if last_question else "intro"
             else:
-                last_stage_name = "intro"  # AI 발화가 없다면 intro가 끝난 직후
-            
+                last_stage_name = "intro"
+
             logger.info(f"Current stage determined: {last_stage_name} (is_transition={is_transition})")
             next_stage = get_next_stage_func(last_stage_name)
 
@@ -124,6 +120,16 @@ def generate_next_question_task(interview_id: int):
                 session.add(interview)
                 session.commit()
                 return {"status": "completed"}
+
+            # [중복 방지 개선] next_stage가 이미 생성됐는지 확인 (timestamp 기반 X → stage 기반 O)
+            # 기존 10초 체크는 사용자가 빠르게 답변하면 Q3 생성이 영원히 스킵되는 버그 발생
+            if last_ai_transcript:
+                last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
+                if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
+                    diff = (datetime.utcnow() - last_ai_transcript.timestamp).total_seconds()
+                    if diff < 30:
+                        logger.info(f"Next stage '{next_stage['stage']}' already generated {diff:.1f}s ago, skipping duplicate")
+                        return {"status": "skipped"}
 
             # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
             if next_stage.get("type") == "template":
