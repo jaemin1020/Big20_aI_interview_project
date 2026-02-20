@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import json
 import gc 
 import logging
 import torch
@@ -56,7 +57,7 @@ def generate_next_question_task(interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
-    from db import engine, Session, select, Interview, Transcript, Speaker, save_generated_question
+    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question
     from utils.exaone_llm import get_exaone_llm
     from tasks.rag_retrieval import retrieve_context
     
@@ -106,9 +107,11 @@ def generate_next_question_task(interview_id: int):
             get_next_stage_func = get_next_stage_transition if is_transition else get_next_stage_normal
 
             # [수정 핵심] 마지막 AI 발화의 question_type으로 현재 stage 판별
-            # User 답변 Transcript는 question_id가 없어 "motivation" fallback으로 잘못 분기되는 문제 수정
-            if last_ai_transcript and last_ai_transcript.question:
-                last_stage_name = last_ai_transcript.question.question_type
+            # ai-worker Transcript 모델에는 question relationship이 없고 question_id만 있으므로
+            # question_id로 Question을 직접 조회합니다.
+            if last_ai_transcript and last_ai_transcript.question_id:
+                last_question = session.get(Question, last_ai_transcript.question_id)
+                last_stage_name = last_question.question_type if last_question else "intro"
             else:
                 last_stage_name = "intro"  # AI 발화가 없다면 intro가 끝난 직후
             
@@ -122,21 +125,14 @@ def generate_next_question_task(interview_id: int):
                 session.commit()
                 return {"status": "completed"}
 
-            # 4. RAG를 통한 문맥 데이터 확보
-            query = next_stage.get("query_template", interview.position)
-            rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
-            context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
-            
-            if last_transcript and last_transcript.speaker == "User":
-                context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
-
-            # 5. 다음 stage가 template이면 LLM 없이 직접 포맷
+            # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
             if next_stage.get("type") == "template":
-                # 이력서에서 후보자 정보 추출
                 candidate_name = "지원자"
                 target_role = interview.position or "해당 직무"
                 if interview.resume and interview.resume.structured_data:
-                    sd = interview.resume.structured_data if isinstance(interview.resume.structured_data, dict) else json.loads(interview.resume.structured_data)
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str):
+                        sd = json.loads(sd)
                     candidate_name = sd.get("header", {}).get("name", "지원자")
                     target_role = sd.get("header", {}).get("target_role", target_role)
 
@@ -150,13 +146,29 @@ def generate_next_question_task(interview_id: int):
                 intro_msg = next_stage.get("intro_sentence", "")
                 display_name = next_stage.get("display_name", "면접질문")
                 final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
-                logger.info(f"Template stage '{next_stage['stage']}' → using template (no LLM)")
+                logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료 (RAG/LLM 생략)")
+
             else:
-                # 5. LLM 질문 생성
+                # 4-b. AI stage: RAG로 문맥 확보 후 LLM 생성
+                # query_template의 {target_role}, {major} 변수를 실제 값으로 치환
+                query_template = next_stage.get("query_template", interview.position)
+                try:
+                    query = query_template.format(
+                        target_role=interview.position or "해당 직무",
+                        major=major or ""
+                    )
+                except (KeyError, ValueError):
+                    query = query_template  # 치환 실패 시 원문 사용
+                rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+
+                if last_transcript and last_transcript.speaker == "User":
+                    context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
+
                 llm = get_exaone_llm()
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
                 chain = prompt | llm | StrOutputParser()
-                
+
                 final_content = chain.invoke({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
@@ -164,10 +176,11 @@ def generate_next_question_task(interview_id: int):
                 })
 
             # 6. DB 저장 (Question 및 Transcript)
+            # category가 None인 경우에도 fallback 적용 (get default는 None일 때 작동 안함)
             question_id = save_generated_question(
                 interview_id=interview_id,
                 content=final_content,
-                category=next_stage.get('category', 'general'),
+                category=next_stage.get('category') or 'behavioral',  # None → 'behavioral'
                 stage=next_stage['stage'],
                 guide=next_stage.get('guide', ''),
                 session=session
