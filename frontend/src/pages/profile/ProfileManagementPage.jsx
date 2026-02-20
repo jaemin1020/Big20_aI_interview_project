@@ -1,22 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
+import { updateUserProfile } from '../../api/interview';
 
-const ProfileManagementPage = ({ onBack, user }) => {
+const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTriggerRef }) => {
     // 프로필 이미지
     // 프로필 이미지 (백엔드 URL 또는 base64)
     const [profileImage, setProfileImage] = useState(user?.profile_image || null);
     const [imagePreview, setImagePreview] = useState(user?.profile_image || null);
 
     // 희망 지원 정보 (복수 선택)
-    const [desiredCompanyTypes, setDesiredCompanyTypes] = useState([]);
-    const [desiredPositions, setDesiredPositions] = useState([]);
+    const [desiredCompanyTypes, setDesiredCompanyTypes] = useState(user?.desired_company_types || []);
+    const [desiredPositions, setDesiredPositions] = useState(user?.desired_positions || []);
 
     // 개인 정보 (회원가입 시 입력한 정보를 기본값으로 - DB 필드명 snake_case 주의)
     const [name, setName] = useState(user?.full_name || '');
     const [birthDate, setBirthDate] = useState(user?.birth_date || '');
     const [email, setEmail] = useState(user?.email || '');
     const [phone, setPhone] = useState(user?.phone_number || '');
+
+    // 변경사항 감지: 원본 값과 현재 값 비교
+    const isDirty = useMemo(() => {
+        const origCompanyTypes = JSON.stringify([...(user?.desired_company_types || [])].sort());
+        const origPositions = JSON.stringify([...(user?.desired_positions || [])].sort());
+        const curCompanyTypes = JSON.stringify([...desiredCompanyTypes].sort());
+        const curPositions = JSON.stringify([...desiredPositions].sort());
+        return (
+            name !== (user?.full_name || '') ||
+            birthDate !== (user?.birth_date || '') ||
+            email !== (user?.email || '') ||
+            phone !== (user?.phone_number || '') ||
+            profileImage instanceof File ||
+            curCompanyTypes !== origCompanyTypes ||
+            curPositions !== origPositions
+        );
+    }, [name, birthDate, email, phone, profileImage, desiredCompanyTypes, desiredPositions, user]);
+
+
+
+    // isDirty 변화를 부모(App.jsx)에 알림
+    useEffect(() => {
+        if (onDirtyChange) onDirtyChange(isDirty);
+    }, [isDirty]);
+
+    // App.jsx의 네비게이션 가드 모달에서 호출할 저장 함수 등록
+    // 성공 시 true 반환, 실패(유효성 오류/API 오류) 시 false 반환
+    useEffect(() => {
+        if (!saveTriggerRef) return;
+        saveTriggerRef.current = async () => {
+            if (!validate()) return false;
+            try {
+                const updatedUser = await updateUserProfile({
+                    fullName: name,
+                    birthDate,
+                    email,
+                    phoneNumber: phone,
+                    profileImageFile: profileImage instanceof File ? profileImage : undefined,
+                    desiredCompanyTypes,
+                    desiredPositions,
+                });
+                if (onSave) onSave(updatedUser);
+                return true;
+            } catch (err) {
+                const msg = err.response?.data?.detail || err.message || '저장 중 오류가 발생했습니다.';
+                alert(`저장 실패: ${msg}`);
+                return false;
+            }
+        };
+    });
 
     const companyTypeOptions = [
         '대기업', '중견기업', '중소기업', '스타트업', '외국계기업', '공기업'
@@ -84,24 +135,57 @@ const ProfileManagementPage = ({ onBack, user }) => {
         }
     };
 
-    const handleSave = () => {
-        // API 호출 로직
-        const profileData = {
-            profileImage,
-            desiredCompanyTypes,
-            desiredPositions,
-            name,
-            birthDate,
-            email,
-            phone
-        };
-        console.log('저장할 프로필 데이터:', profileData);
-        alert('프로필이 저장되었습니다.');
-        // 실제 API 호출 후 onBack() 호출
+    const [isSaving, setIsSaving] = useState(false);
+    const [errors, setErrors] = useState({});
+
+    const validate = () => {
+        const newErrors = {};
+        if (!name.trim()) newErrors.name = '이름은 필수 입력 항목입니다.';
+        if (!birthDate.trim()) {
+            newErrors.birthDate = '생년월일은 필수 입력 항목입니다.';
+        } else if (birthDate.length < 10) {
+            newErrors.birthDate = '생년월일을 올바르게 입력해주세요. (예: 1990-01-01)';
+        }
+        if (!email.trim()) {
+            newErrors.email = '이메일은 필수 입력 항목입니다.';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            newErrors.email = '올바른 이메일 형식을 입력해주세요.';
+        }
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
+
+    const handleSave = async () => {
+        if (!validate()) return;
+        setIsSaving(true);
+        try {
+            const updatedUser = await updateUserProfile({
+                fullName: name,
+                birthDate,
+                email,
+                phoneNumber: phone,
+                profileImageFile: profileImage instanceof File ? profileImage : undefined,
+                desiredCompanyTypes,
+                desiredPositions,
+            });
+            // 부모(App.jsx)의 user 상태 갱신
+            if (onSave) onSave(updatedUser);
+            alert('프로필이 저장되었습니다.');
+            onBack();
+        } catch (err) {
+            console.error('프로필 저장 실패:', err);
+            const msg = err.response?.data?.detail || err.message || '저장 중 오류가 발생했습니다.';
+            alert(`저장 실패: ${msg}`);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
 
     return (
         <div className="animate-fade-in" style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
+
+
 
             {/* 1. 헤더 영역 */}
             <div style={{ marginBottom: '2rem' }}>
@@ -291,24 +375,26 @@ const ProfileManagementPage = ({ onBack, user }) => {
                         <input
                             type="text"
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: '' })); }}
                             placeholder="이름을 입력하세요"
                             style={{
                                 width: '100%',
                                 padding: '12px',
                                 borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${errors.name ? '#ef4444' : 'var(--glass-border)'}`,
+                                background: errors.name ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.05)',
                                 color: 'var(--text-main)',
-                                outline: 'none'
+                                outline: 'none',
+                                transition: 'border-color 0.2s'
                             }}
                         />
+                        {errors.name && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '6px' }}>⚠ {errors.name}</p>}
                     </div>
 
                     {/* 생년월일 */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            생년월일
+                            생년월일 <span style={{ color: '#ef4444' }}>*</span>
                         </label>
                         <input
                             type="text"
@@ -320,6 +406,7 @@ const ProfileManagementPage = ({ onBack, user }) => {
                                 else if (val.length <= 6) result = `${val.slice(0, 4)}-${val.slice(4)}`;
                                 else result = `${val.slice(0, 4)}-${val.slice(4, 6)}-${val.slice(6, 8)}`;
                                 setBirthDate(result);
+                                if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: '' }));
                             }}
                             placeholder="0000-00-00"
                             maxLength={10}
@@ -327,12 +414,14 @@ const ProfileManagementPage = ({ onBack, user }) => {
                                 width: '100%',
                                 padding: '12px',
                                 borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${errors.birthDate ? '#ef4444' : 'var(--glass-border)'}`,
+                                background: errors.birthDate ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.05)',
                                 color: 'var(--text-main)',
-                                outline: 'none'
+                                outline: 'none',
+                                transition: 'border-color 0.2s'
                             }}
                         />
+                        {errors.birthDate && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '6px' }}>⚠ {errors.birthDate}</p>}
                     </div>
 
                     {/* 이메일 */}
@@ -343,18 +432,20 @@ const ProfileManagementPage = ({ onBack, user }) => {
                         <input
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: '' })); }}
                             placeholder="example@email.com"
                             style={{
                                 width: '100%',
                                 padding: '12px',
                                 borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${errors.email ? '#ef4444' : 'var(--glass-border)'}`,
+                                background: errors.email ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.05)',
                                 color: 'var(--text-main)',
-                                outline: 'none'
+                                outline: 'none',
+                                transition: 'border-color 0.2s'
                             }}
                         />
+                        {errors.email && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '6px' }}>⚠ {errors.email}</p>}
                     </div>
 
                     {/* 연락처 */}
@@ -386,8 +477,8 @@ const ProfileManagementPage = ({ onBack, user }) => {
                 <PremiumButton variant="secondary" onClick={onBack} style={{ padding: '12px 32px' }}>
                     취소
                 </PremiumButton>
-                <PremiumButton onClick={handleSave} style={{ padding: '12px 32px' }}>
-                    저장
+                <PremiumButton onClick={handleSave} style={{ padding: '12px 32px' }} disabled={isSaving}>
+                    {isSaving ? '저장 중...' : '저장'}
                 </PremiumButton>
             </div>
 

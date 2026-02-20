@@ -84,21 +84,21 @@ async def create_interview(
 ):
     """
     면접 세션 생성 및 질문 생성
-    
+
     Args:
         interview_data (InterviewCreate): 면접 생성 정보
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         InterviewResponse: 면접 생성 정보
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
-    
+
     logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
-    
+
     # 이력서에서 지원 직무(target_role) 가져오기
     from db_models import Resume
     resume = db.get(Resume, interview_data.resume_id)
@@ -119,35 +119,35 @@ async def create_interview(
     db.add(new_interview)
     db.commit()
     db.refresh(new_interview)
-    
+
     interview_id = new_interview.id
-    
+
     logger.info(f"Interview record created: ID={interview_id} (Target Role: {target_role})")
-    
+
     # 2. 템플릿 질문 즉시 생성 (자기소개, 지원동기)
     try:
         from utils.interview_helpers import get_candidate_info, generate_template_question, check_if_transition
         candidate_info = get_candidate_info(db, interview_data.resume_id)
-        
+
         # [추가] 직무 전환 여부 확인 및 시나리오 선택
         is_transition = check_if_transition(candidate_info.get("major", ""), target_role)
-        
+
         if is_transition:
             from config.interview_scenario_transition import get_initial_stages
             logger.info(f"✨ [TRANSITION] Career change detected ({candidate_info.get('major')} -> {target_role}). Using transition scenario.")
         else:
             from config.interview_scenario import get_initial_stages
             logger.info("✅ [STANDARD] Regular career path detected. Using standard scenario.")
-            
+
         initial_stages = get_initial_stages()
-        
+
         for stage_config in initial_stages:
             question_text = generate_template_question(stage_config["template"], candidate_info)
             # [단계] 말머리 및 안내 문구 추가
             display_name = stage_config.get("display_name", "면접질문")
             intro_msg = stage_config.get("intro_sentence", "")
             question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
-            
+
             # 2-1. Question 객체 생성
             question = Question(
                 content=question_text,
@@ -172,7 +172,7 @@ async def create_interview(
                 logger.info(f"[TTS] question_id={question.id} TTS 태스크 fire-and-forget 전송")
             except Exception as e:
                 logger.warning(f"[TTS] 태스크 전송 실패 (무시): {e}")
-            
+
             # 2-2. Transcript 객체 생성
             transcript = Transcript(
                 interview_id=new_interview.id,
@@ -182,12 +182,12 @@ async def create_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
-        
+
         # 모든 질문/대화가 준비되었을 때 한꺼번에 커밋
         new_interview.status = InterviewStatus.LIVE
         db.add(new_interview)
         db.commit() # 여기서 실제 DB 저장 실행
-        
+
         logger.info(f"✅ Interview setup SUCCESS for ID={interview_id}")
 
     except Exception as e:
@@ -214,14 +214,14 @@ async def get_all_interviews(
 ):
     """
     전체 인터뷰 목록 조회
-    
+
     Args:
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         List[InterviewResponse]: 인터뷰 목록
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
@@ -231,24 +231,24 @@ async def get_all_interviews(
         ).order_by(Interview.created_at.desc())
     else:
         stmt = select(Interview).order_by(Interview.created_at.desc())
-    
+
     interviews = db.exec(stmt).all()
-    
+
     result = []
     from db_models import Company, Resume
     for interview in interviews:
         candidate = db.get(User, interview.candidate_id)
         resume = db.get(Resume, interview.resume_id) if interview.resume_id else None
         company = db.get(Company, interview.company_id) if interview.company_id else None
-        
+
         # 📄 이력서 추출 회사명 우선, 없으면 DB 회사명
         actual_company = "지원 기업"
         if resume and resume.structured_data:
             actual_company = resume.structured_data.get("header", {}).get("target_company") or actual_company
-        
+
         if (not actual_company or actual_company == "지원 기업") and company:
             actual_company = company.company_name
-            
+
         result.append({
             "id": interview.id,
             "candidate_id": interview.candidate_id,
@@ -259,7 +259,8 @@ async def get_all_interviews(
             "created_at": interview.created_at,
             "start_time": interview.start_time,
             "end_time": interview.end_time,
-            "overall_score": interview.overall_score
+            "overall_score": interview.overall_score,
+            "resume_id": interview.resume_id
         })
     return result
 
@@ -272,15 +273,15 @@ async def get_interview_questions(
 ):
     """
     면접의 질문 목록 조회
-    
+
     Args:
         interview_id (int): 면접 ID
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         List[InterviewResponse]: 면접 질문 목록
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
@@ -331,24 +332,24 @@ async def get_interview_transcripts(
 ):
     """
     면접의 전체 대화 기록 조회
-    
+
     Args:
         interview_id (int): 면접 ID
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         List[InterviewResponse]: 면접 대화 기록 목록
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id
     ).order_by(Transcript.timestamp)
-    
+
     transcripts = db.exec(stmt).all()
-    
+
     return [
         {
             "id": t.id,
@@ -370,27 +371,27 @@ async def complete_interview(
 ):
     """
     면접 완료 처리
-    
+
     Args:
         interview_id (int): 면접 ID
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         dict: 면접 완료 정보
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     interview.status = InterviewStatus.COMPLETED
     interview.end_time = datetime.utcnow()
     db.add(interview)
     db.commit()
-    
+
     celery_app.send_task(
         "tasks.evaluator.generate_final_report",
         args=[interview_id],
@@ -407,15 +408,15 @@ async def get_evaluation_report(
 ):
     """
     평가 리포트 조회
-    
+
     Args:
         interview_id (int): 면접 ID
         db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
         current_user (User, optional): 현재 사용자. Defaults to Depends(get_current_user).
-        
+
     Returns:
         EvaluationReportResponse: 평가 리포트
-    
+
     생성자: ejm
     생성일자: 2026-02-06
     """
@@ -423,12 +424,12 @@ async def get_evaluation_report(
         EvaluationReport.interview_id == interview_id
     )
     report = db.exec(stmt).first()
-    
-    
+
+
     # 🔗 데이터 원본(DB) 조회
     from db_models import Company, Resume
     interview = db.get(Interview, interview_id)
-    
+
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
 
@@ -445,12 +446,12 @@ async def get_evaluation_report(
             except: res_data = {}
         else:
             res_data = resume.structured_data
-            
+
     res_header = res_data.get("header", {})
-    
+
     cand_name = res_header.get("name") or (candidate.full_name if candidate else "지원자")
     actual_position = res_header.get("target_role") or (interview.position if interview.position != "일반" else None) or "전문 직무"
-    
+
     actual_company = res_header.get("target_company")
     if not actual_company or str(actual_company).strip() == "":
         actual_company = company.company_name if (company and company.company_name) else "지원 기업"
@@ -476,17 +477,17 @@ async def get_evaluation_report(
             "strengths": ["분석 진행 중"],
             "improvements": ["분석 진행 중"]
         }
-    
+
     # 🔄 데이터 매핑 (EvaluationReportResponse 형식에 맞춤)
     report_dict = report.dict()
     report_dict["position"] = actual_position
     report_dict["company_name"] = actual_company
     report_dict["candidate_name"] = cand_name
     report_dict["interview_date"] = interview.start_time if interview else report.created_at
-    
+
     # [핵심] AI가 분석한 상세 피드백 및 강점/보완점 필드 최상위 노출
     details = report.details_json or {}
-    
+
     # 각 피드백 필드 매핑 및 빈 값 처리
     report_dict["technical_feedback"] = details.get("technical_feedback") or report.summary_text or "기술 역량 분석 결과가 생성 중입니다."
     report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 분석 결과입니다."
@@ -494,7 +495,7 @@ async def get_evaluation_report(
     report_dict["communication_feedback"] = details.get("communication_feedback") or "의사소통 스타일에 대한 분석 결과입니다."
     report_dict["responsibility_feedback"] = details.get("responsibility_feedback") or "업무 태도 및 책임감 분석 결과입니다."
     report_dict["growth_feedback"] = details.get("growth_feedback") or "향후 발전 가능성에 대한 분석 결과입니다."
-    
+
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
 
@@ -504,7 +505,7 @@ async def get_evaluation_report(
 # 기존 main.py에서는 /transcripts 였지만 여기서는 /interviews 하위가 아님.
 # 따라서 별도 라우터(`transcripts_router`)로 분리하거나, prefix 없는 별도 라우터를 정의해야 함.
 # 편의상 여기서는 router 외에 별도 router를 정의하지 않고,
-# /transcripts 엔드포인트를 위해 APIRouter를 하나 더 만들지 않고, 
+# /transcripts 엔드포인트를 위해 APIRouter를 하나 더 만들지 않고,
 # main.py에서 transcript 관련은 별도 라우터 파일(`routes/transcripts.py`)로 빼는 게 깔끔함.
 # 일단 여기서는 Interview 관련만 처리.
 
@@ -524,9 +525,9 @@ async def create_realtime_interview(
     - 템플릿 질문 2개(자기소개, 지원동기)만 즉시 생성하여 반환
     - 대기 시간: 0초
     """
-    
+
     logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
-    
+
     # 0. 지원자 정보 조회 (이력서 기반으로 직무/이름 가져오기)
     from utils.interview_helpers import get_candidate_info
     candidate_info = get_candidate_info(db, interview_data.resume_id)
@@ -547,16 +548,16 @@ async def create_realtime_interview(
     db.commit()
     db.refresh(new_interview)
     db.flush() # ID를 얻기 위해 flush
-    
+
     logger.info(f"Realtime Interview created: ID={new_interview.id}, Candidate={candidate_name}, Target Role={target_role}")
-    
+
     # 2. 템플릿 질문 즉시 생성
     try:
         from utils.interview_helpers import generate_template_question, check_if_transition
-        
+
         # [추가] 직무 전환 여부 확인 및 시나리오 선택
         is_transition = check_if_transition(candidate_info.get("major", ""), target_role)
-        
+
         # 시나리오에서 초기 템플릿 가져오기
         try:
             if is_transition:
@@ -565,7 +566,7 @@ async def create_realtime_interview(
             else:
                 from config.interview_scenario import get_initial_stages
                 logger.info("✅ [REALTIME-STANDARD] Regular career path detected. Using standard scenario.")
-            
+
             initial_stages = get_initial_stages()
         except ImportError:
             # 폴백: 시나리오 로드 실패 시 강제 생성
@@ -574,7 +575,7 @@ async def create_realtime_interview(
                 {"stage": "intro", "display_name": "기본 질문", "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.", "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.", "order": 1},
                 {"stage": "motivation", "display_name": "기본 질문", "intro_sentence": "감사합니다. 이어서 지원하신 동기에 대해 들어보고 싶습니다.", "template": "{candidate_name} 지원자님, 지원동기 말씀해주세요.", "order": 2}
             ]
-        
+
         for stage_config in initial_stages:
             question_text = generate_template_question(
                 stage_config.get("template", "{candidate_name}님 시작해주세요."),
@@ -584,7 +585,7 @@ async def create_realtime_interview(
             display_name = stage_config.get("display_name", "면접질문")
             intro_msg = stage_config.get("intro_sentence", "")
             question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
-            
+
             # Question 저장
             question = Question(
                 content=question_text,
@@ -620,11 +621,11 @@ async def create_realtime_interview(
             )
             db.add(transcript)
 
-        
+
         # 일괄 커밋
         db.commit()
         logger.info(f"✅ Realtime interview setup SUCCESS for ID={new_interview.id}")
-        
+
     except Exception as e:
         logger.error(f"❌ Realtime interview setup FAILED: {e}")
         db.rollback()
@@ -632,7 +633,7 @@ async def create_realtime_interview(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"질문 생성 실패: {str(e)}"
         )
-    
+
     return InterviewResponse(
         id=new_interview.id,
         candidate_id=new_interview.candidate_id,
