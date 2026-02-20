@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 from celery import Celery
 from datetime import datetime, timedelta
@@ -93,6 +94,13 @@ app.include_router(stt_router)
 # 업로드 디렉토리 설정
 UPLOAD_DIR = Path("./uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# TTS 오디오 파일 디렉토리 (ai-worker와 공유 볼륨)
+TTS_DIR = Path("./uploads/tts")
+TTS_DIR.mkdir(parents=True, exist_ok=True)
+
+# [추가] /uploads/tts 정적 파일 서빙 (프론트엔드에서 audio_url로 직접 접근)
+app.mount("/uploads/tts", StaticFiles(directory=str(TTS_DIR)), name="tts_audio")
 
 @app.post("/resumes/upload", tags=["resumes"])
 async def upload_resume(

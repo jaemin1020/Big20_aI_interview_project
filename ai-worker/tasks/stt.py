@@ -37,14 +37,16 @@ def load_stt_model():
     # [문법] try-except: "일단 시도(try)해보고, 에러(Exception)나면 catch해서 처리해라"는 뜻입니다.
     # 프로그램이 에러 하나 때문에 통째로 꺼지는 것을 막아주는 안전장치입니다.
     try:
+        # 팀 공통 설정: CPU 및 int8 양자화 사용
+        # [수정] beam_size는 WhisperModel 생성자 파라미터가 아님 → transcribe() 호출 시 전달
         device = "cpu"
         compute_type = "int8"
-        
-        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on CPU...")
-        
-        # 모델 객체를 생성하여 전역 변수 stt_model에 저장합니다.
+
+        logger.info(f"🚀 [LOADING] Faster-Whisper ({MODEL_SIZE}) on CPU (compute_type=int8)...")
+
+        # 모델 로드
         stt_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
-        
+
         logger.info(f"✅ Faster-Whisper loaded successfully on CPU: {MODEL_SIZE}")
         return True
     except Exception as e:
@@ -126,8 +128,15 @@ def recognize_audio_task(audio_b64: str):
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(audio_bytes)
             input_path = tmp.name
-        
-        segments, info = stt_model.transcribe(input_path, beam_size=1, language="ko")
+
+        # [수정] vad_filter=True 추가: 무음 구간을 제거하여 처리 속도 향상
+        segments, info = stt_model.transcribe(
+            input_path,
+            beam_size=1,
+            language="ko",
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=300)
+        )
         full_text = "".join([s.text for s in segments]).strip()
         
         if any(h in full_text for h in HALLUCINATIONS) and len(full_text) < 15:

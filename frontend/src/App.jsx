@@ -93,6 +93,8 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
+  // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
+  const liveTranscriptRef = useRef('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -153,6 +155,11 @@ function App() {
     }
   }, []);
 
+  // transcript 상태 → ref 동기화 (onstop 클로저 stale 방지)
+  useEffect(() => {
+    liveTranscriptRef.current = transcript;
+  }, [transcript]);
+
   // 상태 변화 시마다 sessionStorage에 저장
   useEffect(() => {
     if (!isInitialized.current || !user) return;
@@ -171,11 +178,11 @@ function App() {
 
     // 클라이언트 사이드 유효성 검사
     if (authMode === 'register') {
-      const usernameRegex = /^[a-z0-9_]{4,12}$/;
+      const usernameRegex = /^[a-z0-9]{4,12}$/;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
       if (!usernameRegex.test(account.username)) {
-        setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+        setAuthError("아이디는 4~12자의 영문 소문자, 숫자만 가능합니다. (공백/특수문자 불가)");
         return;
       }
       if (!emailRegex.test(account.email)) {
@@ -207,17 +214,40 @@ function App() {
           return;
         }
 
+        if (account.password.length < 8) {
+          setAuthError('비밀번호는 최소 8자 이상이어야 합니다.');
+          return;
+        }
+
         if (account.password !== account.passwordConfirm) {
           setAuthError('비밀번호가 일치하지 않습니다.');
           return;
         }
+
+        if (!account.fullName) {
+          setAuthError('이름을 입력해주세요.');
+          return;
+        }
+
+        if (!account.birthDate) {
+          setAuthError('생년월일을 입력해주세요.');
+          return;
+        }
+
         if (!account.termsAgreed) {
           setAuthError('이용약관에 동의해야 합니다.');
           return;
         }
 
-        // 실제 API 호출
-        await apiRegister(account.email, account.username, account.password, account.fullName);
+        // 실제 API 호출 (생년월일, 프로필 이미지 포함)
+        await apiRegister(
+          account.email,
+          account.username,
+          account.password,
+          account.fullName,
+          account.birthDate,
+          account.profileImage
+        );
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
@@ -486,25 +516,20 @@ function App() {
         };
 
         mediaRecorder.onstop = async () => {
-          console.log('[STT] Batch recording stopped. Real-time transcript status check...');
-
-          // 실시간 자막이 이미 충분히 확보되었다면 대용량 파일 전송 스킵 (최적화)
-          if (transcript.length > 50) {
-            console.log('[STT] ✅ Real-time transcript seems sufficient. Skipping heavy batch POST.');
-            setIsLoading(false);
-            return;
-          }
+          console.log('[STT] Processing audio...');
+          setIsLoading(true);
 
           const blob = new Blob(chunks, { type: 'audio/webm' });
 
           try {
             console.log('[STT] Sending batch audio as fallback...');
             const result = await recognizeAudio(blob);
+            console.log('[STT] Recognition result:', result);
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
               setTranscript(prev => {
-                // 실시간 텍스트가 이미 더 길다면(더 많은 정보를 담고 있다면) 유지
+                // 실시간 텍스트가 이미 더 길다면 유지
                 if (prev.length > recognizedText.length) return prev;
                 return recognizedText;
               });
@@ -862,7 +887,11 @@ function App() {
         {step === 'complete' && (
           <InterviewCompletePage
             isReportLoading={isReportLoading}
-            onCheckResult={() => setStep('result')}
+            onCheckResult={() => {
+              // 면접 완료 후 바로 결과 확인: 이력에서 온 것이 아님 -> flag 제거
+              sessionStorage.removeItem('from_history');
+              setStep('result');
+            }}
             onExit={() => {
               setStep('main');
               setCurrentIdx(0); // 메인으로 돌아갈 때 질문 인덱스 초기화
@@ -892,7 +921,15 @@ function App() {
               setCurrentIdx(0);
               setReport(null);
               setSelectedInterview(null);
+              // reset flag
+              sessionStorage.removeItem('from_history');
             }}
+            onBack={
+              // history에서 왔을 때만 함수를 전달 -> ResultPage에서 버튼 표시 여부 결정
+              sessionStorage.getItem('from_history') === 'true'
+                ? () => setStep('history')
+                : null
+            }
           />
         )}
 
@@ -902,6 +939,8 @@ function App() {
             onViewResult={(reportData, interviewData) => {
               setReport(reportData);
               setSelectedInterview(interviewData);
+              // flag 설정: 이력 페이지에서 왔다
+              sessionStorage.setItem('from_history', 'true');
               setStep('result');
             }}
           />
@@ -934,4 +973,3 @@ function App() {
 }
 
 export default App;
-

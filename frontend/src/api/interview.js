@@ -17,12 +17,14 @@ api.interceptors.request.use((config) => {
 
 // ==================== Auth ====================
 
-export const register = async (email, username, password, fullName) => {
+export const register = async (email, username, password, fullName, birthDate, profileImage) => {
     const response = await api.post('/auth/register', {
         email,
         username,
         password,
         full_name: fullName,
+        birth_date: birthDate,
+        profile_image: profileImage,
         role: 'candidate'
     });
     return response.data;

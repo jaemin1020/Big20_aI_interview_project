@@ -127,10 +127,10 @@ def load_tts_engine():
 load_tts_engine()
 
 @shared_task(name="tasks.tts.synthesize")
-def synthesize_task(text: str, language="ko", speed=1.0):
+def synthesize_task(text: str, language="ko", speed=1.0, question_id: int = None):
     """
-    Celery 일꾼이 수행할 실제 작업입니다.
-    텍스트를 소리로 바꾸고, 그 결과를 텍스트(Base64)로 돌려줍니다.
+    텍스트를 음성으로 변환하여 Base64로 반환하는 Celery 태스크
+    question_id가 주어지면 /app/uploads/tts/q_{question_id}.wav 에 직접 저장
     """
     global tts_engine
     if tts_engine is None:
@@ -152,8 +152,21 @@ def synthesize_task(text: str, language="ko", speed=1.0):
         # 3. 파일을 Base64로 변환 (문자열로 만들어서 네트워크로 보내기 위함)
         # [문법] open(path, "rb"): 파일을 '이진 읽기(Read Binary)' 모드로 엽니다.
         with open(temp_path, "rb") as f:
-            # [문법] encode('utf-8'): 바이트 데이터를 일반 문자열로 바꿔서 JSON 전송이 가능하게 만듭니다.
-            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
+            audio_bytes = f.read()
+            audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+        # [추가] question_id가 있으면 공유 볼륨에 직접 저장 (백엔드가 이URL로 서빙)
+        if question_id is not None:
+            try:
+                import pathlib
+                tts_dir = pathlib.Path("/app/uploads/tts")
+                tts_dir.mkdir(parents=True, exist_ok=True)
+                out_path = tts_dir / f"q_{question_id}.wav"
+                with open(out_path, "wb") as f:
+                    f.write(audio_bytes)
+                logger.info(f"[TTS] 저장 완료: {out_path} ({len(audio_bytes)} bytes)")
+            except Exception as save_err:
+                logger.warning(f"[TTS] 파일 저장 실패 (무시): {save_err}")
             
         return {
             "status": "success", 

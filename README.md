@@ -1,11 +1,12 @@
 # 🎯 Big20 AI Interview Project
 
-**AI 기반 실시간 면접 시스템** - 맞춤형 질문 생성, 실시간 평가, 감정 분석
+**AI 기반 실시간 면접 시스템** - 맞춤형 질문 생성, 실시간 평가, 영상 기반 감정·시선 분석
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.2-61DAFB.svg)](https://reactjs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%20+%20pgvector-336791.svg)](https://www.postgresql.org/)
 
 ---
 
@@ -26,12 +27,16 @@
 
 Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스템**입니다.
 
+지원자가 웹 브라우저에서 WebRTC 기반 화상 면접을 진행하면, AI가 실시간으로 영상·음성·답변 내용을 분석하여 종합 평가 리포트를 생성합니다.
+
 ### 핵심 가치
 
-- ✅ **맞춤형 질문 생성**: 이력서와 직무 분석을 통한 개인화된 면접 질문
-- ✅ **실시간 평가**: AI 기반 답변 평가 및 즉각적인 피드백
-- ✅ **감정 분석**: 표정 및 음성 분석을 통한 종합적 평가
-- ✅ **확장 가능한 구조**: 마이크로서비스 아키텍처로 유연한 확장
+- ✅ **맞춤형 질문 생성**: 이력서·직무·회사 데이터를 종합한 RAG 기반 개인화 질문
+- ✅ **실시간 STT**: Faster-Whisper (`large-v3-turbo`) 기반 한국어 음성 인식
+- ✅ **AI 질문 음성 안내**: Supertonic-2 TTS를 통한 면접관 음성 합성
+- ✅ **영상 분석**: MediaPipe FaceLandmarker를 이용한 시선·자세·감정 실시간 분석
+- ✅ **AI 평가**: EXAONE-3.5 / Solar LLM 기반 답변 평가 및 종합 리포트
+- ✅ **확장 가능한 구조**: GPU/CPU 이중 워커 기반 마이크로서비스 아키텍처
 
 ---
 
@@ -41,59 +46,76 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 - PDF/DOCX 이력서 자동 파싱
 - 섹션별 임베딩 (경력, 프로젝트, 기술 스택 등)
-- RAG 기반 맞춤형 질문 생성
+- RAG 기반 맞춤형 질문 생성 (KURE-v1 한국어 임베딩)
+- 회사 정보 연계 질문 생성
 
 ### 2. **실시간 면접 진행**
 
 - WebRTC 기반 영상/음성 스트리밍
-- Deepgram STT (클라이언트 사이드)
-- 실시간 감정 분석 (DeepFace)
+- Faster-Whisper large-v3-turbo STT (오디오 청크 → CPU Worker)
+- Supertonic-2 TTS (질문 음성 자동 재생)
+- 실시간 시선·자세·감정 분석 (MediaPipe FaceLandmarker)
 
 ### 3. **AI 평가 시스템**
 
-- Solar-10.7B 기반 답변 평가
-- 기술적/행동적 역량 분석
-- 종합 피드백 리포트 생성
+- EXAONE-3.5 / Solar LLM 기반 답변 평가
+- 기술적/행동적/종합 역량 분석
+- PDF 다운로드 가능한 종합 평가 리포트 생성
 
-### 4. **관리자 대시보드**
+### 4. **채용 담당자 / 관리자 기능**
 
+- 지원자 이력서 벡터 유사도 검색
 - 면접 진행 상황 모니터링
-- 지원자 이력서 검색
-- 평가 결과 분석
+- 평가 결과 열람 및 관리
 
 ---
 
 ## 🏗️ 시스템 아키텍처
 
 ```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Frontend  │─────▶│ Backend-Core │─────▶│  AI-Worker  │
-│   (React)   │      │   (FastAPI)  │      │   (Celery)  │
-└─────────────┘      └──────────────┘      └─────────────┘
-       │                     │                      │
-       │                     ▼                      ▼
-       │              ┌──────────┐          ┌──────────┐
-       │              │PostgreSQL│          │  Redis   │
-       │              │ + pgvector│         │  Broker  │
-       │              └──────────┘          └──────────┘
-       │
-       ▼
-┌─────────────┐
-│Media-Server │
-│  (WebRTC)   │
-└─────────────┘
+┌─────────────┐    WebRTC/WS    ┌──────────────────┐
+│   Frontend  │◀──────────────▶│  Media-Server    │
+│  (React 18) │                │  (aiortc/FastAPI)│
+│  Port:3000  │                │  Port:8080       │
+└──────┬──────┘                └────────┬─────────┘
+       │ REST/HTTP                      │ Celery Task
+       ▼                                ▼
+┌──────────────┐    Celery     ┌─────────────────────────────┐
+│ Backend-Core │──────────────▶│       AI-Worker             │
+│  (FastAPI)   │               │  ┌──────────┐ ┌──────────┐ │
+│  Port:8000   │               │  │ GPU Worker│ │ CPU Worker│ │
+└──────┬───────┘               │  │(질문생성) │ │(STT/TTS) │ │
+       │                       │  └──────────┘ └──────────┘ │
+       ▼                       └─────────────────────────────┘
+┌──────────────┐                          │
+│  PostgreSQL  │◀─────────────────────────┘
+│  18 + pgvector│
+└──────────────┘
+       ▲
+┌──────┴───────┐
+│    Redis 7   │  (Task Broker + Result Backend)
+└──────────────┘
 ```
 
 ### 마이크로서비스 구성
 
-| 서비스                 | 역할                         | 기술 스택                    |
-| ---------------------- | ---------------------------- | ---------------------------- |
-| **Frontend**     | 사용자 인터페이스            | React, Vite, WebRTC          |
-| **Backend-Core** | API 서버, 인증, 라우팅       | FastAPI, SQLModel, JWT       |
-| **AI-Worker**    | 질문 생성, 평가, 이력서 파싱 | Celery, LangChain, Llama-3.1 |
-| **Media-Server** | 실시간 스트리밍, 감정 분석   | aiortc, DeepFace             |
-| **PostgreSQL**   | 데이터베이스 + 벡터 검색     | PostgreSQL 16 + pgvector     |
-| **Redis**        | 메시지 브로커, 캐싱          | Redis 7                      |
+| 서비스 | 역할 | 기술 스택 | 포트 |
+|--------|------|-----------|------|
+| **Frontend** | 사용자 인터페이스 | React 18, Vite, WebRTC, Deepgram SDK | 3000 |
+| **Backend-Core** | API 서버, 인증, 라우팅 | FastAPI, SQLModel, JWT | 8000 |
+| **AI-Worker (GPU)** | 질문 생성, 이력서 파싱·임베딩, 평가 | Celery, LangChain, EXAONE-3.5, KURE-v1 | - |
+| **AI-Worker (CPU)** | STT, TTS, 감정분석 위임 | Celery, Faster-Whisper, Supertonic-2 | - |
+| **Media-Server** | WebRTC 중계, 영상 분석, STT 위임 | aiortc, MediaPipe FaceLandmarker | 8080 |
+| **PostgreSQL** | 데이터베이스 + 벡터 검색 | PostgreSQL 18 + pgvector | 5432 |
+| **Redis** | 메시지 브로커, 결과 백엔드 | Redis 7 | 6379 |
+
+### AI-Worker 큐 분리 구조
+
+| 큐 이름 | 담당 Worker | 주요 Task |
+|---------|-------------|-----------|
+| `gpu_queue` | ai-worker-gpu | 질문 생성, 이력서 파싱/임베딩, 답변 평가 |
+| `cpu_queue` | ai-worker-cpu | STT (Faster-Whisper), TTS (Supertonic), 청킹 |
+| `celery` (default) | ai-worker-cpu | 기타 경량 작업 |
 
 ---
 
@@ -101,28 +123,41 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 ```
 Big20_aI_interview_project/
-├── backend-core/              # FastAPI 메인 서버
-│   ├── main.py               # API 엔드포인트
-│   ├── models.py             # DB 모델 (SQLModel)
+├── backend-core/              # FastAPI 메인 API 서버
+│   ├── main.py               # 앱 진입점, 라우터 등록
+│   ├── db_models.py          # DB 모델 (SQLModel)
 │   ├── database.py           # DB 연결 설정
-│   ├── routes/               # API 라우터 (분리 예정)
-│   │   ├── auth.py          # 인증 관련
-│   │   ├── interviews.py    # 면접 관련
-│   │   └── resumes.py       # 이력서 관련
+│   ├── exceptions.py         # 커스텀 예외 처리
+│   ├── routes/               # API 라우터
+│   │   ├── auth.py          # 인증 (JWT 토큰 발급)
+│   │   ├── users.py         # 사용자 정보
+│   │   ├── interviews.py    # 면접 생성·진행·평가
+│   │   ├── resumes.py       # 이력서 관련
+│   │   ├── transcripts.py   # 대화 기록
+│   │   ├── companies.py     # 회사 정보
+│   │   └── stt.py          # STT 위임 엔드포인트
 │   ├── utils/               # 유틸리티
 │   │   ├── auth_utils.py    # JWT, 비밀번호 해싱
-│   │   ├── rubric_generator.py  # 평가 루브릭
-│   │   └── logging_config.py    # 로깅 설정
+│   │   └── rubric_generator.py  # 평가 루브릭
+│   ├── data/                # 초기 데이터 (기업·직무 정보)
 │   └── tests/               # 테스트 코드
 │
-├── ai-worker/                # Celery Worker
+├── ai-worker/                # Celery Worker (GPU + CPU 이중 구조)
 │   ├── main.py              # Worker 실행부
-│   ├── db.py                # DB 연결 (공유 모델)
-│   ├── tasks/               # Celery Task
-│   │   ├── question_generator.py  # 질문 생성
+│   ├── db.py                # DB 연결
+│   ├── tasks/               # Celery Task 모음
+│   │   ├── question_generator.py  # 질문 생성 (EXAONE/Solar LLM)
 │   │   ├── evaluator.py          # 답변 평가
-│   │   ├── resume_parser.py      # 이력서 파싱
-│   │   └── resume_embedding.py   # 섹션별 임베딩
+│   │   ├── parse_resume.py       # 이력서 파싱 (PDF/DOCX)
+│   │   ├── resume_parser.py      # 이력서 파서 (보조)
+│   │   ├── resume_embedding.py   # 섹션별 임베딩
+│   │   ├── embedding.py          # 임베딩 Task
+│   │   ├── chunking.py           # 텍스트 청킹
+│   │   ├── rag_retrieval.py      # RAG 검색
+│   │   ├── pgvector_store.py     # pgvector 저장
+│   │   ├── stt.py               # STT (Faster-Whisper large-v3-turbo)
+│   │   ├── tts.py               # TTS (Supertonic-2)
+│   │   └── vision.py            # 감정 분석 위임
 │   ├── utils/               # 유틸리티
 │   │   ├── vector_utils.py       # 벡터 임베딩 (KURE-v1)
 │   │   ├── resume_embedder.py    # 이력서 섹션 임베딩
@@ -132,19 +167,30 @@ Big20_aI_interview_project/
 │       ├── resume_tool.py        # 이력서 검색 도구
 │       └── company_tool.py       # 회사 정보 도구
 │
-├── media-server/            # WebRTC 서버
-│   ├── main.py             # aiortc 서버
+├── media-server/            # WebRTC 미디어 서버
+│   ├── main.py             # aiortc 서버 (WebRTC, WebSocket, STT 위임)
+│   ├── vision_analyzer.py  # MediaPipe FaceLandmarker (시선·자세·감정)
+│   ├── model_repository/   # face_landmarker.task 모델 파일
 │   └── requirements.txt
 │
-├── frontend/                # React 프론트엔드
+├── frontend/                # React 18 프론트엔드 (Vite)
 │   ├── src/
-│   │   ├── components/     # UI 컴포넌트
-│   │   │   ├── AuthPage.jsx
-│   │   │   ├── InterviewPage.jsx
-│   │   │   └── ResultPage.jsx
-│   │   ├── App.jsx         # 메인 앱
-│   │   └── index.css       # 글로벌 스타일
-│   ├── public/
+│   │   ├── App.jsx         # 메인 앱 (라우팅, WebRTC, STT 통합)
+│   │   ├── index.css       # 글로벌 스타일 (Glassmorphism)
+│   │   ├── components/     # 공통 UI 컴포넌트
+│   │   ├── api/            # API 클라이언트
+│   │   └── pages/          # 페이지 컴포넌트
+│   │       ├── landing/    # 랜딩 페이지
+│   │       ├── auth/       # 로그인·회원가입
+│   │       ├── main/       # 메인 대시보드
+│   │       ├── interview/  # 면접 진행 (WebRTC + STT)
+│   │       ├── setup/      # 면접 환경 테스트
+│   │       ├── result/     # 면접 결과·평가 리포트
+│   │       ├── history/    # 면접 이력
+│   │       ├── recruiter/  # 채용 담당자 대시보드
+│   │       ├── profile/    # 사용자 프로필
+│   │       ├── settings/   # 설정
+│   │       └── about/      # 서비스 소개
 │   └── package.json
 │
 ├── docs/                    # 프로젝트 문서
@@ -152,11 +198,16 @@ Big20_aI_interview_project/
 │   ├── RESUME_EMBEDDING_GUIDE.md  # 이력서 임베딩 가이드
 │   ├── SECURITY_GUIDE.md          # 보안 가이드
 │   ├── DB_INSERT_GUIDE.md         # DB 데이터 삽입 가이드
+│   ├── STT_IMPLEMENTATION_COMPLETE.md  # STT 구현 가이드
+│   ├── LangChain_Architecture_Guide.md # LangChain 아키텍처
 │   └── TROUBLESHOOTING.md         # 문제 해결 가이드
 │
+├── infra/                   # 인프라 설정
+│   └── postgres/init.sql    # DB 초기화 스크립트
 ├── docker-compose.yml       # 서비스 오케스트레이션
-├── .env.example            # 환경 변수 예시
-└── README.md               # 프로젝트 문서 (이 파일)
+├── .env                     # 환경 변수 (Git 제외)
+├── .env.example             # 환경 변수 예시 (Git 포함)
+└── README.md                # 프로젝트 문서 (이 파일)
 ```
 
 ---
@@ -169,8 +220,8 @@ Big20_aI_interview_project/
 - **Git** 설치
 - **최소 시스템 사양**:
   - RAM: 16GB 이상
-  - GPU: NVIDIA GPU (VRAM 6GB+) 권장
-  - 디스크: 20GB 이상 여유 공간
+  - GPU: NVIDIA GPU (VRAM 8GB+) 권장 — GPU 없이도 CPU 모드로 동작 가능
+  - 디스크: 30GB 이상 여유 공간 (LLM 모델 포함)
 
 ### 2️⃣ 환경 설정
 
@@ -181,23 +232,42 @@ cd Big20_aI_interview_project
 
 # 2. 환경 변수 설정
 cp .env.example .env
+```
 
-# 3. .env 파일 편집 (API 키 입력)
-# - HUGGINGFACE_API_KEY: https://huggingface.co/settings/tokens
-# - DEEPGRAM_API_KEY: https://console.deepgram.com/
-# - DATABASE_URL: PostgreSQL 연결 정보
+`.env` 파일에서 다음 값을 설정합니다:
 
-# 4. 프론트엔드 환경 변수 설정 (선택사항)
-cp frontend/.env.example frontend/.env
-# - VITE_API_URL: 백엔드 API URL (기본값: http://localhost:8000)
-# - VITE_WS_URL: WebSocket 서버 URL (기본값: ws://localhost:8080)
-# - VITE_WEBRTC_URL: WebRTC 서버 URL (기본값: http://localhost:8080)
+```env
+# Database
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=interview_db
+DATABASE_URL=postgresql+psycopg://admin:your_password@db:5432/interview_db
+
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# AI API Keys
+HUGGINGFACE_HUB_TOKEN=hf_xxxxxxxxxxxx   # HuggingFace 모델 다운로드
+DEEPGRAM_API_KEY=xxxxxxxxxxxx            # Deepgram STT (프론트엔드용)
+
+# LangSmith (선택, 모니터링용)
+LANGCHAIN_API_KEY=ls_xxxxxxxxxxxx
+LANGCHAIN_PROJECT=Big20-AI-Interview
+
+# JWT
+SECRET_KEY=your_random_secret_key
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Frontend API URLs
+VITE_API_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8080
+VITE_WEBRTC_URL=http://localhost:8080
 ```
 
 ### 3️⃣ 서비스 실행
 
 ```bash
-# Docker Compose로 전체 서비스 시작
+# 전체 서비스 빌드 & 시작 (최초 실행 시 LLM 모델 다운로드로 수 분 소요)
 docker-compose up --build
 
 # 백그라운드 실행
@@ -206,29 +276,35 @@ docker-compose up -d
 # 로그 확인
 docker-compose logs -f
 
-# 특정 서비스 로그만 확인
-docker-compose logs -f backend-core
+# 특정 서비스 로그
+docker-compose logs -f ai-worker-cpu   # STT/TTS 워커
+docker-compose logs -f ai-worker-gpu   # 질문 생성 워커
+docker-compose logs -f media-server    # 영상 분석 서버
 ```
 
 ### 4️⃣ 서비스 접속
 
-| 서비스                 | URL                        | 설명          |
-| ---------------------- | -------------------------- | ------------- |
-| **Frontend**     | http://localhost:3000      | 웹 인터페이스 |
-| **Backend API**  | http://localhost:8000      | REST API      |
-| **API Docs**     | http://localhost:8000/docs | Swagger UI    |
-| **Media Server** | http://localhost:8080      | WebRTC 서버   |
+| 서비스 | URL | 설명 |
+|--------|-----|------|
+| **Frontend** | http://localhost:3000 | 웹 인터페이스 |
+| **Backend API** | http://localhost:8000 | REST API |
+| **API Docs (Swagger)** | http://localhost:8000/docs | 자동 생성 API 문서 |
+| **Media Server** | http://localhost:8080 | WebRTC 서버 |
+| **Media Server 상태** | http://localhost:8080/status | Vision Analyzer 상태 확인 |
 
 ### 5️⃣ 초기 데이터 설정
 
 ```bash
-# DB 초기화 및 샘플 데이터 삽입
-docker-compose exec backend-core python populate_industry_position.py
+# 산업군/직종 등 기초 데이터 삽입
+docker-compose exec backend python populate_industry_position.py
 
-# 관리자 계정 생성 (자동)
-# Username: admin
-# Password: admin1234
+# DB 스키마 확인
+docker-compose exec backend python check_db.py
 ```
+
+> **기본 계정** (DB 초기화 시 자동 생성)
+> - 관리자: `admin` / `admin1234`
+> - 채용담당자: `recruiter` / `recruiter1234`
 
 ---
 
@@ -236,34 +312,48 @@ docker-compose exec backend-core python populate_industry_position.py
 
 ### Backend
 
-- **Framework**: FastAPI 0.109+
-- **ORM**: SQLModel 0.0.14+
-- **Database**: PostgreSQL 16 + pgvector
-- **Task Queue**: Celery 5.3.6+ + Redis
-- **Authentication**: JWT (python-jose)
-- **Password Hashing**: bcrypt
+| 구성요소 | 기술 | 버전 |
+|---------|------|------|
+| Framework | FastAPI | 0.109+ |
+| ORM | SQLModel | 0.0.14+ |
+| Database | PostgreSQL + pgvector | 18 |
+| Task Queue | Celery + Redis | 5.4+ |
+| Authentication | JWT (python-jose) | 3.3+ |
+| Password | bcrypt | 4.0.1 |
 
-### AI/ML
+### AI / ML
 
-- **LLM**: Llama-3.1-8B (질문 생성), Solar-10.7B (평가)
-- **Embedding**: KURE-v1 (한국어 특화, 1024차원)
-- **Vision**: DeepFace (감정 분석)
-- **STT**: Deepgram Nova-2 (한국어 최적화)
-- **Framework**: LangChain, Transformers, PyTorch
+| 구성요소 | 기술 | 용도 |
+|---------|------|------|
+| LLM | EXAONE-3.5 / Solar-10.7B | 질문 생성·답변 평가 |
+| Embedding | KURE-v1 (1024차원) | 한국어 이력서 임베딩 |
+| STT | Faster-Whisper (`large-v3-turbo`) | 음성→텍스트 (CPU, int8 양자화) |
+| TTS | Supertonic-2 | 텍스트→음성 (한국어) |
+| Vision | MediaPipe FaceLandmarker | 시선·자세·감정 실시간 분석 |
+| RAG Framework | LangChain | 질문 생성 파이프라인 |
 
 ### Frontend
 
-- **Framework**: React 18.2
-- **Build Tool**: Vite 5.0
-- **Styling**: Vanilla CSS (Glassmorphism)
-- **HTTP Client**: Axios
-- **Real-time**: WebRTC, WebSocket
+| 구성요소 | 기술 | 버전 |
+|---------|------|------|
+| Framework | React | 18.2 |
+| Build | Vite | 5.0 |
+| Routing | React Router DOM | 6.21 |
+| HTTP | Axios | 1.6 |
+| Charts | Recharts | 2.15 |
+| PDF 출력 | jsPDF + html2canvas | - |
+| Real-time | WebRTC, WebSocket | - |
+| STT SDK | @deepgram/sdk | 3.11 |
+| Styling | Vanilla CSS (Glassmorphism) | - |
 
 ### Infrastructure
 
-- **Containerization**: Docker, Docker Compose
-- **Message Broker**: Redis 7
-- **Vector Database**: pgvector (PostgreSQL extension)
+| 구성요소 | 기술 |
+|---------|------|
+| 컨테이너 | Docker, Docker Compose |
+| 메시지 브로커 | Redis 7 |
+| 벡터 DB | pgvector (PostgreSQL extension) |
+| WebRTC | aiortc 1.14 |
 
 ---
 
@@ -275,37 +365,52 @@ docker-compose exec backend-core python populate_industry_position.py
 
 ```http
 POST /auth/register          # 회원가입
-POST /auth/token            # 로그인 (JWT 발급)
-GET  /users/me              # 현재 사용자 정보
+POST /auth/token             # 로그인 (JWT 발급)
+GET  /users/me               # 현재 사용자 정보
 ```
 
 #### 이력서 (Resumes)
 
 ```http
-POST /resumes/upload        # 이력서 업로드
-GET  /resumes/{id}          # 이력서 상태 조회
-GET  /resumes               # 이력서 목록
-POST /resumes/search        # 이력서 검색 (벡터 유사도)
+POST /resumes/upload         # 이력서 업로드 (PDF/DOCX → 자동 파싱·임베딩)
+GET  /resumes/{id}           # 이력서 상태 및 파싱 결과 조회
 ```
 
 #### 면접 (Interviews)
 
 ```http
-POST /interviews            # 면접 생성
-GET  /interviews/{id}       # 면접 정보 조회
-POST /interviews/{id}/start # 면접 시작
-POST /interviews/{id}/complete  # 면접 종료
-GET  /interviews/{id}/report    # 평가 리포트
+POST /interviews             # 면접 세션 생성
+GET  /interviews/{id}        # 면접 정보 조회
+POST /interviews/{id}/start  # 면접 시작
+POST /interviews/{id}/complete   # 면접 종료
+GET  /interviews/{id}/report     # 평가 리포트 조회
+GET  /interviews/{id}/questions  # 면접 질문 목록
+POST /interviews/{id}/next-question  # 다음 질문 생성 (AI)
 ```
 
-#### 질문 (Questions)
+#### STT (Speech-to-Text)
 
 ```http
-GET  /interviews/{id}/questions     # 면접 질문 목록
-POST /interviews/{id}/next-question # 다음 질문 생성
+POST /stt/recognize          # 오디오 파일 → 텍스트 변환 (테스트용)
 ```
 
-자세한 API 명세는 http://localhost:8000/docs 참조
+#### 회사 (Companies)
+
+```http
+GET  /companies              # 회사 목록 조회
+GET  /companies/{id}         # 회사 정보 조회
+```
+
+#### Media Server
+
+```http
+POST /offer                        # WebRTC SDP 협상
+WS   /ws/{session_id}             # WebSocket (실시간 분석 결과 수신)
+GET  /status                       # Vision Analyzer 상태 확인
+POST /stt/recognize                # STT 테스트 (미디어 서버)
+```
+
+> 전체 API 명세: http://localhost:8000/docs (Swagger UI)
 
 ---
 
@@ -325,7 +430,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # 의존성 설치
 pip install -r requirements.txt
 
-# 개발 서버 실행
+# 개발 서버 실행 (Redis, DB는 Docker로 실행 필요)
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -341,96 +446,88 @@ npm install
 npm run dev
 ```
 
+#### AI Worker 개발
+
+```bash
+cd ai-worker
+
+# GPU Worker 실행 (질문 생성)
+celery -A main.app worker --loglevel=info -Q gpu_queue --pool=solo
+
+# CPU Worker 실행 (STT/TTS)
+celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=solo
+```
+
 ### 테스트 실행
 
 ```bash
 # Backend 테스트
 cd backend-core
-pytest tests/ -v --cov=.
+pytest tests/ -v
 
-# 특정 테스트만 실행
-pytest tests/test_auth.py -v
+# DB 상태 확인
+python check_db.py
+
+# 면접 데이터 확인
+python check_interview_data.py
 ```
 
-### 코드 품질 체크
+### 도커 개별 서비스 재빌드
 
 ```bash
-# Python 문법 체크
-python -m py_compile backend-core/main.py
+# 특정 서비스만 재빌드
+docker-compose up --build media-server
 
-# 전체 Python 파일 체크
-find . -name "*.py" -exec python -m py_compile {} \;
+# AI Worker CPU만 재시작
+docker-compose restart ai-worker-cpu
 ```
 
 ---
 
-## 📊 DB 스키마
+## 📊 DB 스키마 요약
 
 ### 주요 테이블
 
-#### Users (사용자)
-
-- 지원자, 채용담당자, 관리자 정보
-- JWT 인증 기반
-
-#### Resumes (이력서)
-
-- 파일 정보, 파싱 상태
-- structured_data (JSONB): 파싱된 정보
-
-#### ResumeSectionEmbedding (섹션별 임베딩)
-
-- 경력, 프로젝트, 자기소개 등 섹션별 벡터
-- pgvector 기반 유사도 검색
-
-#### ResumeChunk (청크 임베딩)
-
-- 500자 단위 텍스트 청크
-- 일반 RAG 검색용
-
-#### Interviews (면접)
-
-- 면접 세션 정보
-- 상태 관리 (scheduled, live, completed)
-
-#### Questions (질문)
-
-- AI 생성 질문
-- 재사용 통계 (usage_count, avg_score)
-
-#### Transcripts (대화 기록)
-
-- 실시간 대화 내용
-- 감정 분석 결과
-
-#### EvaluationReport (평가 리포트)
-
-- 종합 평가 결과
-- 기술적/행동적 점수
+| 테이블 | 설명 |
+|--------|------|
+| `users` | 지원자·채용담당자·관리자 계정 (JWT 인증) |
+| `resumes` | 이력서 파일 및 파싱 결과 (structured_data JSONB) |
+| `resumesectionembedding` | 섹션별 벡터 (pgvector, KURE-v1 1024차원) |
+| `resumechunk` | 텍스트 청크 임베딩 (RAG 검색용) |
+| `interviews` | 면접 세션 (scheduled → live → completed) |
+| `questions` | AI 생성 질문 (재사용 통계 포함) |
+| `transcripts` | 면접 대화 기록 |
+| `evaluationreport` | 종합 평가 리포트 (기술·행동·영상 분석 점수) |
+| `companies` | 회사 정보 |
 
 ---
 
 ## 🔒 보안
 
-자세한 보안 가이드는 [`docs/SECURITY_GUIDE.md`](docs/SECURITY_GUIDE.md) 참조
+자세한 보안 가이드: [`docs/SECURITY_GUIDE.md`](docs/SECURITY_GUIDE.md)
 
 ### 핵심 보안 사항
 
-- ✅ `.env` 파일은 Git에 커밋하지 않기
+- ✅ `.env` 파일은 Git에 커밋하지 않기 (`.gitignore` 설정 확인)
 - ✅ API 키를 코드에 하드코딩하지 않기
-- ✅ JWT Secret Key는 강력한 랜덤 문자열 사용
+- ✅ JWT Secret Key는 강력한 랜덤 문자열 사용 (`openssl rand -hex 32`)
 - ✅ 프로덕션 환경에서는 HTTPS 강제
 - ✅ 비밀번호는 bcrypt로 해싱
+- ✅ Deepgram API 키는 프론트엔드 환경 변수로만 노출 (서버사이드 사용 지양)
 
 ---
 
 ## 📖 추가 문서
 
-- [시스템 명세서](docs/SYSTEM_SPECIFICATION.md)
-- [이력서 임베딩 가이드](docs/RESUME_EMBEDDING_GUIDE.md)
-- [DB 데이터 삽입 가이드](docs/DB_INSERT_GUIDE.md)
-- [문제 해결 가이드](docs/TROUBLESHOOTING.md)
-- [보안 가이드](docs/SECURITY_GUIDE.md)
+| 문서 | 내용 |
+|------|------|
+| [시스템 명세서](docs/SYSTEM_SPECIFICATION.md) | 전체 시스템 설계 명세 |
+| [이력서 임베딩 가이드](docs/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 파이프라인 |
+| [LangChain 아키텍처](docs/LangChain_Architecture_Guide.md) | 질문 생성 LangChain 구조 |
+| [STT 구현 가이드](docs/STT_IMPLEMENTATION_COMPLETE.md) | Faster-Whisper STT 설정 |
+| [DB 데이터 삽입 가이드](docs/DB_INSERT_GUIDE.md) | 초기 데이터 설정 |
+| [보안 가이드](docs/SECURITY_GUIDE.md) | 보안 설정 가이드 |
+| [문제 해결 가이드](docs/TROUBLESHOOTING.md) | 주요 이슈 및 해결 방법 |
 
 ---
 
@@ -438,11 +535,11 @@ find . -name "*.py" -exec python -m py_compile {} \;
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+3. Commit your Changes — 커밋 컨벤션 형식 준수
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-커밋 메시지는 [`commit_convention.md`](commit_convention.md) 참조
+커밋 메시지 규칙은 [`commit_convention.md`](commit_convention.md) 참조
 
 ---
 
@@ -458,10 +555,4 @@ This project is licensed under the MIT License
 
 ---
 
-## 📞 문의
-
-프로젝트 관련 문의사항은 Issue를 통해 남겨주세요.
-
----
-
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-02-19
