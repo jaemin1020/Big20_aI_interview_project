@@ -17,7 +17,6 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.contrib.media import MediaRelay
 from celery import Celery
 import av
-import numpy as np  # [수정] RMS 무음 감지에 사용
 from vision_analyzer import VisionAnalyzer  # [NEW] MediaPipe Vision Analyzer
 import io  # [NEW] 오디오 버퍼링용
 
@@ -25,6 +24,7 @@ import io  # [NEW] 오디오 버퍼링용
 # aiortc/aioice는 기본적으로 random port(0)를 사용하므로, 이를 Docker가 매핑한 50000-50050 범위로 강제함
 import socket
 import random
+import numpy as np # [NEW] 오디오 분석을 위한 NumPy (가벼운 연산용)
 
 original_socket_bind = socket.socket.bind
 
@@ -108,33 +108,14 @@ async def background_init_analyzer():
 # 2. Celery 설정
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
-celery_app.conf.update(
-    broker_connection_retry_on_startup=True,
-    redis_backend_health_check_interval=30,  # 연결 안정성 확보
-)
 
 # 3. 연결 관리 (세션별 WebSocket 및 PeerConnection 저장)
 active_websockets: Dict[str, WebSocket] = {}
 active_pcs: Dict[str, RTCPeerConnection] = {}
 active_video_tracks: Dict[str, 'VideoAnalysisTrack'] = {}
-active_analysis_tasks: Dict[str, asyncio.Task] = {}
-ws_locks: Dict[str, asyncio.Lock] = {} # [추가] 웹소켓 동시 전송 방지용 락
+active_analysis_tasks: Dict[str, asyncio.Task] = {}  # [추가] 분석 루프 태스크 관리
 
-async def send_to_websocket(session_id: str, data: dict):
-    """WebSocket으로 데이터 전송 (Lock을 사용하여 동시 전송 충돌 방지)"""
-    ws = active_websockets.get(session_id)
-    if not ws:
-        return
-    
-    # 세션별 락 가져오기
-    if session_id not in ws_locks:
-        ws_locks[session_id] = asyncio.Lock()
-    
-    async with ws_locks[session_id]:
-        try:
-            await ws.send_json(data)
-        except Exception as e:
-            logger.error(f"[{session_id}] WebSocket 전송 실패: {e}")
+class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
     kind = "video"
 
@@ -155,6 +136,9 @@ async def send_to_websocket(session_id: str, data: dict):
         
         # [신규] 전체 면접 통합 데이터 버켓 (모든 프레임 누적)
         self.session_all_data = self._get_empty_q_data()
+        
+        # [신규] 오디오 자신감 점수 누적 리스트 (최종 리포트용)
+        self.audio_scores = []
         
         # 실시간 로그 쿨타임
         self.last_log_time = 0
@@ -273,13 +257,80 @@ async def send_to_websocket(session_id: str, data: dict):
         print(f"⏱️ 총 질문 수: {len(self.questions_history) + 1}개")
         print(f"⏱️ 분석 기간: {int(time.time() - self.session_started_at)}초 / {s['total_frames']} frames")
         print("-" * 50)
-        print("🧮 [영상분석] 전체 평균 채점 내역:")
-        print(f"   1. 자신감(미소) : {s['avg_smile']:5.1f}점 x 0.3 = {s['score_conf']:4.1f}점")
-        print(f"   2. 시선집중     : {s['gaze_ratio']:5.1f}점 x 0.3 = {s['score_focus']:4.1f}점")
-        print(f"   3. 자세안정     : {s['posture_ratio']:5.1f}점 x 0.2 = {s['score_posture']:4.1f}점")
-        print(f"   4. 정서안정     : {100-s['avg_anxiety']:5.1f}점 x 0.2 = {s['score_emotion']:4.1f}점")
+        # [NEW] 오디오 자신감 최종 리포트 합산 (Video + Audio)
+        # 사용자 요청 가중치: 시선(30), 음성(30), 미소(15), 자세(15), 정서(10)
+        
+        final_audio_score = 0
+        audio_feedback = "(데이터 없음)"
+
+        if self.audio_scores:
+            final_audio_score = sum(self.audio_scores) / len(self.audio_scores)
+            if final_audio_score >= 70:
+                audio_feedback = "👍 아주 좋습니다! (자신감 넘침)"
+            elif final_audio_score >= 60:
+                audio_feedback = "👌 안정적입니다. (무난함)"
+            else:
+                audio_feedback = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+        
+        # 영상 점수는 이미 s 딕셔너리에 계산되어 있음 (단, 가중치 재조정 필요)
+        # 기존: 미소(30), 시선(30), 자세(20), 정서(20) -> 합 100
+        # 변경: 미소(15), 시선(30), 자세(15), 정서(10) + 음성(30) -> 합 100
+        
+        # 영상 원본 점수(Raw Score) 역산 또는 재사용
+        # s['avg_smile'] 등은 40~100으로 보정된 값임. 이를 그대로 재사용
+        
+        w_smile = 0.15
+        w_gaze = 0.30
+        w_posture = 0.15
+        w_emotion = 0.10
+        w_audio = 0.30
+        
+        # 재계산 (Weighted Sum)
+        new_overall_score = (
+            (s['avg_smile'] * w_smile) + 
+            (s['gaze_ratio'] * w_gaze) + 
+            (s['posture_ratio'] * w_posture) + 
+            ((100 - s['avg_anxiety']) * 0.10) +  # 정서안정 원본 값 사용 주의 (100 - anxiety)
+            (final_audio_score * w_audio)
+        )
+        # 중요: 정서안정(anxiety)은 낮을수록 좋으므로 (100-anxiety) 점수를 씀.
+        # 위 코드에서 s['score_emotion'] 계산 시 이미 보정 들어갔지만, 여기선 원본 비율로 다시 계산함이 정확함.
+        # 편의상 s['avg_smile'] 등은 이미 40~100 보정된 값이므로 그대로 씀. 
+        # 단, 정서안정은 s['avg_anxiety']가 %값이므로 (100 - s['avg_anxiety']) * 0.6 + 40 공식 적용 필요.
+        # 위 _calculate_scores 함수에서 adj_emotion을 이미 계산했으므로 그걸 쓰는게 안전.
+        
+        # 안전한 재계산 (이미 보정된 40~100점 스케일 점수들 사용)
+        # adj_smile, adj_focus(gaze), adj_posture, adj_emotion
+        # _calculate_scores 리턴값 딕셔너리 구조를 보면:
+        # "avg_smile": adj_smile, "gaze_ratio": adj_focus, "posture_ratio": adj_posture
+        # "score_conf": adj_smile * 0.3 ... 이런 식임.
+        
+        # 따라서 딕셔너리의 'avg_smile', 'gaze_ratio' 등은 이미 adj_된(보정된) 값임.
+        # 정서안정은 주의: s['avg_anxiety']는 Raw Anxiety임. 
+        # adj_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40  <- 이 로직이 맞음. 
+        # _calculate_scores에서 adj값을 다 리턴해주지는 않고 섞여있음. 다시 계산하자.
+        
+        val_smile = s['avg_smile'] # 이미 보정됨
+        val_gaze = s['gaze_ratio'] # 이미 보정됨
+        val_posture = s['posture_ratio'] # 이미 보정됨
+        val_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40 # 수동 보정
+        
+        ultimate_score = (
+            (val_smile * 0.15) + 
+            (val_gaze * 0.30) + 
+            (val_posture * 0.15) + 
+            (val_emotion * 0.10) + 
+            (final_audio_score * 0.30)
+        )
+
+        print(f"   1. 시선집중     : {val_gaze:5.1f}점 x 0.30 = {val_gaze*0.30:4.1f}점")
+        print(f"   2. 음성자신감   : {final_audio_score:5.1f}점 x 0.30 = {final_audio_score*0.30:4.1f}점 | {audio_feedback}")
+        print(f"   3. 미소(자신감) : {val_smile:5.1f}점 x 0.15 = {val_smile*0.15:4.1f}점")
+        print(f"   4. 자세안정     : {val_posture:5.1f}점 x 0.15 = {val_posture*0.15:4.1f}점")
+        print(f"   5. 정서안정     : {val_emotion:5.1f}점 x 0.10 = {val_emotion*0.10:4.1f}점")
+        
         print(f"   -------------------------------------------")
-        print(f"   ∑ 최종 종합 합계: {s['overall_score']:.1f}점")
+        print(f"   ∑ 최종 종합 합계: {ultimate_score:.1f}점 (Audio & Video 통합)")
         print("="*50 + "\n")
 
     async def process_vision(self, frame, timestamp_ms):
@@ -319,24 +370,12 @@ async def send_to_websocket(session_id: str, data: dict):
                     print(f"📊 [{self.session_id}] 영상 캡처 시작 (전체 세션 분석 중...)", flush=True)
 
                 current_time = time.time()
-                # [수정] 감지된 경우에도 2초마다 웹소켓 전송 (HUD 업데이트용)
                 if current_time - self.last_log_time > 2.0:
                     self.last_log_time = current_time
                     s = self._calculate_scores(self.session_all_data)
                     labels = result["labels"]
-                    # [사용자 컨펌용 로그]
+                    # [사용자 컨펌용 포맷]
                     print(f"[{self.session_id}] {self.current_q_index}번 질문 | [실시간 종합점수: {s['overall_score']:5.1f}점] | 👀 시선: {labels['gaze']:8} | 👤 자세: {labels['posture']:12} | 😊 미소: {int(result['scores']['smile']*100):3}%", flush=True)
-                    
-                    # [추가] 실시간 HUD 데이터 전송
-                    await send_to_websocket(self.session_id, {
-                        "type": "vision_analysis",
-                        "data": {
-                            "gaze": result["flags"]["is_center"], # 프론트엔드 기대 포맷으로 가공
-                            "posture": result["labels"]["posture"],
-                            "emotion": result["labels"]["emotion"],
-                            "scores": result["scores"]
-                        }
-                    })
             else:
                 # 얼굴 미감지 시에도 5초마다 로그 출력
                 current_time = time.time()
@@ -345,9 +384,11 @@ async def send_to_websocket(session_id: str, data: dict):
                     status = result.get("status", "unknown") if result else "no_result"
                     print(f"❓ [{self.session_id}] 얼굴 인식 대기 중... (상태: {status})", flush=True)
 
-                    await send_to_websocket(self.session_id, {
+                ws = active_websockets.get(self.session_id)
+                if ws:
+                    await send_to_websocket(ws, {
                         "type": "vision_analysis",
-                        "data": result if result else {"status": "not_detected"},
+                        "data": result,
                         "timestamp": current_time
                     })
         except Exception as e:
@@ -426,111 +467,114 @@ async def send_to_websocket(ws: WebSocket, data: dict):
 # WebRTC 오디오 스트림 -> WAV 파일 변환 -> AI Worker로 전송
 async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
-
-    # [개선] 2초 단위 청크 (1초는 인식률 저하, 큐 적체 유발)
-    CHUNK_THRESHOLD = 100  # 20ms * 100 = 2000ms (~2초)
-    # [개선] 동시 처리 태스크 제한: Worker(solo pool)가 한 번에 1개만 처리하므로
-    # MAX_PENDING=2로 설정: 처리 중 1개 + 대기 1개 (=1이면 30~148s 동안 모든 청크 폐기됨)
-    MAX_PENDING = 2
+    
+    # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
+    CHUNK_DURATION_MS = 3000 
     accumulated_frames = []
-    # [수정] list로 감싸서 중첩 async 함수 클로저에서 안전하게 변경 가능하게 함
-    pending_stt = [0]  # pending_stt[0] = 현재 처리 중인 STT 태스크 수
-
+    accumulated_time = 0
+    
     try:
         while True:
+            # 1. 오디오 프레임 수신
             frame = await track.recv()
             accumulated_frames.append(frame)
-
-            if len(accumulated_frames) < CHUNK_THRESHOLD:
-                continue
-
-            # --- 청크 준비 완료 ---
-
-            # [개선 1] Worker 큐 적체 방지: 이전 태스크가 아직 처리 중이면 이 청크 폐기
-            if pending_stt[0] >= MAX_PENDING:
-                logger.debug(f"[{session_id}] ⏭️ STT 큐 적체 회피: 청크 폐기 (pending={pending_stt[0]})")
-                accumulated_frames = []
-                continue
-
-            # WAV 변환 (In-Memory)
-            output_buffer = io.BytesIO()
-            output_container = av.open(output_buffer, mode='w', format='wav')
-            output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
-
-            for f in accumulated_frames:
-                for packet in output_stream.encode(f):
+            
+            # 프레임 시간 누적 (packet.duration 사용하거나 개수로 추정)
+            # 보통 Opus 프레임은 20ms or 60ms
+            # 여기서는 프레임 개수로 대략적인 시간 계산 (50개 = 약 1초 가정)
+            # 정확성을 위해 av.AudioFrame.time 사용 가능하지만 단순화
+            if len(accumulated_frames) >= 150: # 약 3초 (20ms * 150 = 3000ms)
+                
+                # 2. WAV 변환 (In-Memory)
+                # av 라이브러리의 Output Container 사용
+                output_buffer = io.BytesIO()
+                output_container = av.open(output_buffer, mode='w', format='wav')
+                output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+                
+                for f in accumulated_frames:
+                    # 리샘플링 및 패킷 작성
+                    for packet in output_stream.encode(f):
+                        output_container.mux(packet)
+                        
+                # 3. 마무리 (Flush)
+                for packet in output_stream.encode(None):
                     output_container.mux(packet)
-            for packet in output_stream.encode(None):
-                output_container.mux(packet)
-            output_container.close()
+                output_container.close()
+                
+                # 4. Base64 인코딩
+                wav_bytes = output_buffer.getvalue()
+                audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
 
-            wav_bytes = output_buffer.getvalue()
-
-            # [개선 2] 무음 감지: RMS 에너지가 기준 이하이면 Worker에 보내지 않음
-            try:
-                import wave as wave_module
-                with wave_module.open(io.BytesIO(wav_bytes), 'rb') as wf:
-                    raw = wf.readframes(wf.getnframes())
-                    rms = np.sqrt(np.mean(np.frombuffer(raw, dtype=np.int16).astype(np.float32) ** 2))
-                if rms < 80:  # 무음 임계값 (실경험 기반: 80 이하 = 사실상 무음)
-                    logger.info(f"[{session_id}] 🔇 무음 청크(RMS={rms:.1f}), 전송 스킵")
-                    accumulated_frames = []
-                    continue
-                logger.info(f"[{session_id}] 🔊 발화 청크 감지(RMS={rms:.1f}), 전송 진행")
-            except Exception as e:
-                logger.warning(f"[{session_id}] RMS 계산 실패, 전송 진행: {e}")
-
-            audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
-
-            # Celery Task 전송
-            task = celery_app.send_task(
-                "tasks.stt.recognize",
-                args=[audio_b64],
-                queue="cpu_queue"
-            )
-            pending_stt[0] += 1
-            logger.info(f"[{session_id}] 📤 STT 청크 전송 ({len(wav_bytes)} bytes, pending={pending_stt[0]})")
-
-            # 비대기 결과 수신 및 WebSocket 중계
-            async def wait_and_relay(celery_task, sid):
+                # [NEW] 오디오 자신감 분석 (NumPy RMS Volume & Density)
+                # --------------------------------------------------------------------------------
                 try:
-                    loop = asyncio.get_event_loop()
-                    start_time = time.time()
-                    is_ready = False
-                    while time.time() - start_time < 20:
-                        is_ready = await loop.run_in_executor(None, celery_task.ready)
-                        if is_ready:
-                            break
-                        await asyncio.sleep(0.3)
+                    # 1. 버퍼에서 바이트 데이터를 가져와서 NumPy 배열로 변환 (int16 -> float32)
+                    #    Normalize: -32768 ~ 32767 범위를 -1.0 ~ 1.0 으로 변환하여 계산하기 쉽게 만듦
+                    #    (예외처리: 데이터가 비어있거나 깨졌을 경우를 대비해 try-except 블록 사용)
+                    audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-                    if is_ready:
-                        result = await loop.run_in_executor(None, lambda: celery_task.result)
-                        if result and result.get("status") == "success":
-                            text = result.get("text", "").strip()
-                            if text:
-                                ws = active_websockets.get(sid)
-                                if ws:
-                                    await send_to_websocket(ws, {
-                                        "type": "stt_result",
-                                        "text": text
-                                    })
-                                    logger.info(f"[{sid}] 🎤 자막 전송 성공: {text[:40]}...")
-                                else:
-                                    logger.warning(f"[{sid}] WebSocket 종료됨, 자막 전송 스킵")
-                    else:
-                        logger.warning(f"[{sid}] STT 타임아웃 (20s 초과)")
+                    # [중요] 침묵 감지 (Silence Detection)
+                    # RMS가 너무 낮으면(0.005 이하), 사용자가 고민 중이거나 듣고 있는 상태이므로
+                    # 자신감 점수를 계산하지 않고 건너뜀 (Skip) -> 평균 점수 하락 방지
+                    if len(audio_np) > 0:
+                        volume_rms = np.sqrt(np.mean(audio_np**2))
+                        
+                        # [변경] 침묵 감지 기준 상향 (0.005 -> 0.02)
+                        # 작은 잡음이나 숨소리(Thinking Time)는 점수 집계에서 제외하여 평균 점수 하락 방지
+                        if volume_rms > 0.02:
+                            # 2. 성량(Volume) 분석
+                            volume_score = min(volume_rms * 500, 100) 
+
+                            # 3. 발화 밀도(Speed/Density) 분석
+                            threshold = 0.05
+                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
+                            speed_score = min(speaking_ratio * 200, 100)
+
+                            # 4. 최종 자신감 점수 합산
+                            confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
+
+                            # [NEW] 점수 구간별 피드백
+                            if confidence_score >= 70:
+                                feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
+                            elif confidence_score >= 60:
+                                feedback_msg = "👌 안정적입니다. (무난함)"
+                            else:
+                                feedback_msg = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+
+                            logger.info(
+                                f"[{session_id}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
+                                f"(🔊성량: {volume_score:4.1f}점/RMS:{volume_rms:.4f}, "
+                                f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
+                            )
+                            
+                            # [NEW] 최종 리포트를 위해 점수 누적
+                            if session_id in active_video_tracks:
+                                track_instance = active_video_tracks[session_id]
+                                track_instance.audio_scores.append(confidence_score)
+                        else:
+                            # 침묵 상황 (로그 생략 가능하지만 디버깅 위해 남김)
+                            # logger.debug(f"[{session_id}] 🤫 침묵 감지됨 (RMS: {volume_rms:.5f}) - 점수 반영 제외")
+                            pass
+
+
                 except Exception as e:
-                    if "closed file" not in str(e).lower():
-                        logger.error(f"[{sid}] STT 결과 중계 실패: {e}")
-                finally:
-                    pending_stt[0] -= 1
-                    try:
-                        celery_task.forget()
-                    except:
-                        pass
-
-            asyncio.create_task(wait_and_relay(task, session_id))
-            accumulated_frames = []
+                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
+                except Exception as e:
+                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
+                # --------------------------------------------------------------------------------
+                
+                # 5. Celery Task 배달 (AI Worker에게)
+                # 결과값은 비동기로 처리되므로, 여기서는 '보냈다'는 사실만 중요
+                celery_app.send_task(
+                    "tasks.stt.recognize",
+                    args=[audio_b64],
+                    queue="cpu_queue" # [수정] STT는 CPU 워커가 처리하도록 변경
+                )
+                
+                logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
+                
+                # 버퍼 초기화
+                accumulated_frames = []
 
     except Exception as e:
         logger.info(f"[{session_id}] STT 스트림 종료: {e}")
@@ -609,7 +653,7 @@ def force_localhost_candidate(sdp_str):
 async def offer(request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    session_id = str(params.get("session_id", "unknown")) # 무조건 문자열로 변환
+    session_id = params.get("session_id", "unknown")
     
     print(f"📨 [{session_id}] Received Offer SDP (First 500 chars): {params['sdp'][:500]}...", flush=True)
 
