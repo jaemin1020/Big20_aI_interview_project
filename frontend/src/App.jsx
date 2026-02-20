@@ -1033,6 +1033,7 @@ function App() {
         {step === 'settings' && (
           <AccountSettingsPage
             onBack={() => setStep('main')}
+            onLogout={handleLogout}
           />
         )}
 

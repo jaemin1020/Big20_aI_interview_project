@@ -40,8 +40,8 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, unique=True)
-    username: str = Field(index=True, unique=True)
+    email: str = Field(index=True)          # unique 제약 제거 → 탈퇴 후 재가입 허용
+    username: str = Field(index=True)       # unique 제약 제거 → 탈퇴 후 재가입 허용
     role: UserRole = Field(default=UserRole.CANDIDATE)
     password_hash: str
     full_name: Optional[str] = None
@@ -58,9 +58,14 @@ class User(SQLModel, table=True):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # 탈퇴 처리 (soft delete)
+    is_withdrawn: bool = Field(default=False)
+    withdrawn_at: Optional[datetime] = Field(default=None)
+
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="candidate")
     resumes: List["Resume"] = Relationship(back_populates="candidate")
+
 
 class Resume(SQLModel, table=True):
     """이력서 테이블"""

@@ -165,3 +165,15 @@ export const updateUserProfile = async ({ fullName, birthDate, email, phoneNumbe
     });
     return response.data;
 };
+
+export const changePassword = async (newPassword) => {
+    const response = await api.patch('/auth/password', null, {
+        params: { new_password: newPassword }
+    });
+    return response.data;
+};
+
+export const withdrawUser = async () => {
+    const response = await api.delete('/auth/withdraw');
+    return response.data;
+};

@@ -14,6 +14,23 @@ const AuthPage = ({
   const fileInputRef = useRef(null);
 
   const [isDragging, setIsDragging] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [showPwConfirm, setShowPwConfirm] = useState(false);
+
+  const getPasswordStrength = (pw) => {
+    if (!pw) return null;
+    let score = 0;
+    if (pw.length >= 8) score++;
+    if (pw.length >= 12) score++;
+    if (/[a-zA-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^a-zA-Z0-9]/.test(pw)) score++;
+    if (score <= 2) return { label: '약함', color: '#ef4444', width: '33%' };
+    if (score <= 3) return { label: '보통', color: '#f59e0b', width: '66%' };
+    return { label: '강함', color: '#22c55e', width: '100%' };
+  };
+
+  const pwStrength = authMode === 'register' ? getPasswordStrength(account.password) : null;
 
   const handleFile = (file) => {
     if (file) {
