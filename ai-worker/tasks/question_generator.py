@@ -114,7 +114,7 @@ def generate_next_question_task(self, interview_id: int):
 
     )
     from utils.exaone_llm import get_exaone_llm
-    from tasks.tts import synthesize  # [추가] TTS 생성을 위해 임포트
+    from tasks.tts import synthesize_task  # [수정] 정확한 태스크 함수명 임포트
     
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -442,7 +442,7 @@ def generate_next_question_task(self, interview_id: int):
             # [핵심 추가] 질문 저장 후 전용 TTS 생성 태스크 즉시 트리거
             if q_id:
                 logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
-                synthesize.delay(final_content, language="auto", question_id=q_id)
+                synthesize_task.delay(final_content, language="auto", question_id=q_id)
 
             return {"status": "success", "stage": stage_name, "question": final_content}
         except Exception as e:
