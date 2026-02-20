@@ -63,8 +63,10 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
         # 교육 정보에서 전공 추출
         major = ""
         education = data.get("education", [])
-        if education and isinstance(education, list) and len(education) > 0:
-            major = education[0].get("major", "")
+        if education and isinstance(education, list):
+            # [수정] education[0]은 PDF 표의 헤더 행일 수 있으므로
+            # major가 실제로 채워진 첫 번째 항목을 찾습니다.
+            major = next((e.get("major", "") for e in education if e.get("major", "").strip()), "")
         
         return {
             "candidate_name": header.get("name", "지원자"),
