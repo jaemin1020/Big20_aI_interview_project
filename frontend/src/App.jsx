@@ -178,11 +178,11 @@ function App() {
 
     // 클라이언트 사이드 유효성 검사
     if (authMode === 'register') {
-      const usernameRegex = /^[a-z0-9_]{4,12}$/;
+      const usernameRegex = /^[a-z0-9]{4,12}$/;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
       if (!usernameRegex.test(account.username)) {
-        setAuthError("아이디는 4~12자의 영문 소문자, 숫자, 밑줄(_)만 가능합니다.");
+        setAuthError("아이디는 4~12자의 영문 소문자, 숫자만 가능합니다. (공백/특수문자 불가)");
         return;
       }
       if (!emailRegex.test(account.email)) {
@@ -214,17 +214,40 @@ function App() {
           return;
         }
 
+        if (account.password.length < 8) {
+          setAuthError('비밀번호는 최소 8자 이상이어야 합니다.');
+          return;
+        }
+
         if (account.password !== account.passwordConfirm) {
           setAuthError('비밀번호가 일치하지 않습니다.');
           return;
         }
+
+        if (!account.fullName) {
+          setAuthError('이름을 입력해주세요.');
+          return;
+        }
+
+        if (!account.birthDate) {
+          setAuthError('생년월일을 입력해주세요.');
+          return;
+        }
+
         if (!account.termsAgreed) {
           setAuthError('이용약관에 동의해야 합니다.');
           return;
         }
 
-        // 실제 API 호출
-        await apiRegister(account.email, account.username, account.password, account.fullName);
+        // 실제 API 호출 (생년월일, 프로필 이미지 포함)
+        await apiRegister(
+          account.email,
+          account.username,
+          account.password,
+          account.fullName,
+          account.birthDate,
+          account.profileImage
+        );
         alert('회원가입 성공! 로그인해주세요.');
         setAuthMode('login');
       }
@@ -493,25 +516,15 @@ function App() {
         };
 
         mediaRecorder.onstop = async () => {
-          console.log('[STT] Batch recording stopped. Real-time transcript status check...');
-
-          // [수정] stale closure 문제 해결:
-          // transcript(state)는 녹음 시작 시점('')으로 고정되어 항상 폴백이 실행됐음.
-          // liveTranscriptRef.current는 항상 최신값을 반영하므로 정확하게 판단 가능.
-          const currentLiveText = liveTranscriptRef.current;
-          console.log(`[STT] Live transcript length at stop: ${currentLiveText.length} chars`);
-
-          if (currentLiveText.length > 50) {
-            console.log('[STT] ✅ Real-time transcript sufficient. Skipping batch POST.');
-            setIsLoading(false);
-            return;
-          }
+          console.log('[STT] Processing audio...');
+          setIsLoading(true);
 
           const blob = new Blob(chunks, { type: 'audio/webm' });
 
           try {
             console.log('[STT] Sending batch audio as fallback...');
             const result = await recognizeAudio(blob);
+            console.log('[STT] Recognition result:', result);
 
             if (result.text && result.text.trim()) {
               const recognizedText = result.text.trim();
@@ -874,7 +887,11 @@ function App() {
         {step === 'complete' && (
           <InterviewCompletePage
             isReportLoading={isReportLoading}
-            onCheckResult={() => setStep('result')}
+            onCheckResult={() => {
+              // 면접 완료 후 바로 결과 확인: 이력에서 온 것이 아님 -> flag 제거
+              sessionStorage.removeItem('from_history');
+              setStep('result');
+            }}
             onExit={() => {
               setStep('main');
               setCurrentIdx(0); // 메인으로 돌아갈 때 질문 인덱스 초기화
@@ -904,7 +921,15 @@ function App() {
               setCurrentIdx(0);
               setReport(null);
               setSelectedInterview(null);
+              // reset flag
+              sessionStorage.removeItem('from_history');
             }}
+            onBack={
+              // history에서 왔을 때만 함수를 전달 -> ResultPage에서 버튼 표시 여부 결정
+              sessionStorage.getItem('from_history') === 'true'
+                ? () => setStep('history')
+                : null
+            }
           />
         )}
 
@@ -914,6 +939,8 @@ function App() {
             onViewResult={(reportData, interviewData) => {
               setReport(reportData);
               setSelectedInterview(interviewData);
+              // flag 설정: 이력 페이지에서 왔다
+              sessionStorage.setItem('from_history', 'true');
               setStep('result');
             }}
           />
@@ -946,4 +973,3 @@ function App() {
 }
 
 export default App;
-
