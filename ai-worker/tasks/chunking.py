@@ -103,3 +103,4 @@ def chunk_resume(parsed_data):
 if __name__ == "__main__":
     # [해석] 실제 실행하면 파싱 결과를 'chunked_result.json'이라는 파일로 저장해줍니다.
     # 그래야 개발자가 눈으로 조각이 잘 났는지 확인할 수 있으니까요.
+    pass

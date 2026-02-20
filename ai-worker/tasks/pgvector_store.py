@@ -105,3 +105,4 @@ def store_embeddings(resume_id, embedded_chunks):
 if __name__ == "__main__":
     # ... (생략) ...
     # 실제 실행 시 store_embeddings(resume_id=1, ...)을 통해 DB에 최종 저장됩니다.
+    pass

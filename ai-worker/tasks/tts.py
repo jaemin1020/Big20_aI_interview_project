@@ -170,7 +170,7 @@ def synthesize_task(text: str, language="ko", speed=1.0, question_id: int = None
             
         return {
             "status": "success", 
-            "audio_base64": audio_b64,
+            "audio_base64": audio_b64 if question_id is None else f"{audio_b64[:50]}... (saved to disk)",
             "duration_ms": result.get("duration_ms")
         }
     except Exception as e:

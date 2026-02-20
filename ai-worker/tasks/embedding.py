@@ -96,3 +96,4 @@ def embed_chunks(chunks):
 if __name__ == "__main__":
     # 이전 단계(파싱, 청킹) 모듈들을 가져와서 전체 파이프라인이 잘 돌아가는지 확인합니다.
     # (실제 서비스에서는 이 부분이 아니라 Celery Task가 이 역할을 대신합니다.)
+    pass
