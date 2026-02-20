@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle, hideMenuButtons = false }) => {
+const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle, hideMenuButtons = false }) => {
   const [activeMenu, setActiveMenu] = React.useState(null); // 'manage', 'myinfo', null
 
   // Close dropdowns when clicking outside
@@ -77,6 +77,14 @@ const Header = ({ onLogout, showLogout = false, onLogoClick, isInterviewing = fa
           </div>
         )}
       </div>
+
+      {isInterviewing && userName && (
+        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', marginRight: '1rem', letterSpacing: '-0.02em' }}>
+            {userName} 지원자 님
+          </span>
+        </div>
+      )}
 
       {!showLogout && !isInterviewing && !isComplete && (
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>

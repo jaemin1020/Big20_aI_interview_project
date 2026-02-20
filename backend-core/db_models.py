@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Column, Relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT
 from pgvector.sqlalchemy import Vector  # pgvector 지원
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -40,18 +40,32 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, unique=True)
-    username: str = Field(index=True, unique=True)
+    email: str = Field(index=True)          # unique 제약 제거 → 탈퇴 후 재가입 허용
+    username: str = Field(index=True)       # unique 제약 제거 → 탈퇴 후 재가입 허용
     role: UserRole = Field(default=UserRole.CANDIDATE)
     password_hash: str
     full_name: Optional[str] = None
     birth_date: Optional[str] = None
+    phone_number: Optional[str] = None
     profile_image: Optional[str] = None
+    desired_company_types: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(ARRAY(TEXT))
+    )
+    desired_positions: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(ARRAY(TEXT))
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # 탈퇴 처리 (soft delete)
+    is_withdrawn: bool = Field(default=False)
+    withdrawn_at: Optional[datetime] = Field(default=None)
 
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="candidate")
     resumes: List["Resume"] = Relationship(back_populates="candidate")
+
 
 class Resume(SQLModel, table=True):
     """이력서 테이블"""
@@ -121,7 +135,6 @@ class Company(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="company")
 
@@ -315,6 +328,7 @@ class InterviewResponse(SQLModel):
     start_time: Optional[datetime]
     end_time: Optional[datetime]
     overall_score: Optional[float]
+    resume_id: Optional[int] = None
 
 class TranscriptCreate(SQLModel):
     """대화 기록 생성 요청"""
@@ -333,13 +347,13 @@ class EvaluationReportResponse(SQLModel):
     summary_text: Optional[str]
     details_json: Optional[Dict[str, Any]]
     created_at: datetime
-    
+
     # [추가] 리포트 표시용 정보
     position: Optional[str] = None
     company_name: Optional[str] = None
     candidate_name: Optional[str] = None
     interview_date: Optional[datetime] = None
-    
+
     # [추가] 상세 피드백 필드 (details_json 파싱 결과)
     technical_feedback: Optional[str] = None
     experience_feedback: Optional[str] = None
@@ -347,6 +361,6 @@ class EvaluationReportResponse(SQLModel):
     communication_feedback: Optional[str] = None
     responsibility_feedback: Optional[str] = None
     growth_feedback: Optional[str] = None
-    
+
     strengths: Optional[List[str]] = None
     improvements: Optional[List[str]] = None

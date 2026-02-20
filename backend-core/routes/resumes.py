@@ -34,7 +34,7 @@ async def upload_resume(
 ):
     """
     이력서 PDF 업로드
-    
+
     - 파일 저장
     - DB 레코드 생성
     - 비동기 파싱 작업 전송
@@ -45,23 +45,23 @@ async def upload_resume(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="PDF 파일만 업로드 가능합니다."
         )
-    
+
     # 파일 크기 검증 (10MB 제한)
     file.file.seek(0, 2)  # 파일 끝으로 이동
     file_size = file.file.tell()
     file.file.seek(0)  # 파일 처음으로 복귀
-    
+
     if file_size > 10 * 1024 * 1024:  # 10MB
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="파일 크기는 10MB 이하여야 합니다."
         )
-    
+
     # 파일 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_filename = f"{user.id}_{timestamp}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, safe_filename)
-    
+
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -72,7 +72,7 @@ async def upload_resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="파일 저장 중 오류가 발생했습니다."
         )
-    
+
     # DB 레코드 생성
     resume = Resume(
         candidate_id=user.id,
@@ -81,13 +81,13 @@ async def upload_resume(
         file_size=file_size,
         processing_status="pending"
     )
-    
+
     db.add(resume)
     db.commit()
     db.refresh(resume)
-    
+
     logger.info(f"Resume {resume.id} 생성 완료")
-    
+
     # 비동기 파싱 및 처리 파이프라인 전송 (Celery)
     try:
         celery_app.send_task(
@@ -99,7 +99,7 @@ async def upload_resume(
     except Exception as e:
         logger.error(f"Celery 작업 전송 실패: {e}")
         # 실패해도 레코드는 생성됨 (나중에 재처리 가능)
-    
+
     return {
         "resume_id": resume.id,
         "file_name": file.filename,
@@ -117,20 +117,20 @@ async def get_resume(
 ):
     """이력서 조회"""
     resume = db.get(Resume, resume_id)
-    
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="이력서를 찾을 수 없습니다."
         )
-    
+
     # 권한 확인 (본인 또는 관리자만)
     if resume.candidate_id != user.id and user.role != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="권한이 없습니다."
         )
-    
+
     return {
         "id": resume.id,
         "file_name": resume.file_name,
@@ -141,6 +141,42 @@ async def get_resume(
         "has_structured_data": resume.structured_data is not None,
         "structured_data": resume.structured_data if resume.processing_status == "completed" else None
     }
+
+from fastapi.responses import FileResponse
+
+@router.get("/{resume_id}/pdf")
+async def get_resume_pdf(
+    resume_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """이력서 실제 PDF 파일 다운로드 및 조회"""
+    resume = db.get(Resume, resume_id)
+
+    if not resume or not resume.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="이력서를 찾을 수 없습니다."
+        )
+
+    # 권한 확인 (본인 또는 관리자만)
+    if resume.candidate_id != user.id and user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다."
+        )
+
+    if not os.path.exists(resume.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="이력서 파일을 서버에서 찾을 수 없습니다."
+        )
+
+    return FileResponse(
+        path=resume.file_path,
+        filename=resume.file_name,
+        media_type="application/pdf"
+    )
 
 
 @router.get("/user/{user_id}")
@@ -156,14 +192,14 @@ async def get_user_resumes(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="권한이 없습니다."
         )
-    
+
     stmt = select(Resume).where(
         Resume.candidate_id == user_id,
         Resume.is_active == True
     ).order_by(Resume.uploaded_at.desc())
-    
+
     resumes = db.exec(stmt).all()
-    
+
     return {
         "user_id": user_id,
         "total": len(resumes),
@@ -187,20 +223,20 @@ async def reprocess_resume(
 ):
     """이력서 재처리"""
     resume = db.get(Resume, resume_id)
-    
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="이력서를 찾을 수 없습니다."
         )
-    
+
     # 권한 확인
     if resume.candidate_id != user.id and user.role != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="권한이 없습니다."
         )
-    
+
     # 재처리 작업 전송
     try:
         celery_app.send_task(
@@ -208,12 +244,12 @@ async def reprocess_resume(
             args=[resume_id, resume.file_path],
             queue='gpu_queue'
         )
-        
+
         # 상태 업데이트
         resume.processing_status = "pending"
         db.add(resume)
         db.commit()
-        
+
         return {
             "resume_id": resume_id,
             "status": "pending",
@@ -235,25 +271,25 @@ async def delete_resume(
 ):
     """이력서 삭제 (soft delete)"""
     resume = db.get(Resume, resume_id)
-    
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="이력서를 찾을 수 없습니다."
         )
-    
+
     # 권한 확인
     if resume.candidate_id != user.id and user.role != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="권한이 없습니다."
         )
-    
+
     # Soft delete
     resume.is_active = False
     db.add(resume)
     db.commit()
-    
+
     return {
         "resume_id": resume_id,
         "message": "이력서가 삭제되었습니다."
