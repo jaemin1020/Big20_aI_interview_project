@@ -102,52 +102,110 @@ def parse_resume_final(input_source):
                 row_text = get_row_text(row)
                 safe_row = [clean_text(c) if c else "" for c in row]
                 
-                # [해석] "학력"이라는 단어가 나오면 지금부터 나오는 줄들은 다 "education"에 저장해! 라고 깃발을 꽂는 겁니다.
+                # [해석] 섹션 전환 깃발 꽂기
                 if any(kw in row_text for kw in ["학력", "Education"]): current_section = "education"; continue
-                elif any(kw in row_text for kw in ["경력", "경험", "활동", "Work", "Experience"]): current_section = "activities"; continue
-                elif any(kw in row_text for kw in ["수상", "Awards"]): current_section = "awards"; continue
+                elif any(kw in row_text for kw in ["경력", "경험", "활동", "Work", "Experience"]): 
+                    # 만약 현재 줄에 '수상'이나 '공모전' 단어가 포함되어 있다면 수상 섹션으로 양보합니다.
+                    if any(kw in row_text for kw in ["수상", "공모전", "대회", "Awards"]):
+                        current_section = "awards"
+                    else:
+                        current_section = "activities"
+                    continue
+                elif any(kw in row_text for kw in ["수상", "Awards", "상훈", "공모전", "대회"]): current_section = "awards"; continue
                 elif any(kw in row_text for kw in ["자격증", "Certifications", "License"]): current_section = "certifications"; continue
                 elif any(kw in row_text for kw in ["프로젝트", "Projects"]): current_section = "projects"; continue
 
-                # 실제 데이터 매핑 (비어있는 행은 무시)
-                if not any(safe_row): continue
+                # 실제 데이터 매핑 (비어있는 행이나 템플릿 가이드 텍스트 무시)
+                # [수정] 학력 헤더 행("재학기간", "학교명") 및 활동 헤더 행도 함께 제외
+                if not any(safe_row) or any(kw in row_text for kw in ["개최명", "상세내용", "활동내용", "재학기간", "학교명및전공", "학교명"]):
+                    continue
 
                 if current_section == "education" and len(safe_row) >= 2:
                     period = safe_row[0]
                     val1 = safe_row[1]
                     if is_date(val1) or "고등학교" in val1: continue # 고등학교 정보는 제외하는 필터링
                     
-                    # [문법] re.split: -, ㅡ 같은 다양한 기호를 기준으로 학교명과 전공을 쪼갭니다.
-                    parts = re.split(r'[—ㅡ\-]', val1)
-                    school = parts[0].strip()
-                    major = parts[1].strip() if len(parts) > 1 else ""
-                    
-                    # 만약 전공이 비어 있고 3번째 칸이 있다면 그걸 전공으로 간주해봅니다.
+                    major = ""
                     gpa = ""
-                    if not major and len(safe_row) > 2:
-                        major = safe_row[2]
-                        gpa = safe_row[3] if len(safe_row) > 3 else ""
-                    else:
-                        gpa = safe_row[2] if len(safe_row) > 2 else ""
+                    # 1. 학교명/전공 쪼개기 시도
+                    parts = re.split(r'[—ㅡ\-\(\)]', val1)
+                    school = parts[0].strip()
+                    if len(parts) > 1: major = parts[1].strip()
+                    
+                    # 2. 나머지 칸에서 전공/학점 보강
+                    for cell in safe_row[2:]:
+                        if not cell: continue
+                        if any(kw in cell for kw in ["학과", "학부", "전공"]):
+                            major = cell.replace("학과", "").replace("전공", "").replace("학부", "").strip()
+                        elif re.search(r'\d\.\d|\d+/\d+', cell):
+                            gpa = cell
+                        elif not major and not re.search(r'\d', cell):
+                            major = cell
+                    
+                    # 3. 뒤늦게라도 학점이 발견되지 않았다면 4번째 칸 시도 (기존 호환성)
+                    if not gpa and len(safe_row) > 3: gpa = safe_row[3]
                     
                     data["education"].append({
                         "period": period, "school_name": school, "major": major, "gpa": gpa
                     })
 
                 elif current_section == "activities" and len(safe_row) >= 2:
-                    # [기간 | 기관/회사 | 역할 | 상세내용] 구조 대응
-                    data["activities"].append({
-                        "period": safe_row[0],
-                        "organization": safe_row[1],
-                        "role": safe_row[2] if len(safe_row) > 2 else "",
-                        "description": safe_row[3] if len(safe_row) > 3 else ""
-                    })
+                    period = safe_row[0]
+                    org = safe_row[1]
+                    role = safe_row[2] if len(safe_row) > 2 else ""
+                    desc = safe_row[3] if len(safe_row) > 3 else ""
+                    
+                    # [보강] 단일 셀 복합 정보 쪼개기 (예: 개최명 - 점수 (기간))
+                    combined_text = org
+                    if " - " in combined_text or "(" in combined_text:
+                        # 1. 날짜 추출
+                        date_match = re.search(r'\(([^)]*\d{4}[^)]*)\)', combined_text)
+                        if date_match:
+                            extracted_date = date_match.group(1).strip()
+                            if not is_date(period): period = extracted_date
+                            combined_text = combined_text.replace(date_match.group(0), "").strip()
+                        
+                        # 2. 개최명/점수 쪼개기
+                        parts = re.split(r' [—ㅡ\-\:] | - ', combined_text)
+                        if len(parts) >= 2:
+                            org = parts[0].strip()
+                            if not role: role = parts[1].strip()
+
+                    # 수상 관련 텍스트가 경력으로 들어오지 못하게 한 번 더 체크
+                    if any(kw in row_text for kw in ["수상", "장려상", "우수상", "최우수상", "대상", "공모전"]):
+                        data["awards"].append({
+                            "date": period,
+                            "title": org,
+                            "organization": role
+                        })
+                    else:
+                        data["activities"].append({
+                            "period": period,
+                            "organization": org,
+                            "role": role,
+                            "description": desc
+                        })
 
                 elif current_section == "awards" and len(safe_row) >= 2:
+                    date = safe_row[0]
+                    title = safe_row[1]
+                    org = safe_row[2] if len(safe_row) > 2 else ""
+
+                    # [보강] 단일 셀 복합 정보 쪼개기
+                    if " - " in title or "(" in title:
+                        date_match = re.search(r'\(([^)]*\d{4}[^)]*)\)', title)
+                        if date_match:
+                            extracted_date = date_match.group(1).strip()
+                            if not is_date(date): date = extracted_date
+                            title = title.replace(date_match.group(0), "").strip()
+                        
+                        parts = re.split(r' [—ㅡ\-\:] | - ', title)
+                        if len(parts) >= 2:
+                            title = parts[0].strip()
+                            if not org: org = parts[1].strip()
+
                     data["awards"].append({
-                        "date": safe_row[0],
-                        "title": safe_row[1],
-                        "organization": safe_row[2] if len(safe_row) > 2 else ""
+                        "date": date, "title": title, "organization": org
                     })
 
                 elif current_section == "certifications" and len(safe_row) >= 2:

@@ -23,7 +23,7 @@ INTERVIEW_STAGES = [
         "intro_sentence": "감사합니다. 이어서 지원하신 동기에 대해 들어보고 싶습니다.",
         "type": "template",
         "template": "{candidate_name} 지원자님, 지원하신 직무인 '{target_role}'에 지원하게 된 동기는 무엇입니까? 또한 {major}을 전공하셨는데 어떤 계기로 {target_role}에 관심을 갖게 되셨나요?",
-        "variables": ["candidate_name", "target_role"],
+        "variables": ["candidate_name", "target_role", "major"],
         "order": 2
     },
     
