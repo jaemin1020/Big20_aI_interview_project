@@ -470,13 +470,8 @@ async def get_evaluation_report(
             "interview_id": interview_id,
             "technical_score": 0, "communication_score": 0, "cultural_fit_score": 0,
             "summary_text": "AI가 현재 면접 내용을 상세 분석하고 있습니다. 잠시만 기다려 주세요.",
-<<<<<<< HEAD
             "details_json": {},          # ← required 필드 추가
             "created_at": now,           # ← required 필드 추가
-=======
-            "details_json": {},
-            "created_at": datetime.utcnow(),
->>>>>>> main
             "position": actual_position,
             "company_name": actual_company,
             "candidate_name": cand_name,
