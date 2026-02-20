@@ -54,17 +54,12 @@ def _fire_tts_for_question(question_id: int, question_text: str) -> None:
         task = celery_app.send_task(
             "tasks.tts.synthesize",
             args=[clean_text],
-            kwargs={"language": "ko"},
+            kwargs={"language": "ko", "question_id": question_id},
             queue="cpu_queue"
         )
-        result = task.get(timeout=60)  # 최대 60초 대기
+        result = task.get(timeout=60)
         if result and result.get("status") == "success":
-            audio_b64 = result.get("audio_base64", "")
-            if audio_b64:
-                audio_bytes = base64.b64decode(audio_b64)
-                with open(filepath, "wb") as f:
-                    f.write(audio_bytes)
-                logger.info(f"[TTS] 파일 저장 완료: {filename} ({len(audio_bytes)} bytes)")
+            logger.info(f"✅ [TTS] 음성 파일 생성 완료: {filename}")
         else:
             logger.warning(f"[TTS] question_id={question_id} 실패: {result}")
     except Exception as e:

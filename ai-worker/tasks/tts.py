@@ -195,6 +195,7 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
             return {"status": "error", "message": result.get("error", "Synthesis failed")}
 
         logger.info(f"✅ 음성 합성 완료 (소요시간: {result.get('duration_ms', 0):.2f}ms)")
+        logger.info(f"📖 [TTS 읽는 텍스트]: {text}")
 
         with open(temp_path, "rb") as f:
             audio_bytes = f.read()
@@ -215,7 +216,7 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
             
         return {
             "status": "success", 
-            "audio_base64": audio_b64,
+            "audio_base64": audio_b64[:100] + "...(truncated for log visibility)",
             "duration_ms": result.get("duration_ms")
         }
     except Exception as e:
