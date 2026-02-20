@@ -227,7 +227,8 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
             
         return {
             "status": "success", 
-            "audio_base64": audio_b64,
+            # "audio_base64": audio_b64,  # 로그 스팸 방지를 위해 제거 (파일로 저장됨)
+            "audio_size_bytes": len(audio_bytes),
             "duration_ms": result.get("duration_ms")
         }
     except Exception as e:
