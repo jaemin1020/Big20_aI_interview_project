@@ -61,19 +61,17 @@ def _fire_tts_for_question(question_id: int, question_text: str) -> None:
             clean_text = parts[1].strip()
 
     try:
-        task = celery_app.send_task(
+        # [fire-and-forget] TTS 태스크는 파일을 직접 저장하므로 결과를 기다릴 필요 없음
+        # task.get(timeout=60)을 제거 → Q1→Q2 전환 즉시 가능
+        celery_app.send_task(
             "tasks.tts.synthesize",
             args=[clean_text],
             kwargs={"language": "ko", "question_id": question_id},
             queue="cpu_queue"
         )
-        result = task.get(timeout=60)
-        if result and result.get("status") == "success":
-            logger.info(f"✅ [TTS] 음성 파일 생성 완료: {filename}")
-        else:
-            logger.warning(f"[TTS] question_id={question_id} 실패: {result}")
+        logger.info(f"🔊 [TTS] 비동기 음성 생성 요청 완료: {filename} (백그라운드 처리 중)")
     except Exception as e:
-        logger.warning(f"[TTS] question_id={question_id} 생성 실패 (브라우저 TTS로 fallback): {e}")
+        logger.warning(f"[TTS] question_id={question_id} 생성 요청 실패: {e}")
 
 # 면접 생성
 @router.post("", response_model=InterviewResponse)
@@ -297,15 +295,22 @@ async def get_interview_questions(
     # 인터뷰 상태 정보 가져오기
     interview = db.get(Interview, interview_id)
 
-    def get_audio_url(question_id: int) -> str | None:
-        """TTS 파일 존재 시 URL 반환, 없으면 None"""
+    def get_audio_url(question_id: int, question_text: str) -> str | None:
+        """TTS 파일 존재 시 URL 반환, 없으면 TTS 트리거 후 None 반환"""
         if question_id is None:
             return None
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
         if filepath.exists():
-            # [수정] 브라우저 캐싱(특히 파일 생성 전 404 캐싱) 방지를 위해 타임스탬프 추가
+            # 브라우저 캐싱 방지를 위해 타임스탬프 추가
             timestamp = int(datetime.now().timestamp())
             return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
+        # 파일 없으면 비동기로 TTS 생성 트리거 (fire-and-forget)
+        import threading
+        threading.Thread(
+            target=_fire_tts_for_question,
+            args=(question_id, question_text),
+            daemon=True
+        ).start()
         return None
 
     return {
@@ -316,7 +321,7 @@ async def get_interview_questions(
                 "content": t.text,
                 "order": t.order,
                 "timestamp": t.timestamp,
-                "audio_url": get_audio_url(t.question_id)
+                "audio_url": get_audio_url(t.question_id, t.text)
             }
             for t in results
         ]
@@ -464,6 +469,8 @@ async def get_evaluation_report(
             "interview_id": interview_id,
             "technical_score": 0, "communication_score": 0, "cultural_fit_score": 0,
             "summary_text": "AI가 현재 면접 내용을 상세 분석하고 있습니다. 잠시만 기다려 주세요.",
+            "details_json": {},
+            "created_at": datetime.utcnow(),
             "position": actual_position,
             "company_name": actual_company,
             "candidate_name": cand_name,
