@@ -55,6 +55,38 @@ def init_db():
             # 테이블 생성
             SQLModel.metadata.create_all(engine)
             
+            # [추가] DB 스키마 자동 보정 (Alembic 생략 시 땜질 처방)
+            with engine.connect() as conn:
+                # 1. users 테이블 컬럼 확인
+                user_cols = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users'")).fetchall()
+                existing_cols = [c[0] for c in user_cols]
+                
+                if 'birth_date' not in existing_cols:
+                    logger.info("➕ users 테이블에 birth_date 컬럼 추가 중...")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN birth_date VARCHAR"))
+                
+                if 'profile_image' not in existing_cols:
+                    logger.info("➕ users 테이블에 profile_image 컬럼 추가 중...")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN profile_image VARCHAR"))
+                
+                # 2. interviews 테이블 컬럼 확인
+                iv_cols = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='interviews'")).fetchall()
+                existing_iv_cols = [c[0] for c in iv_cols]
+                
+                if 'emotion_summary' not in existing_iv_cols:
+                    logger.info("➕ interviews 테이블에 emotion_summary 컬럼 추가 중...")
+                    conn.execute(text("ALTER TABLE interviews ADD COLUMN emotion_summary JSONB"))
+                
+                # 3. evaluation_reports 테이블 컬럼 확인
+                report_cols = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='evaluation_reports'")).fetchall()
+                existing_report_cols = [c[0] for c in report_cols]
+                
+                if 'details_json' not in existing_report_cols:
+                    logger.info("➕ evaluation_reports 테이블에 details_json 컬럼 추가 중...")
+                    conn.execute(text("ALTER TABLE evaluation_reports ADD COLUMN details_json JSONB"))
+
+                conn.commit()
+
             # 연결 확인용 간단한 쿼리 실행
             with Session(engine) as session:
                 session.exec(text("SELECT 1"))

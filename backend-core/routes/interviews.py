@@ -460,6 +460,8 @@ async def get_evaluation_report(
             "company_name": actual_company,
             "candidate_name": cand_name,
             "interview_date": interview.start_time or datetime.utcnow(),
+            "created_at": datetime.utcnow(), # 필수 필드 누락 해결
+            "details_json": None, # 필수 필드 누락 해결
             "technical_feedback": "분석이 완료되면 여기에 표시됩니다.",
             "experience_feedback": "데이터 분석 중...",
             "problem_solving_feedback": "데이터 분석 중...",

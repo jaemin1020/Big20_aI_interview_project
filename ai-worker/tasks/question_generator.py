@@ -4,109 +4,176 @@ import re
 import gc 
 import logging
 import torch
+import json
 from datetime import datetime
 from celery import shared_task
-# ... (생략: LangChain 관련 임포트)
 
-# ==========================================
 # 1. 초기 설정 및 모델 경로 최적화
-# ==========================================
-
-# [문법] sys.path.insert: 파이썬이 라이브러리를 찾을 폴더 목록 맨 앞에 "/app"을 추가합니다.
-# 왜? 도커 컨테이너 내부의 소스 코드를 우선적으로 참조하기 위해서입니다.
 if "/app" not in sys.path:
     sys.path.insert(0, "/app")
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-# [해석] 로컬 개발 환경과 도커 운영 환경의 경로가 다르기 때문에, 
-# 파일이 존재하는 곳을 찾아 자동으로 model_path를 설정하는 방어적 코드입니다.
-local_path = r"C:\...\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
-model_path = local_path if os.path.exists(local_path) else docker_path
+# LangChain 관련 임포트
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 # ==========================================
 # 2. 페르소나 설정 (Prompt Engineering)
 # ==========================================
 
-# [해석] PROMPT_TEMPLATE: LLM에게 "너는 면접관이야"라는 역할을 부여합니다.
-# 특히 '특수문자 금지', '150자 이내' 같은 '절대 규칙'을 명시하여 
-# 인공지능이 음성 합성(TTS)하기 좋은 깨끗한 텍스트만 뱉도록 강제합니다.
-PROMPT_TEMPLATE = """... (생략) ..."""
+PROMPT_TEMPLATE = """당신은 20년 경력의 베테랑 면접관이며 전문 채용 위원장입니다. 
+지원자의 답변을 바탕으로 날카로우면서도 성취 지향적인 다음 면접 질문을 생성하십시오.
+
+[면접 상황 관제 정보]
+- 지원 직무: {position}
+- 지원자 성명: {name}
+- 현재 단계: {stage_display}
+- 핵심 가이드: {guide}
+
+[참고: 지원자 이력서 문맥]
+{context}
+
+[이전 대화 요약]
+{chat_history}
+
+[질문 생성 지침]
+1. 반드시 다음 질문 1개만 텍스트로 출력하십시오.
+2. 지원자의 답변 내용에서 기술적 키워드나 경험 수치를 인용하여 구체적으로 질문하십시오.
+3. 질문 끝에는 "..." 같은 특수문자를 남발하지 말고 정중한 마침표나 물음표로 끝내십시오.
+4. 길이는 150자 이내로 핵심만 찌르십시오.
+5. {stage_display} 성격에 맞는 질문이어야 합니다.
+
+질문:"""
 
 # ==========================================
 # 3. 메인 작업: 질문 생성 태스크
 # ==========================================
 
-# [문법] @shared_task: Celery 일꾼이 이 함수를 백그라운드에서 실행하도록 등록합니다.
 @shared_task(name="tasks.question_generation.generate_next_question")
 def generate_next_question_task(interview_id: int):
     """
     [함수의 역할] 인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
-    [존재 이유] 면접은 실시간 상호작용이므로, 사용자 답변이 들어오자마자 
-               그에 맞는 최적의 다음 질문을 계산해야 하기 때문입니다.
     """
-    from db import (engine, Session, select, ...) # [문법] 내부 임포트로 순환 참조 방지
+    # 순환 참조 방지를 위해 내부 임포트
+    from db import (engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question)
     from utils.exaone_llm import get_exaone_llm
+    from tasks.rag_retrieval import retrieve_context
+    
+    logger.info(f"🚀 [START] Generating next question for Interview {interview_id}")
     
     with Session(engine) as session:
         # 1. 인터뷰 정보 로드
         interview = session.get(Interview, interview_id)
-        if not interview: return {"status": "error"}
+        if not interview: 
+            logger.error(f"Interview {interview_id} not found")
+            return {"status": "error", "message": "Interview not found"}
 
-        # -------------------------------------------------------
-        # [핵심 로직] 전공자 vs 비전공자(직무 전환자) 판별
-        # -------------------------------------------------------
-        # [해석] 지원자의 전공(Major)과 지원 직무(Target Role)를 키워드로 비교합니다.
-        # 예: '국어국문학' 전공자가 '소프트웨어 개발'에 지원했다면 is_transition = True가 됩니다.
-        # 이 판단에 따라 '기술 기본기'를 물을지, '직무 전환 동기'를 물을지 시나리오가 바뀝니다.
-        is_transition = False
-        # ... (키워드 매칭 로직) ...
+        # 2. 대화 내역 조회 (현재 단계 파악용)
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+        transcripts = session.exec(stmt).all()
         
-        # -------------------------------------------------------
-        # [안전장치] 중복 생성 방지 (Race Condition)
-        # -------------------------------------------------------
-        # [해석] AI가 질문을 던진 지 10초도 안 되었는데 또 질문 생성 요청이 오면 무시합니다.
-        # 왜? 네트워크 지연 등으로 인해 동일한 요청이 두 번 들어와 AI가 혼자 북치고 장구치는 걸 막기 위함입니다.
-        if last_transcript and last_transcript.speaker == Speaker.AI:
+        if not transcripts:
+            logger.warning(f"No transcripts found for interview {interview_id}. Logic might need initial setup.")
+            return {"status": "error", "message": "No transcripts found"}
+
+        last_transcript = transcripts[0]
+        
+        # 3. 중복 생성 방지 (AI가 질문했는데 10초 이내에 또 요청 오면 무시)
+        if last_transcript.speaker == "AI":
             diff = (datetime.utcnow() - last_transcript.timestamp).total_seconds()
-            if diff < 10: return {"status": "skipped"}
+            if diff < 10: 
+                logger.info(f"Skipping: Last AI message was just {diff:.1f}s ago.")
+                return {"status": "skipped", "reason": "too_soon"}
 
-        # -------------------------------------------------------
-        # 🔍 현재 단계(Stage) 판별
-        # -------------------------------------------------------
-        # [해석] 대화 기록(Transcript)을 뒤져서 마지막으로 어떤 질문에 답변했는지 찾습니다.
-        # '자기소개(intro)' -> '지원동기(motivation)' -> '기술면접(skill)' 순서로 
-        # 면접이 물 흐르듯 진행되게 조율합니다.
-        next_stage_data = get_next_stage(last_stage_name)
-
-        # [해석] 더 이상 질문할 단계가 없으면 면접을 종료(COMPLETED) 처리하고 리포트 생성을 예약합니다.
+        # 4. 다음 단계 결정 (Scenario Logic)
+        from utils.interview_helpers import check_if_transition, get_candidate_info
+        cand_info = get_candidate_info(session, interview.resume_id)
+        is_transition = check_if_transition(cand_info.get("major", ""), interview.position)
+        
+        # 시나리오 로드
+        if is_transition:
+            import config.interview_scenario_transition as scenario
+        else:
+            import config.interview_scenario as scenario
+            
+        # 마지막 AI 질문의 단계를 찾고 다음 단계 결정
+        last_ai_transcript = next((t for t in transcripts if t.speaker == "AI"), None)
+        last_stage_name = "motivation" # 기본값
+        if last_ai_transcript and last_ai_transcript.question_id:
+            q = session.get(Question, last_ai_transcript.question_id)
+            if q: last_stage_name = q.question_type or "motivation"
+        
+        next_stage_data = scenario.get_next_stage(last_stage_name)
+        
         if not next_stage_data:
+            logger.info(f"Interview {interview_id} finished (No more stages). Status -> COMPLETED")
             interview.status = "COMPLETED"
-            # ... 리포트 생성 트리거 ...
+            session.add(interview)
+            session.commit()
             return {"status": "completed"}
 
-        # -------------------------------------------------------
-        # 🚀 AI 질문 생성 (RAG + Context)
-        # -------------------------------------------------------
-        # [해석] 꼬리질문(followup)인 경우, 사용자가 방금 한 답변 내용을 컨텍스트에 추가합니다.
-        # "방금 리액트를 써보셨다고 했는데..." 처럼 자연스러운 대화가 가능해지는 비결입니다.
-        if stage_type == "followup":
-            context_text = f"{profile_summary}... [최근 답변] {user_ans_text}"
+        stage_name = next_stage_data["stage"]
+        stage_display = next_stage_data.get("display_name", "심층 면접")
+        stage_guide = next_stage_data.get("guide", "지원자의 역량을 검증하십시오.")
         
-        # [문법] LCEL(LangChain Expression Language) 체인: 
-        # 프롬프트 입력 -> LLM 연산 -> 텍스트 파싱을 파이프(|) 기호로 연결한 현대적 방식입니다.
-        chain = prompt | llm | output_parser
-        content = chain.invoke({...})
+        logger.info(f"Target Stage: {stage_name} ({stage_display})")
 
-        # -------------------------------------------------------
-        # 🧹 뒷정리 (Memory Cleanup)
-        # -------------------------------------------------------
-        # [존재 이유] AI 모델은 메모리를 엄청나게 씁니다. 작업 하나가 끝날 때마다 
-        # 쓰레기 수집(gc.collect)과 GPU 메모리 비우기를 수동으로 해줘야 서버가 안 터집니다.
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # 5. RAG 컨텍스트 확보
+        # 직무 지식이나 경험 질문인 경우 이력서에서 관련 내용을 뽑아옴
+        rag_context = ""
+        if next_stage_data.get("type") == "ai" or next_stage_data.get("type") == "followup":
+            query = next_stage_data.get("query_template", interview.position).format(target_role=interview.position)
+            search_results = retrieve_context(query, resume_id=interview.resume_id, top_k=5)
+            rag_context = "\n".join([r['text'] for r in search_results])
 
-        # 최종 저장
-        save_generated_question(interview_id, final_content, ...)
+        # 6. 최근 대화 요약 (Context for LLM)
+        # 최근 3~4개의 대화만 요약하여 전달
+        chat_limit = 5
+        recent_chats = transcripts[:chat_limit][::-1] # 역순 (오래된 것부터)
+        chat_history_str = "\n".join([f"{t.speaker}: {t.text}" for t in recent_chats])
+
+        # 7. LLM 호출 (LangChain LCEL)
+        try:
+            llm = get_exaone_llm()
+            prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
+            output_parser = StrOutputParser()
+            
+            chain = prompt | llm | output_parser
+            
+            final_content = chain.invoke({
+                "position": interview.position,
+                "name": cand_info.get("candidate_name", "지원자"),
+                "stage_display": stage_display,
+                "guide": stage_guide,
+                "context": rag_context if rag_context else "이력서 정보가 충분하지 않습니다. 일반적인 직무 지식을 물어보십시오.",
+                "chat_history": chat_history_str
+            })
+            
+            # 후처리: [단계] 말머리가 이미 생성된 경우 중복 방지
+            if not final_content.startswith('['):
+                intro_msg = next_stage_data.get("intro_sentence", "")
+                final_content = f"[{stage_display}] {intro_msg} {final_content}" if intro_msg else f"[{stage_display}] {final_content}"
+
+            # 8. 결과 저장
+            save_generated_question(
+                interview_id=interview_id,
+                content=final_content,
+                category=next_stage_data.get("category", "general"),
+                stage=stage_name,
+                guide=stage_guide
+            )
+            
+            logger.info(f"✅ Successfully generated and saved next question for Interview {interview_id}")
+            
+            # 메모리 정리
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
+            return {"status": "success", "stage": stage_name}
+
+        except Exception as llm_err:
+            logger.error(f"❌ LLM generation failed: {llm_err}")
+            return {"status": "error", "message": "LLM failed"}
