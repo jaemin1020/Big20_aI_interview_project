@@ -21,6 +21,24 @@ const AccountSettingsPage = ({ onBack, onLogout }) => {
     const [showTerms, setShowTerms] = useState(false);
     const [showPrivacy, setShowPrivacy] = useState(false);
 
+    // 알림 설정 저장 상태
+    const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+    // 컴포넌트 마운트 시 저장된 알림 설정 불러오기
+    React.useEffect(() => {
+        const savedSettings = localStorage.getItem('notificationSettings');
+        if (savedSettings) {
+            try {
+                const parsed = JSON.parse(savedSettings);
+                setEmailNotification(parsed.email ?? true);
+                setSmsNotification(parsed.sms ?? false);
+                setServiceNotification(parsed.service ?? true);
+            } catch (e) {
+                console.error("알림 설정 불러오기 실패", e);
+            }
+        }
+    }, []);
+
     // 비밀번호 강도 계산
     const getPasswordStrength = (pw) => {
         if (!pw) return null;
@@ -71,12 +89,6 @@ const AccountSettingsPage = ({ onBack, onLogout }) => {
         }
     };
 
-    const handleAccountSuspension = () => {
-        if (confirm('계정을 휴면 상태로 전환하시겠습니까?')) {
-            alert('계정이 휴면 상태로 전환되었습니다.');
-        }
-    };
-
     const handleAccountDeletion = async () => {
         if (!confirm('정말로 회원 탈퇴를 진행하시겠습니까?\n탈퇴 후 로그인이 불가능하며, 동일 아이디/이메일로 재가입할 수 있습니다.')) return;
         try {
@@ -87,6 +99,21 @@ const AccountSettingsPage = ({ onBack, onLogout }) => {
             const msg = err.response?.data?.detail || err.message || '탈퇴 중 오류가 발생했습니다.';
             alert(`탈퇴 실패: ${msg}`);
         }
+    };
+
+    const handleSaveNotifications = () => {
+        setIsSavingNotifications(true);
+        // 가상의 저장 딜레이를 주어 실제 API 호출 느낌 제공
+        setTimeout(() => {
+            const settings = {
+                email: emailNotification,
+                sms: smsNotification,
+                service: serviceNotification
+            };
+            localStorage.setItem('notificationSettings', JSON.stringify(settings));
+            setIsSavingNotifications(false);
+            alert('알림 설정이 성공적으로 저장되었습니다.');
+        }, 600);
     };
 
     const inputStyle = (hasError) => ({
@@ -229,6 +256,14 @@ const AccountSettingsPage = ({ onBack, onLogout }) => {
                             </div>
                         </label>
                     ))}
+
+                    <PremiumButton
+                        onClick={handleSaveNotifications}
+                        disabled={isSavingNotifications}
+                        style={{ alignSelf: 'flex-start', padding: '10px 28px', marginTop: '0.5rem' }}
+                    >
+                        {isSavingNotifications ? '저장 중...' : '알림 설정 저장'}
+                    </PremiumButton>
                 </div>
             </GlassCard>
 
@@ -238,15 +273,6 @@ const AccountSettingsPage = ({ onBack, onLogout }) => {
                     계정 관리
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
-                        <div style={{ marginBottom: '8px', fontWeight: '500' }}>계정 휴면 설정</div>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                            일정 기간 서비스를 이용하지 않을 경우 계정을 휴면 상태로 전환할 수 있습니다.
-                        </p>
-                        <PremiumButton variant="secondary" onClick={handleAccountSuspension} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>
-                            계정 휴면 전환
-                        </PremiumButton>
-                    </div>
                     <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.05)', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.2)' }}>
                         <div style={{ marginBottom: '8px', fontWeight: '500', color: '#ef4444' }}>회원 탈퇴</div>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
