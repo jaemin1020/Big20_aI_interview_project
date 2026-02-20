@@ -58,7 +58,7 @@ async def create_transcript(
                 queue="gpu_queue"
             )
 
-            # 2. 답변 분석 및 평가 요청 (cpu_queue: LLM 평가지만 generate_next_question 블로킹 방지)
+            # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
             celery_app.send_task(
                 "tasks.evaluator.analyze_answer",
                 args=[
@@ -68,7 +68,7 @@ async def create_transcript(
                     question.rubric_json,
                     question.id
                 ],
-                queue="cpu_queue"  # gpu_queue → cpu_queue: Q2 생성이 평가 LLM에 의해 블로킹되는 문제 해결
+                queue="gpu_queue"
             )
             logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
     
