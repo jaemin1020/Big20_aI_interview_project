@@ -82,7 +82,7 @@ def generate_next_question_task(interview_id: int):
             stmt_ai = select(Transcript).where(
                 Transcript.interview_id == interview_id,
                 Transcript.speaker == Speaker.AI
-            ).order_by(Transcript.order.desc())
+            ).order_by(Transcript.order.desc(), Transcript.id.desc())  # id를 tiebreaker로 사용 (order 같을 때 최신 AI 발화 보장)
             last_ai_transcript = session.exec(stmt_ai).first()
 
             # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
