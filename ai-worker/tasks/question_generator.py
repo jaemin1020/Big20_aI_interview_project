@@ -59,20 +59,13 @@ def generate_next_question_task(interview_id: int):
     """
     from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question
     from utils.exaone_llm import get_exaone_llm
-    from tasks.rag_retrieval import retrieve_context
+    from tasks.tts import synthesize_task  # [수정] 정확한 태스크 함수명 임포트
     
-    # 시나리오 모듈 임포트
-    from config.interview_scenario import get_next_stage as get_next_stage_normal
-    from config.interview_scenario_transition import get_next_stage as get_next_stage_transition
-    from utils.interview_helpers import check_if_transition
-
-    try:
-        with Session(engine) as session:
-            # 1. 인터뷰 정보 로드
-            interview = session.get(Interview, interview_id)
-            if not interview:
-                logger.error(f"Interview {interview_id} not found")
-                return {"status": "error", "message": "Interview not found"}
+    with Session(engine) as session:
+        interview = session.get(Interview, interview_id)
+        if not interview: 
+            logger.error(f"Interview {interview_id} not found.")
+            return {"status": "error", "message": "Interview not found"}
 
             # 2. 마지막 AI 발화 확인 (Stage 판별 + 중복 방지)
             # [수정] User transcript는 question_id가 없어 stage 판별 불가 → 마지막 AI 발화 기준으로 판별
@@ -196,10 +189,53 @@ def generate_next_question_task(interview_id: int):
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+            
+            # 5. 결과 저장
+            category_raw = next_stage_data.get("category", "technical")
+            category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
+            db_category = category_map.get(category_raw, "technical")
+            
+            # [추가] 면접 단계별 한국어 명칭 및 안내 문구 가져오기
+            try:
+                if is_transition:
+                    from config.interview_scenario_transition import INTERVIEW_STAGES as TRANS_STAGES
+                    target_stages = TRANS_STAGES
+                else:
+                    from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                    target_stages = STD_STAGES
+            except ImportError:
+                from config.interview_scenario import INTERVIEW_STAGES as STD_STAGES
+                target_stages = STD_STAGES
 
-            logger.info(f"✅ Generated new question for interview {interview_id}: {final_content[:50]}...")
-            return {"status": "success", "question_id": question_id}
+            stage_display = "심층 면접"
+            intro_msg = ""
+            for s in target_stages:
+                if s["stage"] == stage_name:
+                    stage_display = s.get("display_name", stage_display)
+                    intro_msg = s.get("intro_sentence", "")
+                    break
+            
+            # 꼬리질문의 경우 고정된 인트로 추가 (중복 방지를 위해 LLM에게는 시키지 않음)
+            if stage_type == "followup":
+                intro_msg = "추가적으로 궁금한 점이 있습니다."
+            elif intro_msg == "추가적으로 궁금한 점이 있습니다.":
+                # 메인 질문인데 시나리오에 잘못 들어가 있는 경우 제거
+                intro_msg = ""
 
-    except Exception as e:
-        logger.error(f"Error in generate_next_question_task: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
+            # 질문 앞에 [단계] 및 안내 문구 추가
+            final_content = f"[{stage_display}] {intro_msg} {content}" if intro_msg else f"[{stage_display}] {content}"
+            
+            logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
+            q_id = save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
+            
+            # [핵심 추가] 질문 저장 후 전용 TTS 생성 태스크 즉시 트리거
+            if q_id:
+                logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
+                synthesize_task.delay(final_content, language="auto", question_id=q_id)
+
+            return {"status": "success", "stage": stage_name, "question": final_content}
+        except Exception as e:
+            logger.error(f"❌ 실시간 질문 생성 실패 (Retry 시도): {e}")
+            raise self.retry(exc=e, countdown=3)
+        finally:
+            gc.collect()
