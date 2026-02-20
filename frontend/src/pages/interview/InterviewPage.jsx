@@ -399,7 +399,6 @@ const InterviewPage = ({
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            onKeyDown={handleKeyDown}
             readOnly={isRecording}
             placeholder={isRecording ? '음성 인식 대기 중...' : '마이크를 사용할 수 없는 경우 이곳에 직접 답변을 입력하고 Enter를 눌러주세요.'}
             style={{

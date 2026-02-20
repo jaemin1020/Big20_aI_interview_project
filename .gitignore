@@ -218,6 +218,7 @@ structured_resume.json
 uploads/
 *.pdf
 *.docx
+*.sql
 
 # Quality reports (keep only final version)
 docs/QUALITY_REPORT_*.md

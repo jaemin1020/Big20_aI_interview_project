@@ -41,6 +41,13 @@ function App() {
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
 
+  // 프로필 페이지 이탈 가드
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [pendingStep, setPendingStep] = useState(null);
+  const [showProfileLeaveModal, setShowProfileLeaveModal] = useState(false);
+  // 프로필 페이지에서 저장 함수를 바인딩하는 ref
+  const profileSaveRef = useRef(null);
+
   const [isDarkMode, setIsDarkMode] = useState(false); // 기본: 라이트모드
 
   useEffect(() => {
@@ -95,6 +102,16 @@ function App() {
   const isInitialized = useRef(false);
   // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
   const liveTranscriptRef = useRef('');
+
+  // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
+  const navigateSafe = (targetStep) => {
+    if (step === 'profile' && profileDirty) {
+      setPendingStep(targetStep);
+      setShowProfileLeaveModal(true);
+    } else {
+      setStep(targetStep);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -693,8 +710,13 @@ function App() {
   };
 
   useEffect(() => {
-    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
+    if (step === 'interview' && interview && !pcRef.current) {
       const initMedia = async () => {
+        // videoRef가 아직 DOM에 마운트되지 않았을 경우 한 틱 대기
+        if (!videoRef.current) {
+          console.warn('[Media Init] videoRef not ready, waiting 100ms...');
+          await new Promise(r => setTimeout(r, 100));
+        }
         try {
           await setupWebRTC(interview.id);
           setupWebSocket(interview.id);
@@ -702,7 +724,8 @@ function App() {
           console.error("Media init error:", err);
         }
       };
-      initMedia();
+      // React 렌더링 완료 후 실행 보장
+      setTimeout(() => initMedia(), 0);
     }
 
     // 면접 진행 중 페이지 이탈 방지 경고
@@ -733,6 +756,7 @@ function App() {
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
+          userName={parsedResumeData?.structured_data?.header?.name || parsedResumeData?.name || 'OOO'}
           onLogout={handleLogout}
           showLogout={!!user}
           onLogoClick={() => {
@@ -740,13 +764,13 @@ function App() {
               alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
               return;
             }
-            setStep('main');
+            navigateSafe('main');
           }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
-          onHistory={() => setStep('history')}
-          onAccountSettings={() => setStep('settings')}
-          onProfileManagement={() => setStep('profile')}
+          onHistory={() => navigateSafe('history')}
+          onAccountSettings={() => navigateSafe('settings')}
+          onProfileManagement={() => navigateSafe('profile')}
           onLogin={() => { setAuthMode('login'); setStep('auth'); }}
           onRegister={() => { setAuthMode('register'); setStep('auth'); }}
           pageTitle={
@@ -758,6 +782,66 @@ function App() {
                       null
           }
         />
+      )}
+
+      {/* 프로필 이탈 확인 모달 (헤더 네비게이션 가로채기) */}
+      {showProfileLeaveModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)'
+        }}>
+          <div style={{
+            background: 'var(--glass-bg, rgba(20,20,40,0.92))',
+            border: '1px solid var(--glass-border)',
+            borderRadius: '16px',
+            padding: '2.5rem 2rem',
+            maxWidth: '420px',
+            width: '90%',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>💾</div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '0.6rem', color: 'var(--text-main)' }}>
+              저장하지 않은 변경 사항
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: '1.6' }}>
+              프로필에 변경된 내용이 있습니다.<br />저장하고 이동하시겠습니까?
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setShowProfileLeaveModal(false);
+                  setProfileDirty(false);
+                  if (pendingStep) { setStep(pendingStep); setPendingStep(null); }
+                }}
+                style={{
+                  padding: '10px 24px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: '600'
+                }}
+              >
+                그냥 이동
+              </button>
+              <button
+                onClick={async () => {
+                  setShowProfileLeaveModal(false);
+                  if (profileSaveRef.current) {
+                    const ok = await profileSaveRef.current();
+                    if (ok && pendingStep) { setStep(pendingStep); setPendingStep(null); }
+                  }
+                }}
+                style={{
+                  padding: '10px 24px', borderRadius: '8px', border: 'none',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff', cursor: 'pointer', fontWeight: '600',
+                  boxShadow: '0 2px 12px rgba(99,102,241,0.4)'
+                }}
+              >
+                저장 후 이동
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Theme Toggle Button */}
@@ -949,13 +1033,20 @@ function App() {
         {step === 'settings' && (
           <AccountSettingsPage
             onBack={() => setStep('main')}
+            onLogout={handleLogout}
           />
         )}
 
         {step === 'profile' && (
           <ProfileManagementPage
-            onBack={() => setStep('main')}
+            onBack={() => navigateSafe('main')}
             user={user}
+            onSave={(updatedUser) => {
+              setUser(updatedUser);
+              setProfileDirty(false);
+            }}
+            onDirtyChange={(dirty) => setProfileDirty(dirty)}
+            saveTriggerRef={profileSaveRef}
           />
         )}
 
