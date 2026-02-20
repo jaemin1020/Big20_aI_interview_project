@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Column, Relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT
 from pgvector.sqlalchemy import Vector  # pgvector 지원
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -46,7 +46,16 @@ class User(SQLModel, table=True):
     password_hash: str
     full_name: Optional[str] = None
     birth_date: Optional[str] = None
+    phone_number: Optional[str] = None
     profile_image: Optional[str] = None
+    desired_company_types: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(ARRAY(TEXT))
+    )
+    desired_positions: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(ARRAY(TEXT))
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
@@ -121,7 +130,6 @@ class Company(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="company")
 
