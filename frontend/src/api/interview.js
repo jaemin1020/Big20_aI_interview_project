@@ -138,7 +138,42 @@ export const getResume = async (resumeId) => {
     return response.data;
 };
 
+export const getResumePdf = async (resumeId) => {
+    const response = await api.get(`/api/resumes/${resumeId}/pdf`, {
+        responseType: 'blob'
+    });
+    return response.data; // this is the Blob
+};
+
 export const getAllInterviews = async () => {
     const response = await api.get('/interviews');
+    return response.data;
+};
+
+export const updateUserProfile = async ({ fullName, birthDate, email, phoneNumber, profileImageFile, desiredCompanyTypes, desiredPositions }) => {
+    const formData = new FormData();
+    if (fullName !== undefined && fullName !== null) formData.append('full_name', fullName);
+    if (birthDate !== undefined && birthDate !== null) formData.append('birth_date', birthDate);
+    if (email !== undefined && email !== null) formData.append('email', email);
+    if (phoneNumber !== undefined && phoneNumber !== null) formData.append('phone_number', phoneNumber);
+    if (profileImageFile instanceof File) formData.append('profile_image', profileImageFile);
+    if (desiredCompanyTypes !== undefined && desiredCompanyTypes !== null) formData.append('desired_company_types', JSON.stringify(desiredCompanyTypes));
+    if (desiredPositions !== undefined && desiredPositions !== null) formData.append('desired_positions', JSON.stringify(desiredPositions));
+
+    const response = await api.patch('/users/me', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+};
+
+export const changePassword = async (newPassword) => {
+    const response = await api.patch('/auth/password', null, {
+        params: { new_password: newPassword }
+    });
+    return response.data;
+};
+
+export const withdrawUser = async () => {
+    const response = await api.delete('/auth/withdraw');
     return response.data;
 };
