@@ -69,12 +69,13 @@ app.conf.update(
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
-        'tasks.stt.*': {'queue': 'cpu_queue'}, # STT는 CPU 기반으로 동작함
+        'tasks.evaluator.analyze_answer': {'queue': 'gpu_queue'},  # EXAONE LLM 필요 → GPU 워커 필수
+        'tasks.stt.*': {'queue': 'cpu_queue'},
         
-        # CPU 사용 태스크 (답변 분석, 비전, 기타)
-        'tasks.evaluator.*': {'queue': 'cpu_queue'},
+        # CPU 사용 태스크 (비전, 파싱, TTS, 나머지 evaluator)
+        'tasks.evaluator.*': {'queue': 'cpu_queue'},  # analyze_answer, generate_final_report 제외한 나머지
         'tasks.vision.*': {'queue': 'cpu_queue'},
-        'tasks.resume_parser.*': {'queue': 'cpu_queue'}, # 파싱은 CPU 작업임
+        'tasks.resume_parser.*': {'queue': 'cpu_queue'},
         'tasks.tts.*': {'queue': 'cpu_queue'},
     }
 )
