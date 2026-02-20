@@ -55,11 +55,14 @@ const InterviewPage = ({
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
     setIsTimerActive(false); // TTS 시작 전 타이머 정지
 
-    // TTS 재생 로직 (currentIdx가 바뀔 때만 실행 - audioUrl/question 변경으로 재실행 방지)
+    // TTS 재생 로직 (currentIdx가 바뀌얼 때만 실행 - audioUrl/question 변경으로 재실행 방지)
     const playTTS = () => {
-      console.log(`🔊 [TTS Play Attempt] URL: ${audioUrl ? 'PRESENT' : 'MISSING'}, Question: ${question?.substring(0, 30)}...`);
+      const currentAudioUrl = audioUrlRef.current;  // ← ref에서 최신값 읽기
+      const currentQuestion = questionRef.current;  // ← ref에서 최신값 읽기
 
-      if (audioUrl) {
+      console.log(`🔊 [TTS Play Attempt] URL: ${currentAudioUrl ? 'PRESENT' : 'MISSING'}, Question: ${currentQuestion?.substring(0, 30)}...`);
+
+      if (currentAudioUrl) {
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
@@ -77,37 +80,9 @@ const InterviewPage = ({
           console.error("Audio play failed:", e);
           setIsTimerActive(true); // 재생 실패 시 바로 타이머 시작
         });
-      }
-      // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
-      else if (question) {
+      } else if (currentQuestion) {
         console.log(`⏳ [Waiting for Server Audio] audioUrl is missing... Do NOT use fallback.`);
-        // [수정] 기계음 선점 방지를 위해 Fallback 비활성화
-        // 서버에서 생성된 음성이 올 때까지 침묵 유지 (App.jsx에서 오디오 준비 후 질문 전환)
-
-        /* 
-        console.log(`📢 [Browser Fallback] audioUrl is missing, using Web Speech API`);
-        if (window.speechSynthesis) {
-          window.speechSynthesis.cancel(); // 이전 발화 중지
-
-          // [...] 태그 제거 로직
-          const cleanText = currentQuestion.includes(']') ? currentQuestion.split(']').slice(1).join(']').trim() : currentQuestion;
-
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          utterance.lang = 'ko-KR';
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-
-          // TTS 종료 시 타이머 시작
-          utterance.onend = () => {
-            console.log("TTS ended, starting timer.");
-            setIsTimerActive(true);
-          };
-
-          window.speechSynthesis.speak(utterance);
-        } else {
-          setIsTimerActive(true); // TTS 지원 안 하면 바로 시작
-        }
-        */
+        // 서버 TTS 대기 (기계음 Fallback 비활성화)
       } else {
         setIsTimerActive(true); // 읽을 질문도 없으면 바로 시작
       }
