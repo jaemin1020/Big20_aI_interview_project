@@ -315,6 +315,7 @@ class InterviewResponse(SQLModel):
     start_time: Optional[datetime]
     end_time: Optional[datetime]
     overall_score: Optional[float]
+    resume_id: Optional[int] = None
 
 class TranscriptCreate(SQLModel):
     """대화 기록 생성 요청"""
@@ -333,13 +334,13 @@ class EvaluationReportResponse(SQLModel):
     summary_text: Optional[str]
     details_json: Optional[Dict[str, Any]]
     created_at: datetime
-    
+
     # [추가] 리포트 표시용 정보
     position: Optional[str] = None
     company_name: Optional[str] = None
     candidate_name: Optional[str] = None
     interview_date: Optional[datetime] = None
-    
+
     # [추가] 상세 피드백 필드 (details_json 파싱 결과)
     technical_feedback: Optional[str] = None
     experience_feedback: Optional[str] = None
@@ -347,6 +348,6 @@ class EvaluationReportResponse(SQLModel):
     communication_feedback: Optional[str] = None
     responsibility_feedback: Optional[str] = None
     growth_feedback: Optional[str] = None
-    
+
     strengths: Optional[List[str]] = None
     improvements: Optional[List[str]] = None

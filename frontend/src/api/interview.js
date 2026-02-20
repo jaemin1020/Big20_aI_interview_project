@@ -138,6 +138,13 @@ export const getResume = async (resumeId) => {
     return response.data;
 };
 
+export const getResumePdf = async (resumeId) => {
+    const response = await api.get(`/api/resumes/${resumeId}/pdf`, {
+        responseType: 'blob'
+    });
+    return response.data; // this is the Blob
+};
+
 export const getAllInterviews = async () => {
     const response = await api.get('/interviews');
     return response.data;

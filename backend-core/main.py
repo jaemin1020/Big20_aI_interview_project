@@ -109,13 +109,13 @@ async def upload_resume(
     current_user: User = Depends(get_current_user)
 ):
     """이력서 파일 업로드 (PDF, DOC, DOCX)"""
-    
+
     # 파일 확장자 검증
     allowed_extensions = [".pdf", ".doc", ".docx"]
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in allowed_extensions:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="지원하지 않는 파일 형식입니다. PDF, DOC, DOCX 파일만 업로드 가능합니다."
         )
 
@@ -124,11 +124,11 @@ async def upload_resume(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_filename = f"{current_user.id}_{timestamp}_{file.filename}"
         file_path = UPLOAD_DIR / safe_filename
-        
+
         # 파일 저장
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # Resume 레코드 생성
         new_resume = Resume(
             candidate_id=current_user.id,
@@ -140,17 +140,17 @@ async def upload_resume(
         db.add(new_resume)
         db.commit()
         db.refresh(new_resume)
-        
+
         logger.info(f"Resume uploaded: ID={new_resume.id}, User={current_user.username}, File={file.filename}")
-        
+
         # Celery 태스크로 이력서 파싱 및 구조화 작업 전달
         celery_app.send_task(
-            "parse_resume_pdf", 
+            "parse_resume_pdf",
             args=[new_resume.id, str(file_path)],
-            queue='gpu_queue' 
+            queue='gpu_queue'
         )
         logger.info(f"Resume parsing task sent for ID={new_resume.id}")
-        
+
         return {
             "id": new_resume.id,
             "file_name": new_resume.file_name,
@@ -158,7 +158,7 @@ async def upload_resume(
             "status": "uploaded",
             "message": "Resume uploaded successfully. Processing will begin shortly."
         }
-        
+
     except Exception as e:
         logger.error(f"Resume upload failed: {e}")
         # 실패 시 파일 삭제
@@ -177,23 +177,23 @@ async def get_resume(
     resume = db.get(Resume, resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-        
+
     # 권한 체크: 본인 또는 관리자만 접근 가능
     if resume.candidate_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to access this resume")
-        
+
     # 모든 기술 스택 통합
     # 모든 기술 스택 통합
     all_skills = []
-    
+
     # [수정: 2026-02-10] structured_data 타입 처리 로직 개선
-    # 이유: PostgreSQL DB에서 JSONB 컬럼이 간혹 문자열(String) 형태로 반환되는 이슈 발생 
+    # 이유: PostgreSQL DB에서 JSONB 컬럼이 간혹 문자열(String) 형태로 반환되는 이슈 발생
     #       (AttributeError: 'str' object has no attribute 'get' 에러 유발).
-    # 해결: 데이터 타입이 문자열인 경우 json.loads()로 명시적 파싱을 수행하여 
+    # 해결: 데이터 타입이 문자열인 경우 json.loads()로 명시적 파싱을 수행하여
     #       항상 딕셔너리(Dict) 형태로 처리하도록 안전 장치(Fail-safe) 추가.
     import json
     parsed_data = {}
-    
+
     try:
         if resume.structured_data:
             temp_data = resume.structured_data
@@ -206,7 +206,7 @@ async def get_resume(
                         temp_data = json.loads(temp_data)
                 except Exception as parse_error:
                     print(f"JSON parse error: {parse_error}")
-            
+
             # 최종 결과가 딕셔너리인지 확인
             if isinstance(temp_data, dict):
                 parsed_data = temp_data
@@ -215,7 +215,7 @@ async def get_resume(
     except Exception as e:
         print(f"Error processing structured_data: {e}")
         parsed_data = {}
-    
+
     # 모든 기술 스택 통합
     all_skills = []
     if "skills" in parsed_data:
@@ -224,7 +224,7 @@ async def get_resume(
             for cat, skills_list in skills_data.items():
                 if isinstance(skills_list, list):
                     all_skills.extend(skills_list)
-                
+
     # [수정: 2026-02-10] target_position 타입 안전 처리
     # 이유: target_position이 문자열("Unknown")일 수도 있고 딕셔너리일 수도 있음.
     #       문자열인데 .get()을 호출하면 AttributeError 발생.
@@ -234,7 +234,7 @@ async def get_resume(
         position_value = target_pos_data.get("position")
     elif isinstance(target_pos_data, str):
         position_value = target_pos_data
-        
+
     return {
         "id": resume.id,
         "file_name": resume.file_name,
@@ -244,6 +244,42 @@ async def get_resume(
         "position": position_value,
         "skills": list(set(all_skills))  # 중복 제거
     }
+
+from fastapi.responses import FileResponse
+
+@app.get("/api/resumes/{resume_id}/pdf", tags=["resumes"])
+async def get_resume_pdf(
+    resume_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """이력서 실제 PDF 파일 다운로드 및 조회"""
+    resume = db.get(Resume, resume_id)
+
+    if not resume or not resume.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="이력서를 찾을 수 없습니다."
+        )
+
+    # 권한 확인 (본인 또는 관리자만)
+    if resume.candidate_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다."
+        )
+
+    if not os.path.exists(resume.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="이력서 파일을 서버에서 찾을 수 없습니다."
+        )
+
+    return FileResponse(
+        path=resume.file_path,
+        filename=resume.file_name,
+        media_type="application/pdf"
+    )
 
 # ==================== Health Check ====================
 
