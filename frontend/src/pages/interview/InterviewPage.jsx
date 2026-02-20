@@ -27,6 +27,12 @@ const InterviewPage = ({
   const audioRef = React.useRef(null);
   const isTimeOverRef = React.useRef(false); // 타이머 종료 처리 중복 방지용 Ref
 
+  // audioUrl/question을 ref로 항상 최신값 유지 (stale closure 방지)
+  const audioUrlRef = React.useRef(audioUrl);
+  const questionRef = React.useRef(question);
+  React.useEffect(() => { audioUrlRef.current = audioUrl; }, [audioUrl]);
+  React.useEffect(() => { questionRef.current = question; }, [question]);
+
   // 데이터 전송 테스트: transcript와 isRecording 변경 감지
   React.useEffect(() => {
     console.log('[InterviewPage] Props updated:', {
@@ -49,15 +55,18 @@ const InterviewPage = ({
     setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
     setIsTimerActive(false); // TTS 시작 전 타이머 정지
 
-    // TTS 재생 로직
+    // TTS 재생 로직 (currentIdx가 바뀔 때만 실행 - audioUrl/question 변경으로 재실행 방지)
     const playTTS = () => {
+      const currentAudioUrl = audioUrlRef.current;
+      const currentQuestion = questionRef.current;
+
       // 1. 서버 제공 오디오 URL이 있는 경우
-      if (audioUrl) {
+      if (currentAudioUrl) {
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
         }
-        const audio = new Audio(audioUrl);
+        const audio = new Audio(currentAudioUrl);
         audioRef.current = audio;
 
         // 오디오 종료 시 타이머 시작
@@ -72,12 +81,12 @@ const InterviewPage = ({
         });
       }
       // 2. URL이 없으면 브라우저 내장 TTS 사용 (Fallback)
-      else if (question) {
+      else if (currentQuestion) {
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel(); // 이전 발화 중지
 
-          // [추가] [...] 태그 제거 로직
-          const cleanText = question.includes(']') ? question.split(']').slice(1).join(']').trim() : question;
+          // [...] 태그 제거 로직
+          const cleanText = currentQuestion.includes(']') ? currentQuestion.split(']').slice(1).join(']').trim() : currentQuestion;
 
           const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.lang = 'ko-KR';
@@ -101,16 +110,17 @@ const InterviewPage = ({
 
     playTTS();
 
-    // Cleanup: 컴포넌트 언마운트 시 오디오 중지
+    // Cleanup: 질문 변경 또는 언마운트 시 오디오 중지
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current = null;
       }
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
     };
-  }, [currentIdx, audioUrl, question]);
+  }, [currentIdx]); // ← currentIdx만 의존: audioUrl/question 변경으로 TTS 재실행 방지
 
   React.useEffect(() => {
     // 타이머 기능 활성화
