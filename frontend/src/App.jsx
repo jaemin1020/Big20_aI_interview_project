@@ -950,7 +950,7 @@ function App() {
         {step === 'interview' && (
           <InterviewPage
             currentIdx={currentIdx}
-            totalQuestions={questions.length}
+            totalQuestions={15} // 시나리오 기준 15단계 고정
             question={questions[currentIdx]?.content}
             audioUrl={questions[currentIdx]?.audio_url}
             isRecording={isRecording}
