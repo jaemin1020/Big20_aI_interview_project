@@ -733,6 +733,7 @@ function App() {
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
+          userName={parsedResumeData?.structured_data?.header?.name || parsedResumeData?.name || 'OOO'}
           onLogout={handleLogout}
           showLogout={!!user}
           onLogoClick={() => {
