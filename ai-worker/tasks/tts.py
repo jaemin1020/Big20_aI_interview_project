@@ -179,7 +179,7 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
         dict: 상태(success/error), Base64 오디오 데이터, 합성 시간 등을 포함
 
     생성자: CYJ, hyl
-    생성일자: 2026-02-10, 2026-02-19
+    생성일자: 2026-02-10, 2026-02-20
     """
     global tts_engine
     question_id = kwargs.get("question_id")
