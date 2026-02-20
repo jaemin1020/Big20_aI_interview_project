@@ -32,9 +32,19 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
 
 def _fire_tts_for_question(question_id: int, question_text: str) -> None:
-    """
-    질문에 대한 TTS 태스크를 비동기로 실행하고 WAV 파일을 uploads/tts/에 저장습니다.
-    audio_url 형식: {BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav
+    """설명:
+        질문에 대한 TTS 태스크를 실행하고 생성된 WAV 파일을 공유 볼륨(uploads/tts/)에 저장합니다.
+        문장 내의 [단계] 태그를 자동으로 제거하여 합성하며, 이미 파일이 존재하는 경우 중복 생성을 방지합니다.
+
+    Args:
+        question_id (int): 질문의 고유 ID. 파일명(q_{id}.wav) 정의에 사용됩니다.
+        question_text (str): 음성 합성 대상인 전체 질문 텍스트.
+
+    Returns:
+        None: 반환값은 없으며 서버 파일 시스템에 직접 저장합니다.
+
+    생성자: ejm,hyl
+    생성일자: 2026-02-06,2026-02-19
     """
     filename = f"q_{question_id}.wav"
     filepath = TTS_UPLOAD_DIR / filename
@@ -54,17 +64,12 @@ def _fire_tts_for_question(question_id: int, question_text: str) -> None:
         task = celery_app.send_task(
             "tasks.tts.synthesize",
             args=[clean_text],
-            kwargs={"language": "ko"},
+            kwargs={"language": "ko", "question_id": question_id},
             queue="cpu_queue"
         )
-        result = task.get(timeout=60)  # 최대 60초 대기
+        result = task.get(timeout=60)
         if result and result.get("status") == "success":
-            audio_b64 = result.get("audio_base64", "")
-            if audio_b64:
-                audio_bytes = base64.b64decode(audio_b64)
-                with open(filepath, "wb") as f:
-                    f.write(audio_bytes)
-                logger.info(f"[TTS] 파일 저장 완료: {filename} ({len(audio_bytes)} bytes)")
+            logger.info(f"✅ [TTS] 음성 파일 생성 완료: {filename}")
         else:
             logger.warning(f"[TTS] question_id={question_id} 실패: {result}")
     except Exception as e:
@@ -298,7 +303,9 @@ async def get_interview_questions(
             return None
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
         if filepath.exists():
-            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav"
+            # [수정] 브라우저 캐싱(특히 파일 생성 전 404 캐싱) 방지를 위해 타임스탬프 추가
+            timestamp = int(datetime.now().timestamp())
+            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
         return None
 
     return {

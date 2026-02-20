@@ -98,8 +98,14 @@ REFINER_PROMPT = """[|system|]
 # -----------------------------------------------------------
 # [5. Celery Task] - 실시간 1개씩 생성하는 태스크 (수정 완료)
 # -----------------------------------------------------------
-@shared_task(name="tasks.question_generation.generate_next_question")
-def generate_next_question_task(interview_id: int):
+@shared_task(
+    name="tasks.question_generation.generate_next_question",
+    bind=True,
+    acks_late=True,
+    max_retries=2,
+    soft_time_limit=120
+)
+def generate_next_question_task(self, interview_id: int):
     logger.info(f"🔥 [START] generate_next_question_task for Interview {interview_id}")
     
     from db import (
@@ -108,6 +114,7 @@ def generate_next_question_task(interview_id: int):
 
     )
     from utils.exaone_llm import get_exaone_llm
+    from tasks.tts import synthesize  # [추가] TTS 생성을 위해 임포트
     
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -430,10 +437,16 @@ def generate_next_question_task(interview_id: int):
             final_content = f"[{stage_display}] {intro_msg} {content}" if intro_msg else f"[{stage_display}] {content}"
             
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {stage_name})")
-            save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
+            q_id = save_generated_question(interview_id, final_content, db_category, stage_name, next_stage_data.get("guide", ""), session=session)
+            
+            # [핵심 추가] 질문 저장 후 전용 TTS 생성 태스크 즉시 트리거
+            if q_id:
+                logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
+                synthesize.delay(final_content, language="auto", question_id=q_id)
+
             return {"status": "success", "stage": stage_name, "question": final_content}
         except Exception as e:
-            logger.error(f"실시간 질문 생성 실패: {e}")
-            return {"status": "error", "error": str(e)}
+            logger.error(f"❌ 실시간 질문 생성 실패 (Retry 시도): {e}")
+            raise self.retry(exc=e, countdown=3)
         finally:
             gc.collect()
