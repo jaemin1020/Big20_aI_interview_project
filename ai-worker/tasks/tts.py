@@ -3,9 +3,17 @@ import time
 import logging
 import base64
 import tempfile
+import threading
+import torch
 import scipy.io.wavfile as wavfile
 from abc import ABC, abstractmethod
 from celery import shared_task
+
+# 스레드 안전성 확보를 위한 락
+tts_lock = threading.Lock()
+
+# CPU 연산 과부하 및 경합 방지 (내부 병렬화 제한)
+torch.set_num_threads(1)
 
 # 로깅 설정
 logger = logging.getLogger("TTS-Task")
@@ -188,7 +196,10 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
             temp_path = tmp.name
         
         logger.info(f"🟡 음성 합성 진행 중... (언어: {language})")
-        result = tts_engine.generate_speech(text, temp_path, language=language)
+        
+        # 락을 사용하여 한 번에 하나의 음성 합성만 수행 (CPU 경쟁 및 엔진 충돌 방지)
+        with tts_lock:
+            result = tts_engine.generate_speech(text, temp_path, language=language)
         
         if not result["success"]:
             logger.error(f"❌ 음성 합성 실패: {result.get('error')}")
@@ -216,7 +227,7 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
             
         return {
             "status": "success", 
-            "audio_base64": audio_b64[:100] + "...(truncated for log visibility)",
+            "audio_base64": audio_b64,
             "duration_ms": result.get("duration_ms")
         }
     except Exception as e:
