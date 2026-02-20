@@ -153,6 +153,16 @@ const InterviewPage = ({
   // 진행률 계산
   const progressPercent = ((currentIdx + 1) / totalQuestions) * 100;
 
+  // [복구] 엔터키 단축키 핸들러
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (transcript && transcript.trim() && !isLoading) {
+        nextQuestion();
+      }
+    }
+  };
+
   return (
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
 
@@ -409,14 +419,6 @@ const InterviewPage = ({
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (transcript.trim() && !isLoading) {
-                  nextQuestion();
-                }
-              }
-            }}
             readOnly={isRecording}
             placeholder={isRecording ? '음성 인식 대기 중...' : '마이크를 사용할 수 없는 경우 이곳에 직접 답변을 입력하고 Enter를 눌러주세요.'}
             style={{

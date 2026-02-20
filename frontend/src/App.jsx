@@ -721,8 +721,13 @@ function App() {
   };
 
   useEffect(() => {
-    if (step === 'interview' && interview && videoRef.current && !pcRef.current) {
+    if (step === 'interview' && interview && !pcRef.current) {
       const initMedia = async () => {
+        // videoRef가 아직 DOM에 마운트되지 않았을 경우 한 틱 대기
+        if (!videoRef.current) {
+          console.warn('[Media Init] videoRef not ready, waiting 100ms...');
+          await new Promise(r => setTimeout(r, 100));
+        }
         try {
           await setupWebRTC(interview.id);
           setupWebSocket(interview.id);
@@ -730,7 +735,8 @@ function App() {
           console.error("Media init error:", err);
         }
       };
-      initMedia();
+      // React 렌더링 완료 후 실행 보장
+      setTimeout(() => initMedia(), 0);
     }
 
     // 면접 진행 중 페이지 이탈 방지 경고
@@ -761,6 +767,7 @@ function App() {
       {/* Header - Visible in Most Steps */}
       {step !== 'auth' && (
         <Header
+          userName={parsedResumeData?.structured_data?.header?.name || parsedResumeData?.name || 'OOO'}
           onLogout={handleLogout}
           showLogout={!!user}
           onLogoClick={() => {
