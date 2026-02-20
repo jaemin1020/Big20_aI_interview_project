@@ -372,10 +372,13 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
     session.flush() # ID 생성을 위해 즉시 플러시
     
     # 2. Transcript 테이블에 AI 질문으로 저장
-    # 현재 면접의 마지막 순서를 파악
-    stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
-    last_transcript = session.exec(stmt).first()
-    next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
+    # [수정] AI transcript 기준으로만 다음 order 계산 (User transcript는 order=NULL이라 리셋 버그 발생)
+    stmt = select(Transcript).where(
+        Transcript.interview_id == interview_id,
+        Transcript.speaker == Speaker.AI
+    ).order_by(Transcript.order.desc())
+    last_ai = session.exec(stmt).first()
+    next_order = (last_ai.order + 1) if last_ai and last_ai.order is not None else 1
 
     new_transcript = Transcript(
         interview_id=interview_id,
