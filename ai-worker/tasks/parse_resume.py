@@ -103,12 +103,17 @@ def parse_resume_final(input_source):
                 safe_row = [clean_text(c) if c else "" for c in row]
                 
                 # [해석] "학력"이라는 단어가 나오면 지금부터 나오는 줄들은 다 "education"에 저장해! 라고 깃발을 꽂는 겁니다.
-                if "학력" in row_text: current_section = "education"; continue
-                elif "수상" in row_text: current_section = "awards"; continue
-                elif "자격증" in row_text: current_section = "certifications"; continue
+                if any(kw in row_text for kw in ["학력", "Education"]): current_section = "education"; continue
+                elif any(kw in row_text for kw in ["경력", "경험", "활동", "Work", "Experience"]): current_section = "activities"; continue
+                elif any(kw in row_text for kw in ["수상", "Awards"]): current_section = "awards"; continue
+                elif any(kw in row_text for kw in ["자격증", "Certifications", "License"]): current_section = "certifications"; continue
+                elif any(kw in row_text for kw in ["프로젝트", "Projects"]): current_section = "projects"; continue
 
-                # 실제 데이터 매핑 (예: 학력 섹션일 때 데이터 저장)
+                # 실제 데이터 매핑 (비어있는 행은 무시)
+                if not any(safe_row): continue
+
                 if current_section == "education" and len(safe_row) >= 2:
+                    period = safe_row[0]
                     val1 = safe_row[1]
                     if is_date(val1) or "고등학교" in val1: continue # 고등학교 정보는 제외하는 필터링
                     
@@ -117,9 +122,46 @@ def parse_resume_final(input_source):
                     school = parts[0].strip()
                     major = parts[1].strip() if len(parts) > 1 else ""
                     
+                    # 만약 전공이 비어 있고 3번째 칸이 있다면 그걸 전공으로 간주해봅니다.
+                    gpa = ""
+                    if not major and len(safe_row) > 2:
+                        major = safe_row[2]
+                        gpa = safe_row[3] if len(safe_row) > 3 else ""
+                    else:
+                        gpa = safe_row[2] if len(safe_row) > 2 else ""
+                    
                     data["education"].append({
-                        "period": safe_row[0], "school_name": school, "major": major,
-                        "gpa": safe_row[2] if len(safe_row)>2 else ""
+                        "period": period, "school_name": school, "major": major, "gpa": gpa
+                    })
+
+                elif current_section == "activities" and len(safe_row) >= 2:
+                    # [기간 | 기관/회사 | 역할 | 상세내용] 구조 대응
+                    data["activities"].append({
+                        "period": safe_row[0],
+                        "organization": safe_row[1],
+                        "role": safe_row[2] if len(safe_row) > 2 else "",
+                        "description": safe_row[3] if len(safe_row) > 3 else ""
+                    })
+
+                elif current_section == "awards" and len(safe_row) >= 2:
+                    data["awards"].append({
+                        "date": safe_row[0],
+                        "title": safe_row[1],
+                        "organization": safe_row[2] if len(safe_row) > 2 else ""
+                    })
+
+                elif current_section == "certifications" and len(safe_row) >= 2:
+                    data["certifications"].append({
+                        "date": safe_row[0],
+                        "title": safe_row[1],
+                        "organization": safe_row[2] if len(safe_row) > 2 else ""
+                    })
+
+                elif current_section == "projects" and len(safe_row) >= 2:
+                    data["projects"].append({
+                        "period": safe_row[0],
+                        "title": safe_row[1],
+                        "description": safe_row[2] if len(safe_row) > 2 else ""
                     })
 
     # -------------------------------------------------------
