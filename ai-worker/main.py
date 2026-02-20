@@ -66,6 +66,7 @@ app.conf.update(
     task_routes={
         # GPU 사용 태스크 (질문 생성, 임베딩, STT, 리포트)
         'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
+        'tasks.question_generation.*': {'queue': 'gpu_queue'},
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},

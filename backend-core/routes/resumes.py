@@ -17,9 +17,8 @@ logger = logging.getLogger("ResumeAPI")
 
 router = APIRouter(prefix="/api/resumes", tags=["Resumes"])
 
-# Celery 앱 (환경변수에서 설정)
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-celery_app = Celery("ai_worker", broker=CELERY_BROKER_URL)
+# Celery 설정 (중앙화된 설정 로드)
+from celery_app import celery_app
 
 # 업로드 디렉토리
 UPLOAD_DIR = os.getenv("RESUME_UPLOAD_DIR", "./uploads/resumes")

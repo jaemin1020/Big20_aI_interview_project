@@ -10,12 +10,8 @@ logger = logging.getLogger("STT-Service")
 
 router = APIRouter(prefix="/stt", tags=["Speech-to-Text"])
 
-# Celery 설정
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
-
-celery_app = Celery("ai_worker", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
-celery_app.conf.result_backend = CELERY_RESULT_BACKEND
+# Celery 설정 (중앙화된 설정 로드)
+from celery_app import celery_app
 
 @router.post("/recognize")
 async def recognize_audio(file: UploadFile = File(...)):

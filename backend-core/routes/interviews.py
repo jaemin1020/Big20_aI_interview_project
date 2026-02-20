@@ -21,7 +21,7 @@ router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
 
 # Celery
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+from celery_app import celery_app
 
 # TTS 오디오 저장 디렉토리 (백엔드와 ai-worker 공유 볼륨)
 TTS_UPLOAD_DIR = Path("/app/uploads/tts")

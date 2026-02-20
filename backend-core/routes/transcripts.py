@@ -10,7 +10,7 @@ from utils.auth_utils import get_current_user
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 logger = logging.getLogger("Transcript-Router")
 
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+from celery_app import celery_app
 
 # 대화 기록 저장
 @router.post("")
