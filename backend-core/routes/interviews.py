@@ -32,9 +32,19 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
 
 def _fire_tts_for_question(question_id: int, question_text: str) -> None:
-    """
-    질문에 대한 TTS 태스크를 비동기로 실행하고 WAV 파일을 uploads/tts/에 저장습니다.
-    audio_url 형식: {BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav
+    """설명:
+        질문에 대한 TTS 태스크를 실행하고 생성된 WAV 파일을 공유 볼륨(uploads/tts/)에 저장합니다.
+        문장 내의 [단계] 태그를 자동으로 제거하여 합성하며, 이미 파일이 존재하는 경우 중복 생성을 방지합니다.
+
+    Args:
+        question_id (int): 질문의 고유 ID. 파일명(q_{id}.wav) 정의에 사용됩니다.
+        question_text (str): 음성 합성 대상인 전체 질문 텍스트.
+
+    Returns:
+        None: 반환값은 없으며 서버 파일 시스템에 직접 저장합니다.
+
+    생성자: ejm,hyl
+    생성일자: 2026-02-06,2026-02-19
     """
     filename = f"q_{question_id}.wav"
     filepath = TTS_UPLOAD_DIR / filename
