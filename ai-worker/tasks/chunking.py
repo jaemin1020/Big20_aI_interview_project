@@ -61,10 +61,94 @@ def chunk_resume(parsed_data):
             "metadata": { "source": "resume", "category": "education", "school": school }
         })
 
-    # (활동, 수상, 프로젝트, 자격증도 위와 같은 방식으로 반복됩니다... 생략)
+    # ----------------------------------------------------
+    # 4. 대외활동 (Activities)
+    # ----------------------------------------------------
+    activities = parsed_data.get("activities", [])
+    for act in activities:
+        org = act.get("organization", "")
+        role = act.get("role", "")
+        period = act.get("period", "")
+        desc = act.get("description", "")
+        
+        text = f"[대외활동] 기관: {org}, 역할: {role}"
+        if period: text += f" ({period})"
+        if desc: text += f"\n설명: {desc}"
+        
+        chunks.append({
+            "type": "experience",
+            "text": text,
+            "metadata": { "source": "resume", "category": "experience", "org": org }
+        })
 
     # ----------------------------------------------------
-    # 4. 자기소개서 (Self Intro) - 🔥 이 코드의 핵심 🔥
+    # 5. 수상 (Awards)
+    # ----------------------------------------------------
+    awards = parsed_data.get("awards", [])
+    for award in awards:
+        title = award.get("title", "")
+        org = award.get("organization", "")
+        date = award.get("date", "")
+        
+        text = f"[수상] 상훈: {title}, 기관: {org}"
+        if date: text += f" ({date})"
+        
+        chunks.append({
+            "type": "awards",
+            "text": text,
+            "metadata": { "source": "resume", "category": "awards" }
+        })
+
+    # ----------------------------------------------------
+    # 6. 자격증 (Certifications) - 🔥 핵심 수정 지점 🔥
+    # ----------------------------------------------------
+    certifications = parsed_data.get("certifications", [])
+    for cert in certifications:
+        title = cert.get("title", "")
+        org = cert.get("organization", "")
+        date = cert.get("date", "")
+        
+        # [해석] AI가 "자격증을 보유하고 있다"는 것을 확실히 인식하도록 포맷팅합니다.
+        text = f"[자격증] 자격명: {title}, 발행기관: {org}"
+        if date: text += f" (취득일: {date})"
+        
+        chunks.append({
+            "type": "certifications", 
+            "text": text,
+            "metadata": { "source": "resume", "category": "certification" }
+        })
+
+    # ----------------------------------------------------
+    # 7. 프로젝트 (Projects)
+    # ----------------------------------------------------
+    projects = parsed_data.get("projects", [])
+    for proj in projects:
+        title = proj.get("title", "")
+        period = proj.get("period", "")
+        desc = proj.get("description", "")
+        
+        text = f"[프로젝트] 명칭: {title}"
+        if period: text += f" ({period})"
+        if desc: text += f"\n상세: {desc}"
+        
+        # 프로젝트 설명이 길면 텍스트 분할기로 쪼갭니다.
+        if len(text) > 400:
+            split_texts = text_splitter.split_text(text)
+            for i, st in enumerate(split_texts):
+                chunks.append({
+                    "type": "projects",
+                    "text": f"(부분 {i+1}) {st}",
+                    "metadata": { "source": "resume", "category": "project", "title": title }
+                })
+        else:
+            chunks.append({
+                "type": "projects",
+                "text": text,
+                "metadata": { "source": "resume", "category": "project" }
+            })
+
+    # ----------------------------------------------------
+    # 8. 자기소개서 (Self Intro)
     # ----------------------------------------------------
     self_intros = parsed_data.get("self_intro", [])
     for idx, intro in enumerate(self_intros):
