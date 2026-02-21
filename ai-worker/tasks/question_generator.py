@@ -38,6 +38,7 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
 5. 이전 질문과 중복되지 않도록 하십시오.
 6. **환각 주의**: 이력서에 "익히고 싶다", "공부할 계획이다", "성장하겠다" 등 미래 포부로 적힌 내용은 실제 실무 경험이나 프로젝트 성과로 취급하여 질문하지 마십시오. 미래 포부는 학습 의지나 관심도를 묻는 용도로만 사용하십시오.
+7. **꼬리질문(Follow-up) 규칙**: 지원자의 답변에 대한 꼬리질문을 할 때는 반드시 지원자의 답변 내용을 먼저 한 문장으로 요약하고, 답변에서 사용된 구체적인 기술 용어나 고유 명사를 활용하여 더 깊은 내용을 물어보십시오. 답변에 없는 뻔한 질문은 피하십시오.
 
 [이력서 및 답변 문맥]
 {context}
@@ -139,24 +140,77 @@ def generate_next_question_task(interview_id: int):
             if next_stage.get("type") == "template":
                 candidate_name = "지원자"
                 target_role = interview.position or "해당 직무"
+                course_name = "관련 프로젝트"
+                cert_name = "관련 자격"
+
                 if interview.resume and interview.resume.structured_data:
                     sd = interview.resume.structured_data
                     if isinstance(sd, str):
                         sd = json.loads(sd)
-                    candidate_name = sd.get("header", {}).get("name", "지원자")
-                    target_role = sd.get("header", {}).get("target_role", target_role)
+                    
+                    candidate_name = sd.get("header", {}).get("name") or sd.get("header", {}).get("candidate_name") or "지원자"
+                    target_role = sd.get("header", {}).get("target_role") or target_role
+                    
+                    # 1. 지원 직무와 관련된 핵심 키워드 (우선순위 부여용)
+                    priority_keywords = ["데이터", "분석", "RAG", "AI", "클라우드", "이커머스", "시스템", "예측", "모델링", "SQL", "보안","정보",'컴퓨터']
+                    # 2. 제외해야 할 단어 (가이드 문구나 무관한 데이터)
+                    blacklist = ["과정명", "내용", "상세 내용", "상세내용", "제목", "기간", "자격증명", "운전면허"]
 
-                template_vars = {"candidate_name": candidate_name, "target_role": target_role, "major": major}
+                    # 프로젝트 전문 데이터에서 이름 추출
+                    projects = sd.get("projects", [])
+                    found_project = None
+                    # 우선순위 키워드가 포함된 프로젝트 먼저 찾기
+                    for p in projects:
+                        title = p.get("title") or p.get("name") or ""
+                        if any(kw in title for kw in priority_keywords) and not any(bl in title for bl in blacklist):
+                            found_project = title
+                            break
+                    # 못 찾았다면 블랙리스트만 피해서 찾기
+                    if not found_project:
+                        for p in projects:
+                            title = p.get("title") or p.get("name") or ""
+                            if title and not any(bl in title for bl in blacklist):
+                                found_project = title
+                                break
+                    if found_project: course_name = found_project
+                    
+                    # 자격증 전문 데이터에서 이름 추출
+                    certs = sd.get("certifications", [])
+                    found_cert = None
+                    # 우선순위 키워드 자격증 찾기
+                    for c in certs:
+                        title = c.get("title") or c.get("name") or ""
+                        if any(kw in title for kw in priority_keywords) and not any(bl in title for bl in blacklist):
+                            found_cert = title
+                            break
+                    # 못 찾았다면 블랙리스트(운전면허 등) 피해서 찾기
+                    if not found_cert:
+                        for c in certs:
+                            title = c.get("title") or c.get("name") or ""
+                            if title and not any(bl in title for bl in blacklist):
+                                found_cert = title
+                                break
+                    if found_cert: cert_name = found_cert
+
+                template_vars = {
+                    "candidate_name": candidate_name, 
+                    "target_role": target_role, 
+                    "major": major or "보관 전공",
+                    "course_name": course_name,
+                    "cert_name": cert_name
+                }
+                
                 tpl = next_stage.get("template", "{candidate_name} 지원자님, 계속해주세요.")
                 try:
                     formatted = tpl.format(**template_vars)
                 except KeyError:
-                    formatted = tpl
+                    # 필요한 키가 없을 경우를 대비한 안전 장치
+                    formatted = tpl.replace("{candidate_name}", candidate_name).replace("{course_name}", course_name).replace("{cert_name}", cert_name)
 
                 intro_msg = next_stage.get("intro_sentence", "")
                 display_name = next_stage.get("display_name", "면접질문")
                 final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
-                logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료 (RAG/LLM 생략)")
+                logger.info(f"Template stage '{next_stage['stage']}' (v2) → 즉시 포맷 완료 (Direct Extraction)")
 
             else:
                 # 4-b. AI stage: 문맥 확보 후 LLM 생성

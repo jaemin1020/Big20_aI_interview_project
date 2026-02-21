@@ -29,29 +29,42 @@ def get_candidate_info(structured_data):
 def check_if_transition(major: str, target_role: str) -> bool:
     """
     지원자의 전공과 지원 직무를 비교하여 '직무 전환(비전공자)' 여부를 판별합니다.
-    - major: 지원자 전공 (예: 국어국문학)
-    - target_role: 지원 직무 (예: AI 개발자)
+    기준: 지원 직무의 핵심 키워드가 전공명에 포함되어 있지 않으면 전환자로 간주합니다.
     """
-    if not major:
-        return False
+    if not major or not target_role:
+        return True # 정보가 없으면 보수적으로 전환자 시나리오 적용
         
-    # IT/공학 계열 전공 키워드
-    tech_keywords = [
-        "컴퓨터", "소프트웨어", "공학", "전산", "IT", "플랫폼", "데이터", "통계", "수학", 
-        "인공지능", "AI", "정보", "보안", "시스템", "전자", "전기", "통신", "임베디드",
-        "디지털", "웹", "네트워크"
-    ]
-    
-    # 전공에 기술 키워드가 포함되어 있는지 확인
+    # 직무별 핵심 키워드 맵핑 (직무에 이 단어가 있으면 전공에도 관련 단어가 있어야 함)
+    role_to_major_keywords = {
+        "보안": ["보안", "정보보호", "해킹", ],
+        "데이터": ["데이터", "통계", "수학", "계산",],
+        "개발": ["컴퓨터", "소프트웨어", "공학", "전산", "IT", "정보", "웹", "앱", "SW", "프로그래밍"],
+        "분석": ["데이터", "통계", "수학",],
+        "AI": ["인공지능", "컴퓨터", "소프트웨어", "지능"],
+        "엔지니어": ["컴퓨터", "소프트웨어", "시스템", "IT"]
+    }
+
+    # 1. 현재 지원 직무에서 어떤 핵심 키워드군에 속하는지 확인
+    relevant_major_keywords = set()
+    for role_key, major_keys in role_to_major_keywords.items():
+        if role_key.lower() in target_role.lower():
+            relevant_major_keywords.update(major_keys)
+
+    # 2. 만약 직무 키워드를 찾았다면, 전공에 해당 관련 단어가 있는지 확인
+    if relevant_major_keywords:
+        is_major_match = any(mk.lower() in major.lower() for mk in relevant_major_keywords)
+        if not is_major_match:
+            logger.info(f"Transition Detected: Role '{target_role}' requires keywords {relevant_major_keywords}, but Major is '{major}'")
+            return True
+        else:
+            logger.info(f"Major Match: '{major}' is considered relevant for Role '{target_role}'")
+            return False
+
+    # 3. 매칭되는 직무 키워드가 없는 경우 (기본 기술직군 체크)
+    tech_keywords = ["컴퓨터", "소프트웨어", "전산", "IT", "플랫폼", "인공지능", "정보"]
     is_tech_major = any(kw.lower() in major.lower() for kw in tech_keywords)
     
-    # 지원 직무가 기술직군인지 확인
-    tech_roles = ["개발", "데이터", "분석", "AI", "보안", "엔지니어", "프로그래머", "기획", "디렉터", "운영"]
-    is_tech_role = any(kw.lower() in target_role.lower() for kw in tech_roles)
-    
-    # 기술직군에 지원했는데 전공이 비전공이라면 '전환(Transition)' 시나리오 적용
-    if is_tech_role and not is_tech_major:
-        logger.info(f"Transition scenario detected: Major={major}, Role={target_role}")
+    if not is_tech_major:
         return True
         
     return False
