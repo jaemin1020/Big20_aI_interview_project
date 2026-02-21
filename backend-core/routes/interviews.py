@@ -21,7 +21,7 @@ router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
 
 # Celery
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+from celery_app import celery_app
 
 # TTS 오디오 저장 디렉토리 (백엔드와 ai-worker 공유 볼륨)
 TTS_UPLOAD_DIR = Path("/app/uploads/tts")
@@ -464,17 +464,18 @@ async def get_evaluation_report(
     # 리포트가 아직 없거나 생성 중일 때에 대한 처리
     if not report:
         # 데이터는 없지만 기본 정보는 보여주기 위해 가짜 객체 구성 (프론트엔드 미상 방지)
+        now = datetime.utcnow()
         return {
             "id": 0,
             "interview_id": interview_id,
             "technical_score": 0, "communication_score": 0, "cultural_fit_score": 0,
             "summary_text": "AI가 현재 면접 내용을 상세 분석하고 있습니다. 잠시만 기다려 주세요.",
-            "details_json": {},
-            "created_at": datetime.utcnow(),
+            "details_json": {},          # ← required 필드 추가
+            "created_at": now,           # ← required 필드 추가
             "position": actual_position,
             "company_name": actual_company,
             "candidate_name": cand_name,
-            "interview_date": interview.start_time or datetime.utcnow(),
+            "interview_date": interview.start_time or now,
             "technical_feedback": "분석이 완료되면 여기에 표시됩니다.",
             "experience_feedback": "데이터 분석 중...",
             "problem_solving_feedback": "데이터 분석 중...",
