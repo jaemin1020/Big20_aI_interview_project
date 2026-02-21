@@ -159,7 +159,7 @@ def generate_next_question_task(interview_id: int):
                 logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료 (RAG/LLM 생략)")
 
             else:
-                # 4-b. AI stage: RAG로 문맥 확보 후 LLM 생성
+                # 4-b. AI stage: 문맥 확보 후 LLM 생성
                 query_template = next_stage.get("query_template", interview.position)
                 try:
                     query = query_template.format(
@@ -169,21 +169,38 @@ def generate_next_question_task(interview_id: int):
                 except (KeyError, ValueError):
                     query = query_template 
                 
-                # [개선] 카테고리가 'certification'인 경우 자격증(certifications) 섹션만 엄격하게 필터링
-                filter_type = None
+                # [개선] 카테고리가 'certification'인 경우 RAG 대신 구조화된 데이터에서 직접 추출 (정확도 100%)
                 category_raw = next_stage.get("category")
-                if category_raw == "certification":
-                    filter_type = "certifications"
-                    logger.info("🎯 Category 'certification' detected: Strict filtering for certifications context.")
+                rag_results = []
+                context_text = ""
 
-                rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
-                
-                # 자격증 카테고리인데 결과가 만약 없다면 전체 섹션에서 재검색
-                if not rag_results and filter_type == "certifications":
-                    logger.info("⚠️ No exact 'certifications' section found, searching globally for certificates.")
-                    rag_results = retrieve_context(f"보유 자격증 자격 취득 {query}", resume_id=interview.resume_id, top_k=3)
-
-                context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                if category_raw == "certification" and interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str): sd = json.loads(sd)
+                    
+                    certs = sd.get("certifications", [])
+                    # 직무 관련성 높은 자격증 우선 필터링 (키워드 기반)
+                    important_certs = [c for c in certs if any(kw in c.get('title', '') for kw in ["데이터", "분석", "RAG", "AI", "클라우드", "SQL", "ADSP", "정보처리"])]
+                    
+                    # 만약 필터링된 게 없다면 전체 자격증 사용
+                    final_certs = important_certs if important_certs else certs
+                    
+                    if final_certs:
+                        logger.info(f"✅ RAG 건너뜀: 구조화된 데이터에서 자격증 {len(final_certs)}개를 직접 가져왔습니다.")
+                        context_text = "지원자가 보유한 자격증 목록:\n" + "\n".join([f"- 자격명: {c.get('title')}, 발행기관: {c.get('organization')}, 일자: {c.get('date')}" for c in final_certs])
+                        # intro_sentence 포맷팅 호환성을 위해 rag_results 형태로 변환 (첫 번째 것만)
+                        rag_results = [{'text': f"자격명: {final_certs[0].get('title')}"}]
+                    else:
+                        logger.info("⚠️ 이력서에 자격증 정보가 없어 일반 RAG 검색으로 전환합니다.")
+                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                else:
+                    # 일반적인 경우에는 RAG 검색 수행
+                    filter_type = None
+                    if category_raw == "certification": filter_type = "certifications"
+                    
+                    rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
+                    context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
 
                 if last_transcript and last_transcript.speaker == "User":
                     context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
