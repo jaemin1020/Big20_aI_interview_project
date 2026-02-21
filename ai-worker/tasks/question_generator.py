@@ -37,8 +37,8 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
 4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
 5. 이전 질문과 중복되지 않도록 하십시오.
-6. **환각 주의**: 이력서에 "익히고 싶다", "공부할 계획이다", "성장하겠다" 등 미래 포부로 적힌 내용은 실제 실무 경험이나 프로젝트 성과로 취급하여 질문하지 마십시오. 미래 포부는 학습 의지나 관심도를 묻는 용도로만 사용하십시오.
-7. **꼬리질문(Follow-up) 규칙**: 지원자의 답변에 대한 꼬리질문을 할 때는 반드시 지원자의 답변 내용을 먼저 한 문장으로 요약하고, 답변에서 사용된 구체적인 기술 용어나 고유 명사를 활용하여 더 깊은 내용을 물어보십시오. 답변에 없는 뻔한 질문은 피하십시오.
+7. **꼬리질문(Follow-up) 규칙**: 반드시 지원자의 답변을 "~라고 말씀해 주셨군요."와 같이 먼저 한 문장으로 요약하십시오. 그 후, 답변에서 언급된 구체적인 기술이나 방법론에 대해 **그 방식을 선택한 이유** 또는 실제 프로젝트에서 직면했던 **기술적 한계나 문제점**을 콕 집어 심층 질문하십시오.
+8. **환각 및 대괄호 금지**: 지원자가 말하지 않은 외부 기술(예: AWS Lambda 등)이나 이름(이지은님 등)을 절대 지어내지 마십시오. 가이드에 적힌 '[예시]'나 대괄호 기호([...])도 절대 출력하지 마십시오. 답변이 너무 짧다면 억지로 깊은 내용을 묻지 말고 해당 키워드의 학습 동기나 일반적인 특징을 질문하십시오.
 
 [이력서 및 답변 문맥]
 {context}
@@ -83,6 +83,13 @@ def generate_next_question_task(interview_id: int):
                 Transcript.speaker == Speaker.AI
             ).order_by(Transcript.order.desc(), Transcript.id.desc())  # id를 tiebreaker로 사용 (order 같을 때 최신 AI 발화 보장)
             last_ai_transcript = session.exec(stmt_ai).first()
+
+            # [수정] RAG 쿼리로 사용할 지원자의 '진짜' 마지막 답변 별도 추출
+            stmt_user = select(Transcript).where(
+                Transcript.interview_id == interview_id,
+                Transcript.speaker == Speaker.USER
+            ).order_by(Transcript.order.desc(), Transcript.id.desc())
+            last_user_transcript = session.exec(stmt_user).first()
 
             # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
             if last_ai_transcript:
@@ -213,60 +220,50 @@ def generate_next_question_task(interview_id: int):
                 logger.info(f"Template stage '{next_stage['stage']}' (v2) → 즉시 포맷 완료 (Direct Extraction)")
 
             else:
-                # 4-b. AI stage: 문맥 확보 후 LLM 생성
-                query_template = next_stage.get("query_template", interview.position)
-                try:
-                    query = query_template.format(
-                        target_role=interview.position or "해당 직무",
-                        major=major or ""
-                    )
-                except (KeyError, ValueError):
-                    query = query_template 
-                
-                # [개선] 카테고리가 'certification'인 경우 RAG 대신 구조화된 데이터에서 직접 추출 (정확도 100%)
-                category_raw = next_stage.get("category")
-                rag_results = []
-                context_text = ""
-
-                if category_raw == "certification" and interview.resume and interview.resume.structured_data:
-                    sd = interview.resume.structured_data
-                    if isinstance(sd, str): sd = json.loads(sd)
-                    
-                    certs = sd.get("certifications", [])
-                    # 직무 관련성 높은 자격증 우선 필터링 (키워드 기반)
-                    important_certs = [c for c in certs if any(kw in c.get('title', '') for kw in ["데이터", "분석", "RAG", "AI", "클라우드", "SQL", "ADSP", "정보처리"])]
-                    
-                    # 만약 필터링된 게 없다면 전체 자격증 사용
-                    final_certs = important_certs if important_certs else certs
-                    
-                    if final_certs:
-                        logger.info(f"✅ RAG 건너뜀: 구조화된 데이터에서 자격증 {len(final_certs)}개를 직접 가져왔습니다.")
-                        context_text = "지원자가 보유한 자격증 목록:\n" + "\n".join([f"- 자격명: {c.get('title')}, 발행기관: {c.get('organization')}, 일자: {c.get('date')}" for c in final_certs])
-                        # intro_sentence 포맷팅 호환성을 위해 rag_results 형태로 변환 (첫 번째 것만)
-                        rag_results = [{'text': f"자격명: {final_certs[0].get('title')}"}]
-                    else:
-                        logger.info("⚠️ 이력서에 자격증 정보가 없어 일반 RAG 검색으로 전환합니다.")
-                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
-                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                # [로직 단순환] 꼬리질문과 일반 질문의 컨텍스트 분리
+                if next_stage.get("type") == "followup":
+                    # 꼬리질문: RAG/질문은행 모두 스킵하고 오직 '질문-답변' 맥락만 사용 (환각 0%)
+                    logger.info("🎯 Follow-up mode: RAG & Question Bank disabled. Focusing purely on conversation context.")
+                    context_text = f"이전 질문: {last_ai_transcript.text if last_ai_transcript else '없음'}\n"
+                    if last_user_transcript:
+                        context_text += f"[지원자의 최근 답변]: {last_user_transcript.text}"
+                    rag_results = []
                 else:
-                    # 일반적인 경우에는 RAG 검색 수행
-                    filter_type = None
-                    if category_raw == "certification": filter_type = "certifications"
-                    
-                    rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
-                    context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                    # 일반 AI 질문 (경험/문제해결 등): 이력서 RAG 검색 수행
+                    query_template = next_stage.get("query_template", interview.position)
+                    try:
+                        query = query_template.format(
+                            target_role=interview.position or "해당 직무",
+                            major=major or ""
+                        )
+                    except (KeyError, ValueError):
+                        query = query_template
 
-                if last_transcript and last_transcript.speaker == "User":
-                    context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
-                    
-                    # [추가] 꼬리질문 시 질문 은행(13,000개 데이터) 활용
-                    if next_stage.get("type") == "followup":
-                        logger.info(f"🔍 Searching Question Bank for smarter follow-up. Query: '{last_transcript.text[:30]}...'")
-                        similar_questions = retrieve_similar_questions(last_transcript.text, top_k=3)
-                        if similar_questions:
-                            context_text += "\n\n[참고할 만한 전문 면접 질문 목록]:\n"
-                            context_text += "\n".join([f"- {q['text']}" for q in similar_questions])
-                            context_text += "\n(가이드: 위 질문 목록의 수준과 형식을 참고하여, 지원자의 답변을 요약한 뒤 구체적으로 꼬리질문을 하세요.)"
+                    category_raw = next_stage.get("category")
+                    rag_results = []
+                    context_text = ""
+
+                    if category_raw == "certification" and interview.resume and interview.resume.structured_data:
+                        sd = interview.resume.structured_data
+                        if isinstance(sd, str): sd = json.loads(sd)
+                        certs = sd.get("certifications", [])
+                        important_certs = [c for c in certs if any(kw in c.get('title', '') for kw in ["데이터", "분석", "RAG", "AI", "클라우드", "SQL", "ADSP", "정보처리"])]
+                        final_certs = important_certs if important_certs else certs
+                        if final_certs:
+                            logger.info(f"✅ RAG 건너뜀 (구조화 데이터 활용)")
+                            context_text = "지원자가 보유한 자격증 목록:\n" + "\n".join([f"- {c.get('title')}" for c in final_certs])
+                            rag_results = [{'text': f"자격명: {final_certs[0].get('title')}"}]
+                        else:
+                            rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                            context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                    else:
+                        filter_type = None
+                        if category_raw == "certification": filter_type = "certifications"
+                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
+                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                        
+                    if last_user_transcript:
+                        context_text += f"\n[지원자의 최근 답변]: {last_user_transcript.text}"
 
                 llm = get_exaone_llm()
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
