@@ -65,7 +65,7 @@ def generate_next_question_task(interview_id: int):
     from utils.interview_helpers import check_if_transition
     from config.interview_scenario import get_next_stage as get_next_stage_normal
     from config.interview_scenario_transition import get_next_stage as get_next_stage_transition
-    from tasks.rag_retrieval import retrieve_context
+    from tasks.rag_retrieval import retrieve_context, retrieve_similar_questions
     try:
         with Session(engine) as session:
             interview = session.get(Interview, interview_id)
@@ -258,6 +258,15 @@ def generate_next_question_task(interview_id: int):
 
                 if last_transcript and last_transcript.speaker == "User":
                     context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
+                    
+                    # [추가] 꼬리질문 시 질문 은행(13,000개 데이터) 활용
+                    if next_stage.get("type") == "followup":
+                        logger.info(f"🔍 Searching Question Bank for smarter follow-up. Query: '{last_transcript.text[:30]}...'")
+                        similar_questions = retrieve_similar_questions(last_transcript.text, top_k=3)
+                        if similar_questions:
+                            context_text += "\n\n[참고할 만한 전문 면접 질문 목록]:\n"
+                            context_text += "\n".join([f"- {q['text']}" for q in similar_questions])
+                            context_text += "\n(가이드: 위 질문 목록의 수준과 형식을 참고하여, 지원자의 답변을 요약한 뒤 구체적으로 꼬리질문을 하세요.)"
 
                 llm = get_exaone_llm()
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)

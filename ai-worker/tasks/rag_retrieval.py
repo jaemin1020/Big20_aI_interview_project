@@ -149,6 +149,42 @@ def get_retriever(resume_id=1, top_k=10, filter_type=None):
     )
 
 # -----------------------------------------------------------
+# [신규] 질문 은행(questions 테이블) 검색 함수
+# -----------------------------------------------------------
+def retrieve_similar_questions(query, top_k=5):
+    """
+    질문 은행(questions 테이블)에서 쿼리와 유사한 질문들을 검색합니다.
+    """
+    print(f"\n🔍 [질문 은행 검색] 쿼리: '{query[:50]}...' (Top {top_k})")
+    
+    embedder = get_embedder()
+    if not embedder:
+        return []
+    
+    connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
+    
+    try:
+        from sqlalchemy import text
+        query_vector = embedder.embed_query(query)
+        sql = text("""
+            SELECT content, category, position, (embedding <=> :emb) as distance
+            FROM questions
+            WHERE embedding IS NOT NULL
+            ORDER BY distance ASC
+            LIMIT :limit
+        """)
+        with engine.connect() as conn:
+            rows = conn.execute(sql, {"emb": str(query_vector), "limit": top_k}).fetchall()
+            results = [{"text": r[0], "meta": {"category": r[1], "position": r[2]}, "score": float(r[3])} for r in rows]
+            
+            print(f"   👉 질문 은행에서 {len(results)}개의 유사 질문을 찾았습니다.")
+            return results
+            
+    except Exception as e:
+        print(f"❌ 질문 은행 검색 실패: {e}")
+        return []
+
+# -----------------------------------------------------------
 # 테스트 코드
 # -----------------------------------------------------------
 if __name__ == "__main__":
