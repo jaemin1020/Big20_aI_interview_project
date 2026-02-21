@@ -287,7 +287,7 @@ def update_company_embedding(company_id: str, embedding: List[float]):
         company = session.get(Company, company_id)
         if company:
             company.embedding = embedding
-            company.updated_at = datetime.utcnow()
+            company.updated_at = datetime.now()
             session.add(company)
             session.commit()
 
@@ -338,7 +338,7 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
                 current_summary["history"] = []
             
             # 타임스탬프 추가
-            emotion_data["timestamp"] = datetime.utcnow().isoformat()
+            emotion_data["timestamp"] = datetime.now().isoformat()
             current_summary["history"].append(emotion_data)
             
             # 최신 상태 업데이트
@@ -386,7 +386,7 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         text=content,
         question_id=question.id,
         order=next_order,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now()
     )
     session.add(new_transcript)
     session.commit() # 전체 확정

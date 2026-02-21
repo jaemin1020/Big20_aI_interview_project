@@ -6,6 +6,7 @@ FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV TZ=Asia/Seoul
 
 # 1. 시스템 패키지 설치
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -14,6 +15,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     python3.10 python3.10-dev python3-pip \
     build-essential cmake git pkg-config libopenblas-dev \
     ffmpeg libsm6 libxext6 libgl1 curl \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/python3.10 /usr/bin/python

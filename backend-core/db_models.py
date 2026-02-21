@@ -2,7 +2,7 @@ from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT
 from pgvector.sqlalchemy import Vector  # pgvector 지원
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 # ==================== Enums ====================
@@ -56,7 +56,7 @@ class User(SQLModel, table=True):
         default=None,
         sa_column=Column(ARRAY(TEXT))
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
 
     # 탈퇴 처리 (soft delete)
     is_withdrawn: bool = Field(default=False)
@@ -100,7 +100,7 @@ class Resume(SQLModel, table=True):
     )
 
     # 메타데이터
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    uploaded_at: datetime = Field(default_factory=datetime.now)
     processed_at: Optional[datetime] = Field(default=None, description="파싱 완료 시각")
     is_active: bool = Field(default=True)
     processing_status: str = Field(default="pending", description="pending, processing, completed, failed")
@@ -132,8 +132,8 @@ class Company(SQLModel, table=True):
     )
 
     # 시스템 필드
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
     # Relationships
     interviews: List["Interview"] = Relationship(back_populates="company")
@@ -156,7 +156,7 @@ class Interview(SQLModel, table=True):
     scheduled_time: Optional[datetime] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
 
     # 전체 점수 (평가 완료 후 업데이트)
     overall_score: Optional[float] = None
@@ -201,7 +201,7 @@ class Question(SQLModel, table=True):
     company: Optional[str] = Field(default=None, index=True)    # 회사명 (예: "삼성전자", "카카오")
     industry: Optional[str] = Field(default=None, index=True)   # 산업 (예: "IT", "금융", "제조")
     position: Optional[str] = Field(default=None, index=True)   # 직무 (예: "Backend 개발자")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     is_active: bool = Field(default=True)
 
     # 통계
@@ -218,7 +218,7 @@ class Transcript(SQLModel, table=True):
     # 대화 정보
     speaker: Speaker
     text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     # 감정 분석 결과
     sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
@@ -253,8 +253,8 @@ class EvaluationReport(SQLModel, table=True):
     )
 
     # 메타데이터
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
     # LLM 평가자 정보
     evaluator_model: Optional[str] = None  # "Solar-10.7B-Q8" 등
@@ -288,7 +288,7 @@ class AnswerBank(SQLModel, table=True):
     position: Optional[str] = Field(default=None, index=True)
 
     # 메타데이터
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     is_active: bool = Field(default=True)
 
     # 통계

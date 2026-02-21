@@ -112,7 +112,7 @@ async def create_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.utcnow()
+        start_time=datetime.now()
     )
     db.add(new_interview)
     db.commit()
@@ -393,7 +393,7 @@ async def complete_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
 
     interview.status = InterviewStatus.COMPLETED
-    interview.end_time = datetime.utcnow()
+    interview.end_time = datetime.now()
     db.add(interview)
     db.commit()
 
@@ -464,7 +464,7 @@ async def get_evaluation_report(
     # 리포트가 아직 없거나 생성 중일 때에 대한 처리
     if not report:
         # 데이터는 없지만 기본 정보는 보여주기 위해 가짜 객체 구성 (프론트엔드 미상 방지)
-        now = datetime.utcnow()
+        now = datetime.now()
         return {
             "id": 0,
             "interview_id": interview_id,
@@ -550,7 +550,7 @@ async def create_realtime_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.IN_PROGRESS,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.utcnow()
+        start_time=datetime.now()
     )
     db.add(new_interview)
     db.commit()
