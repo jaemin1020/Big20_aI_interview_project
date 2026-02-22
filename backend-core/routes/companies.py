@@ -4,7 +4,8 @@ from typing import List
 import logging
 
 from database import get_session
-from models import Company
+
+from db_models import Company
 from pydantic import BaseModel
 
 logger = logging.getLogger("Backend-Core")
@@ -13,6 +14,17 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 # ==================== Request/Response Models ====================
 
 class CompanyResponse(BaseModel):
+    """회사 정보 응답 모델
+    
+    Args:
+        id (str): 회사 ID
+        company_name (str): 회사 이름
+        ideal (str | None): 이상향
+        description (str | None): 설명
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     id: str
     company_name: str
     ideal: str | None
@@ -24,7 +36,19 @@ class CompanyResponse(BaseModel):
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: str, db: Session = Depends(get_session)):
-    """회사 정보 조회"""
+    """
+    회사 정보 조회
+    
+    Args:
+        company_id (str): 회사 ID
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        
+    Returns:
+        CompanyResponse: 회사 정보
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -36,7 +60,20 @@ async def list_companies(
     limit: int = 20,
     db: Session = Depends(get_session)
 ):
-    """회사 목록 조회"""
+    """
+    회사 목록 조회
+    
+    Args:
+        skip (int, optional): 건너뛸 개수. Defaults to 0.
+        limit (int, optional): 가져올 개수. Defaults to 20.
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        
+    Returns:
+        List[CompanyResponse]: 회사 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     stmt = select(Company).offset(skip).limit(limit)
     companies = db.exec(stmt).all()
     return companies
@@ -47,7 +84,20 @@ async def find_similar_companies(
     limit: int = 5,
     db: Session = Depends(get_session)
 ):
-    """유사한 회사 찾기 (벡터 유사도 기반)"""
+    """
+    유사한 회사 찾기 (벡터 유사도 기반)
+    
+    Args:
+        company_id (str): 회사 ID
+        limit (int, optional): 가져올 개수. Defaults to 5.
+        db (Session, optional): 데이터베이스 세션. Defaults to Depends(get_session).
+        
+    Returns:
+        List[CompanyResponse]: 유사한 회사 목록
+    
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")

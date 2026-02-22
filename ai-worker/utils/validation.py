@@ -9,7 +9,17 @@ logger = logging.getLogger("ResumeValidation")
 
 
 class ResumeValidator:
-    """이력서 파싱 결과 품질 검증 클래스"""
+    """
+    이력서 파싱 결과 품질 검증 클래스
+
+    Attributes:
+    - MIN_TEXT_LENGTH: 최소 텍스트 길이 (글자)
+    - MIN_KOREAN_RATIO: 최소 한글 비율
+    - MIN_SECTION_LENGTH: 섹션별 최소 길이
+
+    생성자: ejm
+    생성일자: 2026-02-08
+    """
     
     # 검증 기준 상수
     MIN_TEXT_LENGTH = 100  # 최소 텍스트 길이 (글자)
@@ -26,6 +36,9 @@ class ResumeValidator:
             
         Returns:
             (is_valid, error_message)
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         if not text or not text.strip():
             return False, "추출된 텍스트가 비어있습니다"
@@ -63,6 +76,9 @@ class ResumeValidator:
             
         Returns:
             (is_valid, error_message)
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         if not segments:
             return False, "섹션이 비어있습니다"
@@ -98,6 +114,9 @@ class ResumeValidator:
             
         Returns:
             (is_valid, error_message)
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         if not structured_data:
             return False, "구조화된 데이터가 비어있습니다"
@@ -133,6 +152,9 @@ class ResumeValidator:
             
         Returns:
             (is_valid, error_message)
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         if not resume_data:
             return False, "이력서 데이터가 비어있습니다"
@@ -167,6 +189,9 @@ class ResumeValidator:
             
         Returns:
             (is_valid, error_message)
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         if not vector:
             return False, "임베딩 벡터가 비어있습니다"
@@ -198,6 +223,9 @@ class ResumeValidator:
             
         Returns:
             dict: 품질 점수 및 세부 정보
+        
+        생성자: ejm
+        생성일자: 2026-02-08
         """
         score = 100
         issues = []

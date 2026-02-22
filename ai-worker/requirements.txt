@@ -13,15 +13,11 @@ psycopg[binary]>=3.2.0
 pgvector>=0.2.0
 
 # LLM Core & Optimization
-# Downgrade to versions where 'RopeParameters' exists natively
-torch==2.3.1
-transformers==4.41.2
+# (Heavy components moved to Dockerfile for caching)
 accelerate>=0.30.0
 bitsandbytes>=0.43.1
-sentence-transformers>=3.0.0
 
 # LangChain Ecosystem
-# Compatibility with older transformers
 langchain>=0.2.0
 langchain-community>=0.2.0
 langchain-core>=0.2.0
@@ -40,7 +36,10 @@ opencv-python-headless>=4.10.0.84
 
 # Audio Processing
 librosa>=0.10.2
-
+pydub
+supertonic
+onnxruntime
+soundfile
 
 # PDF Processing & Document Parsing
 PyPDF2>=3.0.1
@@ -52,3 +51,6 @@ pydantic>=2.7.0
 
 # Remote Kernel Connectivity
 ipykernel>=6.29.0
+
+# STT Optimization
+# (Heavy components moved to Dockerfile)

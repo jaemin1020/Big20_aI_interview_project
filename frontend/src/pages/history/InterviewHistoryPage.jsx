@@ -1,12 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
-import { getAllInterviews, getEvaluationReport } from '../../api/interview';
+import { getAllInterviews, getEvaluationReport, getResume, getResumePdf } from '../../api/interview';
 
 const InterviewHistoryPage = ({ onBack, onViewResult }) => {
     const [interviews, setInterviews] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // Resume Modal State
+    const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+    const [resumeData, setResumeData] = useState(null);
+    const [resumePdfUrl, setResumePdfUrl] = useState(null);
+    const [resumeLoading, setResumeLoading] = useState(false);
+
+    // Clean up object URL when closing or unmounting
+    useEffect(() => {
+        return () => {
+            if (resumePdfUrl) {
+                URL.revokeObjectURL(resumePdfUrl);
+            }
+        };
+    }, [resumePdfUrl]);
 
     // Filters
     const [dateFilter, setDateFilter] = useState('all'); // all, 1month, 3month, 6month, custom
@@ -77,11 +92,60 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
 
     const handleViewDetail = async (interviewId) => {
         try {
-            // 리포트 데이터 가져오기
-            const report = await getEvaluationReport(interviewId);
-            onViewResult(report);
+            const interview = interviews.find(i => i.id === interviewId);
+            try {
+                // 리포트 데이터 가져오기 시도
+                const report = await getEvaluationReport(interviewId);
+                onViewResult(report, interview);
+            } catch (err) {
+                console.warn("Report fetch failed, showing placeholder:", err);
+                // 리포트가 없어도 결과 페이지로 이동 (더미 데이터 사용)
+                onViewResult(null, interview);
+            }
         } catch (err) {
-            alert("아직 분석 결과가 생성되지 않았거나, 불러올 수 없습니다.");
+            console.error("Error in handleViewDetail:", err);
+            alert("상세 정보를 불러오는 중 오류가 발생했습니다.");
+        }
+    };
+
+    const handleViewResume = async (resumeId) => {
+        if (!resumeId) {
+            alert("이 면접에 연결된 이력서가 없습니다.");
+            return;
+        }
+        setIsResumeModalOpen(true);
+        setResumeLoading(true);
+        setResumeData(null);
+        if (resumePdfUrl) {
+            URL.revokeObjectURL(resumePdfUrl);
+            setResumePdfUrl(null);
+        }
+        try {
+            const [data, blob] = await Promise.all([
+                getResume(resumeId).catch(err => {
+                    console.error("Failed to load parsed resume:", err);
+                    return null;
+                }),
+                getResumePdf(resumeId).catch(err => {
+                    console.error("Failed to load PDF blob:", err);
+                    return null;
+                })
+            ]);
+
+            setResumeData(data);
+            if (blob) {
+                setResumePdfUrl(URL.createObjectURL(blob));
+            }
+
+            if (!blob && !data) {
+                throw new Error("No data available");
+            }
+        } catch (err) {
+            console.error("Failed to load resume:", err);
+            alert("이력서 정보를 불러오는데 실패했습니다.");
+            setIsResumeModalOpen(false);
+        } finally {
+            setResumeLoading(false);
         }
     };
 
@@ -259,7 +323,7 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                     <div>
                                         <h4 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{item.position || '직무 미정'}</h4>
                                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                            {item.company_name || '회사명 미입력'} | {item.status === 'completed' ? '완료됨' : '진행 중'}
+                                            {item.company_name || '회사명 미입력'} | {(item.status === 'completed' || item.status === 'COMPLETED') ? '완료됨' : '진행 중'}
                                         </p>
                                     </div>
                                 </div>
@@ -271,21 +335,29 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                                         padding: '6px 12px',
                                         borderRadius: '20px',
                                         fontSize: '0.8rem',
-                                        background: item.status === 'completed' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
-                                        color: item.status === 'completed' ? '#22c55e' : '#eab308',
-                                        border: `1px solid ${item.status === 'completed' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)'}`,
+                                        background: (item.status === 'completed' || item.status === 'COMPLETED') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                                        color: (item.status === 'completed' || item.status === 'COMPLETED') ? '#22c55e' : '#eab308',
+                                        border: `1px solid ${(item.status === 'completed' || item.status === 'COMPLETED') ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)'}`,
                                         display: 'flex',
                                         alignItems: 'center',
                                         marginRight: '10px'
                                     }}>
-                                        {item.status === 'completed' ? '분석 완료' : '미완료'}
+                                        {(item.status === 'completed' || item.status === 'COMPLETED') ? '분석 완료' : '미완료'}
                                     </div>
 
                                     <PremiumButton
                                         variant="secondary"
+                                        onClick={() => handleViewResume(item.resume_id)}
+                                        style={{ padding: '8px 20px', fontSize: '0.9rem' }}
+                                    >
+                                        이력서보기
+                                    </PremiumButton>
+
+                                    <PremiumButton
+                                        variant="secondary"
                                         onClick={() => handleViewDetail(item.id)}
-                                        disabled={item.status !== 'completed'}
-                                        style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: item.status === 'completed' ? 1 : 0.5 }}
+                                        disabled={item.status !== 'completed' && item.status !== 'COMPLETED'}
+                                        style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: (item.status === 'completed' || item.status === 'COMPLETED') ? 1 : 0.5 }}
                                     >
                                         상세보기
                                     </PremiumButton>
@@ -295,6 +367,63 @@ const InterviewHistoryPage = ({ onBack, onViewResult }) => {
                     </div>
                 )}
             </div>
+
+            {/* Resume Modal */}
+            {isResumeModalOpen && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
+                    display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+                }}>
+                    <GlassCard style={{ width: '100%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', position: 'relative' }}>
+                        <button
+                            onClick={() => setIsResumeModalOpen(false)}
+                            style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer' }}
+                        >
+                            &times;
+                        </button>
+                        <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>이력서 상세 정보</h2>
+
+                        {resumeLoading ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+                                <div className="spinner"></div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                                {/* PDF 미리보기 */}
+                                {resumePdfUrl ? (
+                                    <div style={{
+                                        width: '100%',
+                                        height: '700px',
+                                        borderRadius: '16px',
+                                        overflow: 'hidden',
+                                        border: '1px solid var(--glass-border)',
+                                        background: 'rgba(255, 255, 255, 0.02)',
+                                        boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)',
+                                    }}>
+                                        <iframe
+                                            src={`${resumePdfUrl}#toolbar=0&navpanes=0`}
+                                            title="Resume Preview"
+                                            style={{ width: '100%', height: '100%', border: 'none' }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem', background: 'rgba(0,0,0,0.1)', borderRadius: '12px' }}>
+                                        PDF 원본을 불러올 수 없습니다.
+                                    </div>
+                                )}
+
+                            </div>
+                        )}
+                        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
+                            <PremiumButton onClick={() => setIsResumeModalOpen(false)} style={{ padding: '10px 30px' }}>
+                                닫기
+                            </PremiumButton>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
 
         </div>
     );

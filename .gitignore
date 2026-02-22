@@ -144,6 +144,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+node_modules/
 
 # Spyder project settings
 .spyderproject
@@ -217,9 +218,34 @@ structured_resume.json
 uploads/
 *.pdf
 *.docx
+*.sql
 
 # Quality reports (keep only final version)
 docs/QUALITY_REPORT_*.md
 docs/QUALITY_FINAL_SUMMARY.md
 
+# Test audio files
+*.wav
+*.mp3
+*.webm
+!ai-worker/poc/libs/StyleTTS2-Vocos/Outputs/**/*.wav
+
+# Large model files (exceed GitHub 100MB limit)
+*.onnx
+*.pth
+*.bin
+*.safetensors
+*.pt
+
 .agent/
+
+lsj/
+
+C:\big20\Big20_aI_interview_project\lyn
+
+C:\big20\Big20_aI_interview_project\ai-worker\models
+
+*.gguf
+lsj/
+ai-worker/ai_models/
+lala_test

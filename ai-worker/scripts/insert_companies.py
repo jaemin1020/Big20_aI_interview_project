@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sentence_transformers import SentenceTransformer
 from sqlmodel import Session, create_engine
-from models import Company
+from db_models import Company
 from datetime import datetime
 
 # 환경 변수에서 DB URL 가져오기
@@ -89,8 +89,8 @@ def insert_companies():
                 ideal=company_data["ideal"],
                 description=company_data["description"],
                 embedding=embedding,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(),
+                updated_at=datetime.now()
             )
             
             session.add(company)

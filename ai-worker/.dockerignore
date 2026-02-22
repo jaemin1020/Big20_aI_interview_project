@@ -1,0 +1,16 @@
+models/
+
+ai_models/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.git/
+.gitignore
+.dockerignore
+uploads/
+results/
+temp/

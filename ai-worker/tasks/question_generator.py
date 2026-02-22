@@ -1,130 +1,280 @@
+import sys
 import os
+import re
+import json
+import gc 
 import logging
+import torch
+from datetime import datetime
 from celery import shared_task
-from typing import Optional, List
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
-# DB 헬퍼 함수 import
-from db import (
-    get_best_questions_by_position,
-    increment_question_usage,
-    engine
-)
-from sqlmodel import Session, select
+# ==========================================
+# 1. 초기 설정 및 모델 경로 최적화
+# ==========================================
 
-# EXAONE LLM import
-from utils.exaone_llm import get_exaone_llm
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
 
 logger = logging.getLogger("AI-Worker-QuestionGen")
 
-class QuestionGenerator:
-    """
-    하이브리드 질문 생성기 (EXAONE-3.5-7.8B-Instruct 사용)
-    전략: DB 재활용 (40%) + Few-Shot LLM 생성 (60%)
-    """
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        logger.info("Initializing Question Generator with EXAONE model")
-        self.llm = get_exaone_llm()
-        self._initialized = True
-        logger.info("✅ Question Generator Initialized")
+# 모델 경로 설정
+local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
+model_path = docker_path if os.path.exists(docker_path) else local_path
 
-    def generate_questions(self, position: str, interview_id: Optional[int] = None, count: int = 5, reuse_ratio: float = 0.4):
-        """
-        하이브리드 질문 생성 로직 (이력서 및 회사 정보 기반)
-        1. DB에서 검증된 질문 일부 재활용 (Reuse)
-        2. 이력서 + 회사 정보로 컨텍스트 구성
-        3. 재활용된 질문을 예시(Few-Shot)로 삼아 나머지 질문 생성 (Create)
-        
-        Args:
-            position: 지원 직무
-            interview_id: 면접 ID (이력서/회사 정보 조회용)
-            count: 생성할 총 질문 수
-            reuse_ratio: 재활용 비율 (0.0 ~ 1.0)
-        """
-        from tools import ResumeTool, CompanyTool
-        
-        questions = []
-        reuse_count = int(count * reuse_ratio)
-        generate_count = count - reuse_count
-        
-        # 1. 컨텍스트 수집 (이력서 + 회사 정보)
-        context_parts = []
-        
-        if interview_id:
-            # 이력서 정보
-            resume_info = ResumeTool.get_resume_by_interview(interview_id)
-            if resume_info.get("has_resume"):
-                context_parts.append(ResumeTool.format_for_llm(resume_info))
-                logger.info(f"이력서 정보 로드 완료: {resume_info.get('summary', '')[:50]}...")
-            
-            # 회사 정보
-            company_info = CompanyTool.get_company_by_interview(interview_id)
-            if company_info.get("has_company"):
-                context_parts.append(CompanyTool.format_for_llm(company_info))
-                logger.info(f"회사 정보 로드 완료: {company_info.get('name', '')}")
-        
-        context = "\n\n".join(context_parts) if context_parts else ""
-        
-        # 2. DB에서 기존 질문 재활용 (Reuse)
-        if reuse_count > 0:
-            reused = self._reuse_questions_from_db(position, reuse_count)
-            questions.extend(reused)
-            logger.info(f"✅ DB에서 {len(reused)}개 질문 재활용")
-        
-        # 3. EXAONE LLM으로 새 질문 생성 (Create with Context)
-        if generate_count > 0:
-            generated = self.llm.generate_questions(
-                position=position,
-                context=context,
-                examples=questions,  # Few-shot 예시로 재활용된 질문 사용
-                count=generate_count
-            )
-            questions.extend(generated)
-            logger.info(f"✅ EXAONE으로 {len(generated)}개 질문 생성 (컨텍스트 포함)")
-        
-        return questions[:count]  # 정확히 count개만 반환
-    
-    def _reuse_questions_from_db(self, position: str, count: int):
-        """DB에서 검증된 질문 가져오기"""
-        
-        try:
-            db_questions = get_best_questions_by_position(position, limit=count)
-            
-            # 재활용 시 사용량 증가
-            for q in db_questions:
-                try:
-                    increment_question_usage(q.id)
-                except Exception as e:
-                    logger.warning(f"Question {q.id} 사용량 증가 실패: {e}")
-            
-            return [q.content for q in db_questions]
-        except Exception as e:
-            logger.warning(f"DB 질문 조회 실패: {e}. 빈 리스트 반환")
-            return []
+# ==========================================
+# 2. 페르소나 설정 (Prompt Engineering)
+# ==========================================
 
-@shared_task(name="tasks.question_generator.generate_questions")
-def generate_questions_task(position: str, interview_id: int = None, count: int = 5):
+PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검증하는 전문 면접관입니다.
+제공된 [이력서 문맥]과 [면접 진행 상황]을 바탕으로, 지원자에게 던질 '다음 질문' 1개만 생성하십시오.
+
+[절대 규칙]
+1. 반드시 한국어로 답변하십시오.
+2. 질문은 명확하고 구체적이어야 하며, 150자 이내로 작성하십시오.
+3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
+4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
+5. 이전 질문과 중복되지 않도록 하십시오.
+6. **환각 주의**: 이력서에 "익히고 싶다", "공부할 계획이다", "성장하겠다" 등 미래 포부로 적힌 내용은 실제 실무 경험이나 프로젝트 성과로 취급하여 질문하지 마십시오. 미래 포부는 학습 의지나 관심도를 묻는 용도로만 사용하십시오.
+
+[이력서 및 답변 문맥]
+{context}
+
+[현재 면접 단계 정보]
+- 단계명: {stage_name}
+- 가이드: {guide}
+
+[|user|]위 정보를 바탕으로 면접 질문을 생성해 주세요.[|endofturn|]
+[|assistant|]"""
+
+# ==========================================
+# 3. 메인 작업: 질문 생성 태스크
+# ==========================================
+
+@shared_task(name="tasks.question_generation.generate_next_question")
+def generate_next_question_task(interview_id: int):
+    """
+    인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
+    """
+    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question
+    from utils.exaone_llm import get_exaone_llm
+    from tasks.tts import synthesize_task
+    from utils.interview_helpers import check_if_transition
+    from config.interview_scenario import get_next_stage as get_next_stage_normal
+    from config.interview_scenario_transition import get_next_stage as get_next_stage_transition
+    from tasks.rag_retrieval import retrieve_context
     try:
-        generator = QuestionGenerator()
-        return generator.generate_questions(position, interview_id, count)
-    except Exception as e:
-        logger.error(f"Task Error: {e}")
-        return []
+        with Session(engine) as session:
+            interview = session.get(Interview, interview_id)
+            if not interview: 
+                logger.error(f"Interview {interview_id} not found.")
+                return {"status": "error", "message": "Interview not found"}
 
-# Eager Initialization: Worker 시작 시 모델 미리 로드
-try:
-    logger.info("🔥 Pre-loading Question Generator with EXAONE...")
-    _warmup_generator = QuestionGenerator()
-    logger.info("✅ Question Generator ready for requests")
-except Exception as e:
-    logger.warning(f"⚠️ Failed to pre-load model (will load on first request): {e}")
+            # 2. 마지막 AI 발화 확인 (Stage 판별 + 중복 방지)
+            # [수정] User transcript는 question_id가 없어 stage 판별 불가 → 마지막 AI 발화 기준으로 판별
+            stmt_all = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+            last_transcript = session.exec(stmt_all).first()
+
+            stmt_ai = select(Transcript).where(
+                Transcript.interview_id == interview_id,
+                Transcript.speaker == Speaker.AI
+            ).order_by(Transcript.order.desc(), Transcript.id.desc())  # id를 tiebreaker로 사용 (order 같을 때 최신 AI 발화 보장)
+            last_ai_transcript = session.exec(stmt_ai).first()
+
+            # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
+            if last_ai_transcript:
+                diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
+                if diff < 10:
+                    logger.info(f"Skipping duplicate request for interview {interview_id}")
+                    return {"status": "skipped"}
+
+            # [수정] 3. 전공/직무 기반 시나리오 결정
+            major = ""
+            if interview.resume and interview.resume.structured_data:
+                sd = interview.resume.structured_data
+                if isinstance(sd, str):
+                    sd = json.loads(sd)
+                edu = sd.get("education", [])
+                major = next((e.get("major", "") for e in edu if e.get("major", "").strip()), "")
+
+            is_transition = check_if_transition(major, interview.position)
+            get_next_stage_func = get_next_stage_transition if is_transition else get_next_stage_normal
+
+            # 마지막 AI 발화의 question_type으로 현재 stage 판별
+            if last_ai_transcript and last_ai_transcript.question_id:
+                last_question = session.get(Question, last_ai_transcript.question_id)
+                last_stage_name = last_question.question_type if last_question else "intro"
+            else:
+                last_stage_name = "intro"
+
+            logger.info(f"Current stage determined: {last_stage_name} (is_transition={is_transition})")
+            next_stage = get_next_stage_func(last_stage_name)
+
+            if not next_stage:
+                logger.info(f"Interview {interview_id} finished. Transitioning to COMPLETED.")
+                interview.status = "COMPLETED"
+                session.add(interview)
+                session.commit()
+                return {"status": "completed"}
+
+            # [수정] 꼬리질문(followup) 생성 제한 로직
+            # 다음 단계가 followup인데, 마지막 발화자가 여전히 AI라면 지원자가 아직 답변을 안 한 것임.
+            if next_stage.get("type") == "followup":
+                if last_transcript and last_transcript.speaker == "AI":
+                    logger.info(f"Next stage is followup, but WAITING for user answer. Skipping generation.")
+                    return {"status": "waiting_for_user"}
+
+            # [중복 방지 개선] next_stage가 이미 생성됐는지 확인 (timestamp 기반 X → stage 기반 O)
+            if last_ai_transcript:
+                last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
+                if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
+                    diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
+                    if diff < 30:
+                        logger.info(f"Next stage '{next_stage['stage']}' already generated {diff:.1f}s ago, skipping duplicate")
+                        return {"status": "skipped"}
+
+            # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
+            if next_stage.get("type") == "template":
+                candidate_name = "지원자"
+                target_role = interview.position or "해당 직무"
+                if interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str):
+                        sd = json.loads(sd)
+                    candidate_name = sd.get("header", {}).get("name", "지원자")
+                    target_role = sd.get("header", {}).get("target_role", target_role)
+
+                template_vars = {"candidate_name": candidate_name, "target_role": target_role, "major": major}
+                tpl = next_stage.get("template", "{candidate_name} 지원자님, 계속해주세요.")
+                try:
+                    formatted = tpl.format(**template_vars)
+                except KeyError:
+                    formatted = tpl
+
+                intro_msg = next_stage.get("intro_sentence", "")
+                display_name = next_stage.get("display_name", "면접질문")
+                final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
+                logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료 (RAG/LLM 생략)")
+
+            else:
+                # 4-b. AI stage: 문맥 확보 후 LLM 생성
+                query_template = next_stage.get("query_template", interview.position)
+                try:
+                    query = query_template.format(
+                        target_role=interview.position or "해당 직무",
+                        major=major or ""
+                    )
+                except (KeyError, ValueError):
+                    query = query_template 
+                
+                # [개선] 카테고리가 'certification'인 경우 RAG 대신 구조화된 데이터에서 직접 추출 (정확도 100%)
+                category_raw = next_stage.get("category")
+                rag_results = []
+                context_text = ""
+
+                if category_raw == "certification" and interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str): sd = json.loads(sd)
+                    
+                    certs = sd.get("certifications", [])
+                    # 직무 관련성 높은 자격증 우선 필터링 (키워드 기반)
+                    important_certs = [c for c in certs if any(kw in c.get('title', '') for kw in ["데이터", "분석", "RAG", "AI", "클라우드", "SQL", "ADSP", "정보처리"])]
+                    
+                    # 만약 필터링된 게 없다면 전체 자격증 사용
+                    final_certs = important_certs if important_certs else certs
+                    
+                    if final_certs:
+                        logger.info(f"✅ RAG 건너뜀: 구조화된 데이터에서 자격증 {len(final_certs)}개를 직접 가져왔습니다.")
+                        context_text = "지원자가 보유한 자격증 목록:\n" + "\n".join([f"- 자격명: {c.get('title')}, 발행기관: {c.get('organization')}, 일자: {c.get('date')}" for c in final_certs])
+                        # intro_sentence 포맷팅 호환성을 위해 rag_results 형태로 변환 (첫 번째 것만)
+                        rag_results = [{'text': f"자격명: {final_certs[0].get('title')}"}]
+                    else:
+                        logger.info("⚠️ 이력서에 자격증 정보가 없어 일반 RAG 검색으로 전환합니다.")
+                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
+                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                else:
+                    # 일반적인 경우에는 RAG 검색 수행
+                    filter_type = None
+                    if category_raw == "certification": filter_type = "certifications"
+                    
+                    rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
+                    context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+
+                if last_transcript and last_transcript.speaker == "User":
+                    context_text += f"\n[지원자의 최근 답변]: {last_transcript.text}"
+
+                llm = get_exaone_llm()
+                prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
+                chain = prompt | llm | StrOutputParser()
+
+                final_content = chain.invoke({
+                    "context": context_text,
+                    "stage_name": next_stage['display_name'],
+                    "guide": next_stage.get('guide', '')
+                })
+
+                # 인트로 메시지 조합 (3번 질문 전용 로직 포함)
+                candidate_name = "지원자"
+                if interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str): sd = json.loads(sd)
+                    candidate_name = sd.get("header", {}).get("name", "지원자")
+
+                intro_tpl = next_stage.get("intro_sentence", "")
+                if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
+                    # RAG 결과에서 첫 번째 자격증 이름 추출 시도
+                    cert_name = "자료에 명시된"
+                    if rag_results:
+                        # "[자격증] 자격명: XXX" 형태에서 이름 추출
+                        match = re.search(r'자격명:\s*([^,\(]+)', rag_results[0]['text'])
+                        if match: cert_name = match.group(1).strip()
+                    intro_msg = intro_tpl.format(candidate_name=candidate_name, cert_name=cert_name)
+                elif intro_tpl:
+                    try:
+                        intro_msg = intro_tpl.format(candidate_name=candidate_name)
+                    except:
+                        intro_msg = intro_tpl
+                else:
+                    intro_msg = ""
+
+                if next_stage.get("type") == "followup":
+                    intro_msg = "답변 감사합니다. 추가적으로 궁금한 점이 있습니다."
+                
+                display_name = next_stage.get("display_name", "심층 면접")
+                final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
+
+            # 6. DB 저장 (Question 및 Transcript)
+
+            # 6. DB 저장 (Question 및 Transcript)
+            category_raw = next_stage.get("category", "technical")
+            category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
+            db_category = category_map.get(category_raw, "technical")
+
+            logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {next_stage['stage']})")
+            q_id = save_generated_question(
+                interview_id=interview_id,
+                content=final_content,
+                category=db_category,
+                stage=next_stage['stage'],
+                guide=next_stage.get('guide', ''),
+                session=session
+            )
+
+            # 7. 메모리 정리
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            # 8. TTS 생성 태스크 즉시 트리거
+            if q_id:
+                logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
+                synthesize_task.delay(final_content, language="auto", question_id=q_id)
+
+            return {"status": "success", "stage": next_stage['stage'], "question": final_content}
+    except Exception as e:
+        logger.error(f"❌ 실시간 질문 생성 실패 (Retry 시도): {e}")
+        raise self.retry(exc=e, countdown=3)
+    finally:
+        gc.collect()

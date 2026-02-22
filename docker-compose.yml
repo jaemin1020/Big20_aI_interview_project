@@ -8,11 +8,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Seoul
     volumes:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
+      - postgres_data:/var/lib/postgresql
+      - ./backend-core/data:/data
     ports:
-      - "5432:5432"
+      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+
     networks:
       - interview_network
 
@@ -21,6 +24,8 @@ services:
     image: redis:7-alpine
     container_name: interview_redis
     restart: always
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "6379:6379"
     networks:
@@ -40,12 +45,19 @@ services:
               count: 1
               capabilities: [ gpu ]
     environment:
+      - TZ=Asia/Seoul
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - BACKEND_PUBLIC_URL=${BACKEND_PUBLIC_URL:-http://localhost:8000}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-Big20-AI-Interview}
     depends_on:
       - redis
       - db
@@ -54,30 +66,39 @@ services:
     networks:
       - interview_network
 
-  # 4. AI Worker: Celery (Question Generation + Emotion/Audio Analysis)
-  ai-worker:
+  # 4-1. AI Worker GPU: 질문 생성 전용 (EXAONE GPU 로드)
+  ai-worker-gpu:
     build:
       context: ./ai-worker
       dockerfile: Dockerfile
     working_dir: /app
-    container_name: interview_worker
+    container_name: interview_worker_gpu
+    # gpu_queue 전용
+    command: celery -A main.app worker --loglevel=info -Q gpu_queue --pool=solo
     deploy:
       resources:
         limits:
-          cpus: '8.0' # CPU 코어 제한
-          memory: 32G # 대용량 RAM
+          cpus: '4.0'
+          memory: 16G
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ] # GPU 접근 (질문 생성용)
+              capabilities: [ gpu ]
     environment:
+      - TZ=Asia/Seoul
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - MODEL_PATH=/app/models/solar-10.7b-instruct-v1.0.Q8_0.gguf
-      - N_GPU_LAYERS=0 # Solar 모델은 순수 CPU 연산
-      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN} # 질문 생성용
+      - N_GPU_LAYERS=-1
+      - USE_GPU=true
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-Big20-AI-Interview}
     depends_on:
       - redis
       - db
@@ -85,20 +106,62 @@ services:
       - ./ai-worker:/app
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
-      - ./backend-core:/backend-core # Shared Code Access
+      - ./backend-core:/backend-core
     networks:
       - interview_network
 
-  # 5. Media Server: WebRTC & STT
+  # 4-2. AI Worker CPU: 답변 분석 및 기타 전처리 (STT, TTS)
+  ai-worker-cpu:
+    build:
+      context: ./ai-worker
+      dockerfile: Dockerfile
+    working_dir: /app
+    container_name: interview_worker_cpu
+    # cpu_queue와 기본 celery 큐를 함께 처리
+    command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --concurrency=4
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 16G
+    environment:
+      - TZ=Asia/Seoul
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - N_GPU_LAYERS=0
+      - USE_GPU=false
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
+      - HF_HOME=/app/models/.cache
+      - DEEPFACE_HOME=/app/models/.deepface
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-Big20-AI-Interview}
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./ai-worker:/app
+      - ./ai-worker/models:/app/models
+      - ./backend-core/uploads:/app/uploads
+      - ./backend-core:/backend-core
+    networks:
+      - interview_network
+
+  # 5. Media Server: WebRTC & Vision
   media-server:
     build: ./media-server
     container_name: interview_media
     ports:
       - "8080:8080"
+      - "50000-50050:50000-50050/udp"
     environment:
+      - TZ=Asia/Seoul
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
     depends_on:
       - backend
       - redis
@@ -107,7 +170,7 @@ services:
     networks:
       - interview_network
 
-  # 6. Frontend: React (Vite/CRA)
+  # 6. Frontend: React (Vite)
   frontend:
     build:
       context: ./frontend
@@ -118,6 +181,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      - TZ=Asia/Seoul
       - VITE_API_URL=http://localhost:8000
       - VITE_DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     depends_on:
@@ -126,7 +190,6 @@ services:
       - interview_network
 
 networks:
-
   interview_network:
     driver: bridge
 

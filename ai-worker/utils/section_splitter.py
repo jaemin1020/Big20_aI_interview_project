@@ -5,7 +5,15 @@ from typing import Dict, List
 logger = logging.getLogger("SectionSplitter")
 
 class SectionSplitter:
-    """Phase_2.md 규칙에 따라 이력서를 섹션별로 분할하는 엔진"""
+    """
+    Phase_2.md 규칙에 따라 이력서를 섹션별로 분할하는 엔진
+
+    Attributes:
+    - SECTION_RULES: 섹션별 키워드 매핑
+
+    생성자: lyn
+    생성일자: 2026-02-07
+    """
     
     # Phase_2.md에 정의된 키워드 매핑 + 교육 정보 추가
     SECTION_RULES = {
@@ -20,6 +28,15 @@ class SectionSplitter:
     def split_by_sections(cls, text: str) -> List[Dict[str, str]]:
         """
         이력서 원문을 훼손하지 않고 섹션별로 분할
+        
+        Args:
+            text: 이력서 원문
+            
+        Returns:
+            List[Dict[str, str]]: 섹션별 분할된 텍스트
+        
+        생성자: lyn
+        생성일자: 2026-02-07
         """
         logger.info("✂️ 원문 기반 섹션 분할 시작...")
         
