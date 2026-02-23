@@ -404,6 +404,36 @@ async def complete_interview(
     )
     return {"status": "completed", "interview_id": interview_id}
 
+# 다음 질문 생성 수동 트리거 (폴링 타임아웃 시 재시도용)
+@router.post("/{interview_id}/trigger-question")
+async def trigger_next_question(
+    interview_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    다음 AI 질문 생성을 강제 트리거합니다.
+    프론트엔드 폴링 타임아웃 시 재시도 안전망으로 사용합니다.
+
+    생성자: ejm
+    생성일자: 2026-02-23
+    """
+    interview = db.get(Interview, interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if interview.status == InterviewStatus.COMPLETED:
+        return {"status": "already_completed", "interview_id": interview_id}
+
+    celery_app.send_task(
+        "tasks.question_generation.generate_next_question",
+        args=[interview_id],
+        queue="gpu_queue"
+    )
+    logger.info(f"🔁 [Manual Trigger] Question generation re-triggered for Interview {interview_id}")
+    return {"status": "triggered", "interview_id": interview_id}
+
+
 # 평가 리포트 조회
 @router.get("/{interview_id}/report", response_model=EvaluationReportResponse)
 async def get_evaluation_report(

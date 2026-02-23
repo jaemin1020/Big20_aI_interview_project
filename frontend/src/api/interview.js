@@ -82,6 +82,12 @@ export const completeInterview = async (interviewId) => {
     return response.data;
 };
 
+export const triggerNextQuestion = async (interviewId) => {
+    const response = await api.post(`/interviews/${interviewId}/trigger-question`);
+    return response.data;
+};
+
+
 // ==================== Transcript ====================
 
 export const recognizeAudio = async (audioBlob) => {
