@@ -27,12 +27,13 @@ INTERVIEW_STAGES = [
         "order": 2
     },
 
-    # 3. 직무 지식 평가 (자격증/프로젝트 중심 템플릿)
+    # 3. 직무 지식 평가 (자격증 중심 템플릿)
     {
         "stage": "skill",
         "display_name": "직무지식질문",
         "type": "template",
-        "template": "감사합니다. 다음은 직무지식관련 질문입니다. 이력서를 보니 프로젝트에 {course_name}을 하셨고 {cert_name}을 취득하셨네요. 이 과정에서 습득한 지식과 기술이 무엇인지 구체적으로 말해주세요.",
+        "template": "다음은 직무지식관련 질문입니다. 이력서를 보니 {cert_list} 자격증을 취득하셨네요. 이 과정에서 습득한 지식과 기술이 무엇인지 구체적으로 말씀해 주세요.",
+        "variables": ["cert_list"],
         "order": 3
     },
 
@@ -52,8 +53,8 @@ INTERVIEW_STAGES = [
         "stage": "experience",
         "display_name": "실무경험질문",
         "type": "template",
-        "template": "감사합니다. 다음은 실무경험질문입니다. 이력서를 보니 경력사항에 {org_name}에서 {role_name}일을 하셨고 {project_title} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤일을 하셨는지 설명해주세요.",
-        "variables": ["org_name", "role_name", "project_title"],
+        "template": "다음은 직무경험관련 질문입니다. 이력서를 보니 경력사항에 {act_org}에서 {act_role}일을 하셨고, {proj_org}에서 {proj_name} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤 일을 하셨는지 설명해 주세요.",
+        "variables": ["act_org", "act_role", "proj_org", "proj_name"],
         "order": 5
     },
 

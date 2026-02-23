@@ -203,21 +203,15 @@ def generate_next_question_task(interview_id: int):
                     if found_cert: cert_name = found_cert
 
                     # 4. 경력 사항 (activities) 추출
+                    # 신규 포맷: title(1), role(2), organization(3)
                     acts = sd.get("activities", [])
                     if acts:
-                        # 첫 번째 유효한 경력 가져오기
                         first_act = acts[0]
-                        raw_org = first_act.get("organization") or first_act.get("name") or ""
-                        raw_desc = first_act.get("description") or ""
-                        
-                        # 지능형 기관명 선택: organization이 프로젝트명처럼 길고(: 포함 등), description에 기관 힌트가 있는 경우
-                        org_hints = ["본사", "센터", "주식회사", "기관", "협회", "기구", "(주)", "팀", "사업부"]
-                        if (":" in raw_org or len(raw_org) > 15) and any(hint in raw_desc for hint in org_hints):
-                            org_name = raw_desc
-                        else:
-                            org_name = raw_org or org_name
-                            
-                        role_name = first_act.get("role") or first_act.get("position") or role_name
+                        org_name = first_act.get("organization") or org_name
+                        role_name = first_act.get("role") or role_name
+                        # 활동 내에 프로젝트명이 있다면 우선 사용
+                        if first_act.get("title"):
+                            project_title = first_act.get("title")
 
                 template_vars = {
                     "candidate_name": candidate_name, 
