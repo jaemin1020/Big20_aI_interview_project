@@ -21,7 +21,7 @@ router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
 
 # Celery
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+from celery_app import celery_app
 
 # TTS 오디오 저장 디렉토리 (백엔드와 ai-worker 공유 볼륨)
 TTS_UPLOAD_DIR = Path("/app/uploads/tts")
@@ -61,19 +61,17 @@ def _fire_tts_for_question(question_id: int, question_text: str) -> None:
             clean_text = parts[1].strip()
 
     try:
-        task = celery_app.send_task(
+        # [fire-and-forget] TTS 태스크는 파일을 직접 저장하므로 결과를 기다릴 필요 없음
+        # task.get(timeout=60)을 제거 → Q1→Q2 전환 즉시 가능
+        celery_app.send_task(
             "tasks.tts.synthesize",
             args=[clean_text],
             kwargs={"language": "ko", "question_id": question_id},
             queue="cpu_queue"
         )
-        result = task.get(timeout=60)
-        if result and result.get("status") == "success":
-            logger.info(f"✅ [TTS] 음성 파일 생성 완료: {filename}")
-        else:
-            logger.warning(f"[TTS] question_id={question_id} 실패: {result}")
+        logger.info(f"🔊 [TTS] 비동기 음성 생성 요청 완료: {filename} (백그라운드 처리 중)")
     except Exception as e:
-        logger.warning(f"[TTS] question_id={question_id} 생성 실패 (브라우저 TTS로 fallback): {e}")
+        logger.warning(f"[TTS] question_id={question_id} 생성 요청 실패: {e}")
 
 # 면접 생성
 @router.post("", response_model=InterviewResponse)
@@ -114,7 +112,7 @@ async def create_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.utcnow()
+        start_time=datetime.now()
     )
     db.add(new_interview)
     db.commit()
@@ -182,6 +180,7 @@ async def create_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
+            logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created at backend.")
 
         # 모든 질문/대화가 준비되었을 때 한꺼번에 커밋
         new_interview.status = InterviewStatus.LIVE
@@ -297,15 +296,25 @@ async def get_interview_questions(
     # 인터뷰 상태 정보 가져오기
     interview = db.get(Interview, interview_id)
 
-    def get_audio_url(question_id: int) -> str | None:
-        """TTS 파일 존재 시 URL 반환, 없으면 None"""
+    def get_audio_url(question_id: int, question_text: str) -> str | None:
+        """TTS 파일 존재 시 URL 반환, 없으면 TTS 트리거 후 None 반환"""
         if question_id is None:
             return None
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
         if filepath.exists():
-            # [수정] 브라우저 캐싱(특히 파일 생성 전 404 캐싱) 방지를 위해 타임스탬프 추가
+            # 브라우저 캐싱 방지를 위해 타임스탬프 추가
             timestamp = int(datetime.now().timestamp())
-            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
+            url = f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
+            logger.info(f"🔊 [TTS Found] ID: {question_id}, URL: {url}")
+            return url
+        logger.warning(f"⏳ [TTS Missing] ID: {question_id}, Path: {filepath}")
+        # 파일 없으면 비동기로 TTS 생성 트리거 (fire-and-forget)
+        import threading
+        threading.Thread(
+            target=_fire_tts_for_question,
+            args=(question_id, question_text),
+            daemon=True
+        ).start()
         return None
 
     return {
@@ -316,7 +325,7 @@ async def get_interview_questions(
                 "content": t.text,
                 "order": t.order,
                 "timestamp": t.timestamp,
-                "audio_url": get_audio_url(t.question_id)
+                "audio_url": get_audio_url(t.question_id, t.text)
             }
             for t in results
         ]
@@ -388,7 +397,7 @@ async def complete_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
 
     interview.status = InterviewStatus.COMPLETED
-    interview.end_time = datetime.utcnow()
+    interview.end_time = datetime.now()
     db.add(interview)
     db.commit()
 
@@ -459,15 +468,18 @@ async def get_evaluation_report(
     # 리포트가 아직 없거나 생성 중일 때에 대한 처리
     if not report:
         # 데이터는 없지만 기본 정보는 보여주기 위해 가짜 객체 구성 (프론트엔드 미상 방지)
+        now = datetime.now()
         return {
             "id": 0,
             "interview_id": interview_id,
             "technical_score": 0, "communication_score": 0, "cultural_fit_score": 0,
             "summary_text": "AI가 현재 면접 내용을 상세 분석하고 있습니다. 잠시만 기다려 주세요.",
+            "details_json": {},          # ← required 필드 추가
+            "created_at": now,           # ← required 필드 추가
             "position": actual_position,
             "company_name": actual_company,
             "candidate_name": cand_name,
-            "interview_date": interview.start_time or datetime.utcnow(),
+            "interview_date": interview.start_time or now,
             "technical_feedback": "분석이 완료되면 여기에 표시됩니다.",
             "experience_feedback": "데이터 분석 중...",
             "problem_solving_feedback": "데이터 분석 중...",
@@ -542,7 +554,7 @@ async def create_realtime_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.IN_PROGRESS,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.utcnow()
+        start_time=datetime.now()
     )
     db.add(new_interview)
     db.commit()
@@ -620,6 +632,7 @@ async def create_realtime_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
+            logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created successfully.")
 
 
         # 일괄 커밋

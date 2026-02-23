@@ -287,7 +287,7 @@ def update_company_embedding(company_id: str, embedding: List[float]):
         company = session.get(Company, company_id)
         if company:
             company.embedding = embedding
-            company.updated_at = datetime.utcnow()
+            company.updated_at = datetime.now()
             session.add(company)
             session.commit()
 
@@ -338,7 +338,7 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
                 current_summary["history"] = []
             
             # 타임스탬프 추가
-            emotion_data["timestamp"] = datetime.utcnow().isoformat()
+            emotion_data["timestamp"] = datetime.now().isoformat()
             current_summary["history"].append(emotion_data)
             
             # 최신 상태 업데이트
@@ -354,9 +354,9 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
     if session is None:
         with Session(engine) as new_session:
-            _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
+            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
     else:
-        _save_generated_question_logic(session, interview_id, content, category, stage, guide)
+        return _save_generated_question_logic(session, interview_id, content, category, stage, guide)
 
 def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None):
     # 1. Question 테이블 저장
@@ -372,10 +372,13 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
     session.flush() # ID 생성을 위해 즉시 플러시
     
     # 2. Transcript 테이블에 AI 질문으로 저장
-    # 현재 면접의 마지막 순서를 파악
-    stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
-    last_transcript = session.exec(stmt).first()
-    next_order = (last_transcript.order + 1) if last_transcript and last_transcript.order is not None else 1
+    # [수정] AI transcript 기준으로만 다음 order 계산 (User transcript는 order=NULL이라 리셋 버그 발생)
+    stmt = select(Transcript).where(
+        Transcript.interview_id == interview_id,
+        Transcript.speaker == Speaker.AI
+    ).order_by(Transcript.order.desc())
+    last_ai = session.exec(stmt).first()
+    next_order = (last_ai.order + 1) if last_ai and last_ai.order is not None else 1
 
     new_transcript = Transcript(
         interview_id=interview_id,
@@ -383,7 +386,7 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         text=content,
         question_id=question.id,
         order=next_order,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now()
     )
     session.add(new_transcript)
     session.commit() # 전체 확정

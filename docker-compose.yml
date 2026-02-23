@@ -8,9 +8,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Seoul
     volumes:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - postgres_data:/var/lib/postgresql # PostgreSQL 18+ 권장 경로
+      - postgres_data:/var/lib/postgresql
       - ./backend-core/data:/data
     ports:
       - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
@@ -23,6 +24,8 @@ services:
     image: redis:7-alpine
     container_name: interview_redis
     restart: always
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "6379:6379"
     networks:
@@ -42,14 +45,15 @@ services:
               count: 1
               capabilities: [ gpu ]
     environment:
+      - TZ=Asia/Seoul
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - BACKEND_PUBLIC_URL=${BACKEND_PUBLIC_URL:-http://localhost:8000}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
@@ -69,7 +73,7 @@ services:
       dockerfile: Dockerfile
     working_dir: /app
     container_name: interview_worker_gpu
-    # gpu_queue 전용 (배달 사고 방지를 위해 기본 celery 큐는 CPU 워커가 전담)
+    # gpu_queue 전용
     command: celery -A main.app worker --loglevel=info -Q gpu_queue --pool=solo
     deploy:
       resources:
@@ -82,6 +86,7 @@ services:
               count: 1
               capabilities: [ gpu ]
     environment:
+      - TZ=Asia/Seoul
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -102,17 +107,18 @@ services:
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
+      - supertonic_cache_gpu:/root/.cache # Supertonic 모델 캐시 영속화 (22개 파일 재다운로드 방지)
     networks:
       - interview_network
 
-  # 4-2. AI Worker CPU: 답변 분석 및 기타 전처리 (EXAONE CPU 로드)
+  # 4-2. AI Worker CPU: 답변 분석 및 기타 전처리 (STT, TTS)
   ai-worker-cpu:
     build:
       context: ./ai-worker
       dockerfile: Dockerfile
     working_dir: /app
     container_name: interview_worker_cpu
-    # cpu_queue와 기본 celery 큐를 함께 처리 (STT 동시 처리를 위해 threads 풀 사용)
+    # cpu_queue와 기본 celery 큐를 함께 처리
     command: celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --concurrency=4
     deploy:
       resources:
@@ -120,6 +126,7 @@ services:
           cpus: '4.0'
           memory: 16G
     environment:
+      - TZ=Asia/Seoul
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -140,17 +147,19 @@ services:
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
+      - supertonic_cache_cpu:/root/.cache # Supertonic 모델 캐시 영속화 (22개 파일 재다운로드 방지)
     networks:
       - interview_network
 
-  # 5. Media Server: WebRTC & STT
+  # 5. Media Server: WebRTC & Vision
   media-server:
     build: ./media-server
     container_name: interview_media
     ports:
       - "8080:8080"
-      - "50000-50050:50000-50050/udp" # [추가] WebRTC Media Ports (UDP)
+      - "50000-50050:50000-50050/udp"
     environment:
+      - TZ=Asia/Seoul
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - BACKEND_URL=http://backend:8000
       - REDIS_URL=redis://redis:6379/0
@@ -163,7 +172,7 @@ services:
     networks:
       - interview_network
 
-  # 6. Frontend: React (Vite/CRA)
+  # 6. Frontend: React (Vite)
   frontend:
     build:
       context: ./frontend
@@ -174,6 +183,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      - TZ=Asia/Seoul
       - VITE_API_URL=http://localhost:8000
       - VITE_DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     depends_on:
@@ -182,9 +192,10 @@ services:
       - interview_network
 
 networks:
-
   interview_network:
     driver: bridge
 
 volumes:
   postgres_data:
+  supertonic_cache_gpu: # AI Worker GPU - Supertonic 모델 캐시
+  supertonic_cache_cpu: # AI Worker CPU - Supertonic 모델 캐시

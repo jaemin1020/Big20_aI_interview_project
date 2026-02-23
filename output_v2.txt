@@ -1,0 +1,10 @@
+--- Education GPA Fix Test ---
+{'education': [{'period': '2018-2022', 'school_name': '한국대학교', 'major': '졸업', 'gpa': '4.0/4.5'}], 'activities': [], 'awards': []}
+{'education': [{'period': '2018-2022', 'school_name': '한국대학교', 'major': '컴퓨터공', 'gpa': '4.0/4.5'}], 'activities': [], 'awards': []}
+--- Career Combination Fix Test ---
+Traceback (most recent call last):
+  File "c:\big20\Big20_aI_interview_project\repro_parse_v2.py", line 67, in <module>
+    test_parse_v2(["경력", "AWS 클라우드 기반 빅데이터 분석 및 AI 모델링 전문가 과정 - (2025년 3월 \u2013 2025년 12월)", "", ""], "activities", "경력AWS클라우드...")
+  File "c:\big20\Big20_aI_interview_project\repro_parse_v2.py", line 60, in test_parse_v2
+    print(data)
+UnicodeEncodeError: 'cp949' codec can't encode character '\u2013' in position 54: illegal multibyte sequence

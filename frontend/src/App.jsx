@@ -646,6 +646,35 @@ function App() {
     }
   };
 
+  // [추가] 현재 질문의 오디오 URL이 없을 경우 폴링하여 갱신 (TTS 지연 대응)
+  const questionsRef = useRef(questions);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
+  useEffect(() => {
+    // 인터뷰 중이고, 현재 질문은 있는데 audio_url이 없는 경우에만 실행
+    const currentQuestion = questionsRef.current[currentIdx];
+    if (step !== 'interview' || !interview || !currentQuestion || currentQuestion.audio_url) return;
+
+    const interval = setInterval(async () => {
+      console.log(`🔄 [TTS Polling] Fetching audio URL for Question index ${currentIdx + 1}...`);
+      try {
+        const data = await getInterviewQuestions(interview.id);
+        const updatedQs = data.questions || [];
+
+        // 현재 인덱스의 질문에 오디오 URL이 생겼는지 확인
+        if (updatedQs[currentIdx]?.audio_url) {
+          console.log(`✅ [TTS Polling] Audio URL found: ${updatedQs[currentIdx].audio_url}`);
+          setQuestions(updatedQs);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("[TTS Polling] Failed to fetch questions:", err);
+      }
+    }, 2000); // 2초 간격으로 확인
+
+    return () => clearInterval(interval);
+  }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
+
   const nextQuestion = async () => {
     console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
     if (!interview || !questions || !questions[currentIdx]) {
@@ -661,12 +690,18 @@ function App() {
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
+        // [추가/수정] 미리 생성된 다음 질문(2번 등)의 최신 정보(특히 audio_url)를 서버에서 다시 가져옴
+        const freshData = await getInterviewQuestions(interview.id);
+        if (freshData.questions && freshData.questions.length > 0) {
+          setQuestions(freshData.questions);
+        }
+
         const nextIdx = currentIdx + 1;
         setCurrentIdx(nextIdx);
         setTranscript('');
         setIsLoading(false);
 
-        // [추가] WebSocket으로 질문 전환 알림
+        // WebSocket으로 질문 전환 알림
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
         }
@@ -693,27 +728,21 @@ function App() {
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
-            const nextQ = updatedQs[nextIdx];
 
-            // [개선] 새 질문이 생겼더라도 TTS 음성 주소(audio_url)가 올 때까지 조금 더 기다림 (기계음 방지)
-            if (nextQ && nextQ.audio_url) {
-              console.log("✅ [Next Question] New question and Audio ready.");
-              setQuestions(updatedQs);
-              setCurrentIdx(prev => prev + 1);
-              setTranscript('');
-              foundNew = true;
+            // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
+            console.log("✅ [Next Question] New question ready. Showing immediately.");
+            setQuestions(updatedQs);
+            setCurrentIdx(prev => prev + 1);
+            setTranscript('');
+            foundNew = true;
 
-              // WebSocket으로 신규 질문 전환 알림
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
-              }
-              break;
-            } else {
-              console.log("⏳ [Next Question] New question found, but waiting for Audio...");
-              // 아직 오디오가 없으면 다음 폴링에서 다시 체크하도록Questions 상태만 미리 업데이트하지 않고 기다림
+            // WebSocket으로 신규 질문 전환 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
             }
+            break;
           }
-        }
+        } // end for loop
 
         if (!foundNew) {
           // [수정] 폴링 타임아웃 시 무조건 종료하지 않고, 서버 상태가 COMPLETED일 때만 자동 종료
@@ -729,7 +758,7 @@ function App() {
           }
         }
         setIsLoading(false);
-      }
+      } // end else block
     } catch (err) {
       console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');

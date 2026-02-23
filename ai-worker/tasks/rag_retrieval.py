@@ -64,11 +64,11 @@ from langchain_community.vectorstores import PGVector
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (LangChain PGVector 활용)
 # -----------------------------------------------------------
-def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
+def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
     """
     LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
     """
-    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_category})")
+    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_type})")
     
     # 1. 임베딩 모델 및 연결 설정
     embedder = get_embedder()
@@ -86,10 +86,10 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
             collection_name="resume_all_embeddings"
         )
 
-        # 3. 필터 설정 (resume_id + category)
+        # 3. 필터 설정 (resume_id + chunk_type)
         search_filter = {"resume_id": resume_id}
-        if filter_category:
-            search_filter["category"] = filter_category
+        if filter_type:
+            search_filter["chunk_type"] = filter_type
 
         # 4. 유사도 검색 수행
         docs_with_scores = vector_store.similarity_search_with_score(
@@ -110,8 +110,8 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
         print(f"   👉 {len(results)}개의 관련 내용을 찾았습니다.")
         for i, res in enumerate(results):
             preview = res['text'].replace('\n', ' ')[:80]
-            category = res['meta'].get('category', 'N/A')
-            print(f"      [{i+1}] (Dist: {res['score']:.4f}, Cat: {category}): {preview}...")
+            chunk_type = res['meta'].get('chunk_type', 'N/A')
+            print(f"      [{i+1}] (Dist: {res['score']:.4f}, Type: {chunk_type}): {preview}...")
 
         return results
 
@@ -122,7 +122,7 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
 # -----------------------------------------------------------
 # [핵심] Retriever 생성 함수 (LangChain LCEL용)
 # -----------------------------------------------------------
-def get_retriever(resume_id=1, top_k=10, filter_category=None):
+def get_retriever(resume_id=1, top_k=10, filter_type=None):
     """
     LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
     """
@@ -137,8 +137,8 @@ def get_retriever(resume_id=1, top_k=10, filter_category=None):
 
     # 필터 설정
     search_filter = {"resume_id": resume_id}
-    if filter_category:
-        search_filter["category"] = filter_category
+    if filter_type:
+        search_filter["chunk_type"] = filter_type
 
     # 검색 결과를 필터링하여 반환하도록 설정
     return vector_store.as_retriever(
@@ -147,6 +147,42 @@ def get_retriever(resume_id=1, top_k=10, filter_category=None):
             "filter": search_filter
         }
     )
+
+# -----------------------------------------------------------
+# [신규] 질문 은행(questions 테이블) 검색 함수
+# -----------------------------------------------------------
+def retrieve_similar_questions(query, top_k=5):
+    """
+    질문 은행(questions 테이블)에서 쿼리와 유사한 질문들을 검색합니다.
+    """
+    print(f"\n🔍 [질문 은행 검색] 쿼리: '{query[:50]}...' (Top {top_k})")
+    
+    embedder = get_embedder()
+    if not embedder:
+        return []
+    
+    connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
+    
+    try:
+        from sqlalchemy import text
+        query_vector = embedder.embed_query(query)
+        sql = text("""
+            SELECT content, category, position, (embedding <=> :emb) as distance
+            FROM questions
+            WHERE embedding IS NOT NULL
+            ORDER BY distance ASC
+            LIMIT :limit
+        """)
+        with engine.connect() as conn:
+            rows = conn.execute(sql, {"emb": str(query_vector), "limit": top_k}).fetchall()
+            results = [{"text": r[0], "meta": {"category": r[1], "position": r[2]}, "score": float(r[3])} for r in rows]
+            
+            print(f"   👉 질문 은행에서 {len(results)}개의 유사 질문을 찾았습니다.")
+            return results
+            
+    except Exception as e:
+        print(f"❌ 질문 은행 검색 실패: {e}")
+        return []
 
 # -----------------------------------------------------------
 # 테스트 코드
