@@ -472,12 +472,19 @@ async def start_remote_stt(track, session_id):
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
     CHUNK_DURATION_MS = 3000 
     accumulated_frames = []
+    audio_frame_count = 0  # [DEBUG] 오디오 프레임 수신 카운터 (recording 상태 무관)
     
     try:
         while True:
             # 1. 오디오 프레임 수신 (항상)
             frame = await track.recv()
-            
+            audio_frame_count += 1
+
+            # [DEBUG] 100프레임(약 2초)마다 무조건 출력 → 오디오 WebRTC 트랙 수신 여부 확인
+            if audio_frame_count % 100 == 0:
+                print(f"[{session_id}] 🎵 [AUDIO-DEBUG] 오디오 프레임 #{audio_frame_count} 수신 "
+                      f"(recording={active_recording_flags.get(session_id, False)})", flush=True)
+
             # [핵심 수정] 녹음 버튼이 ON일 때만 프레임을 누적
             if not active_recording_flags.get(session_id, False):
                 continue  # 녹음 중 아니면 프레임 수신만 하고 버림 (버퍼 차단 방지)
@@ -653,7 +660,7 @@ def force_localhost_candidate(sdp_str):
 async def offer(request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    session_id = params.get("session_id", "unknown")
+    session_id = str(params.get("session_id", "unknown"))
     
     print(f"📨 [{session_id}] Received Offer SDP (First 500 chars): {params['sdp'][:500]}...", flush=True)
 
