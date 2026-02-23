@@ -37,8 +37,8 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
 4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
 5. 이전 질문과 중복되지 않도록 하십시오.
-7. **꼬리질문(Follow-up) 규칙**: 반드시 지원자의 답변을 "~라고 말씀해 주셨군요."와 같이 먼저 한 문장으로 요약하십시오. 그 후, 답변에서 언급된 구체적인 기술이나 방법론에 대해 **그 방식을 선택한 이유** 또는 실제 프로젝트에서 직면했던 **기술적 한계나 문제점**을 콕 집어 심층 질문하십시오.
-8. **환각 및 대괄호 금지**: 지원자가 말하지 않은 외부 기술(예: AWS Lambda 등)이나 이름(이지은님 등)을 절대 지어내지 마십시오. 가이드에 적힌 '[예시]'나 대괄호 기호([...])도 절대 출력하지 마십시오. 답변이 너무 짧다면 억지로 깊은 내용을 묻지 말고 해당 키워드의 학습 동기나 일반적인 특징을 질문하십시오.
+7. **꼬리질문(Follow-up) 규칙**: 반드시 "답변 감사합니다. 추가적으로 궁금한 점이 있습니다."로 시작하십시오. 이어서 지원자의 답변 중 가장 핵심적인 기술 키워드나 프로젝트 성과를 나타내는 **구절(일부)**을 골라 반드시 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 연결하십시오. 문장 전체를 그대로 인용하기보다 핵심 의미가 담긴 '구절' 위주로 인용하십시오.
+8. **심층 질문 전개**: 작은따옴표로 인용한 구절 속 키워드의 정의를 묻고, 지원하신 직무({target_role})에서 해당 기술이 실무적으로 어떻게 활용될 수 있을지 질문하십시오. 인용구(' ') 외에 볼드체(**) 등 어떠한 특수 기호도 사용하지 마십시오.
 
 [이력서 및 답변 문맥]
 {context}
@@ -272,7 +272,8 @@ def generate_next_question_task(interview_id: int):
                 final_content = chain.invoke({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
-                    "guide": next_stage.get('guide', '')
+                    "guide": next_stage.get('guide', ''),
+                    "target_role": interview.position or "지원 직무"
                 })
 
                 # 인트로 메시지 조합 (3번 질문 전용 로직 포함)
@@ -300,7 +301,7 @@ def generate_next_question_task(interview_id: int):
                     intro_msg = ""
 
                 if next_stage.get("type") == "followup":
-                    intro_msg = "답변 감사합니다. 추가적으로 궁금한 점이 있습니다."
+                    intro_msg = "" # 프롬프트에서 이미 생성하므로 중복 방지를 위해 비움
                 
                 display_name = next_stage.get("display_name", "심층 면접")
                 final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
