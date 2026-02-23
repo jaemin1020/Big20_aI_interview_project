@@ -27,15 +27,13 @@ INTERVIEW_STAGES = [
         "order": 2
     },
     
-    # 3. 직무 지식 평가 (자격증 중심)
+    # 3. 직무 지식 평가 (자격증 중심 템플릿)
     {
         "stage": "skill",
         "display_name": "직무지식질문",
-        "intro_sentence": "{candidate_name} 지원자님, {cert_name} 자격증을 취득하셨네요.",
-        "type": "ai",
-        "category": "certification",
-        "query_template": "보유 자격증 취득 과정 학습 내용 {target_role}",
-        "guide": "자격증을 통해 익힌 핵심 기술을 설명하고, 지원 직무에서의 활용 방안을 묻는 형태로 구성하십시오. 마지막은 '~설명해주세요'로 정중하게 마무리하십시오.",
+        "type": "template",
+        "template": "다음은 직무지식관련 질문입니다. 이력서를 보니 {cert_list} 자격증을 취득하셨네요. 이 과정에서 습득한 지식과 기술이 무엇인지 구체적으로 말씀해 주세요.",
+        "variables": ["cert_list"],
         "order": 3
     },
     
@@ -46,19 +44,17 @@ INTERVIEW_STAGES = [
         "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
         "parent": "skill",
-        "guide": "이전 답변 기술의 한계 및 예외 상황 검증.",
+        "guide": "지원자의 이전 답변을 '~라고 말씀해 주셨군요.'와 같이 한 문장으로 먼저 요약하십시오. 그 후 답변에서 언급된 구체적인 기술이나 수치, 방법론 중 하나를 콕 집어 그 이유나 상세 구현 방식을 묻는 심층 질문을 던지십시오.",
         "order": 4
     },
     
-    # 5. 직무 경험 평가 (AI 생성)
+    # 5. 직무 경험 평가 (템플릿)
     {
         "stage": "experience",
         "display_name": "실무경험질문",
-        "intro_sentence": "다음은 실무경험질문입니다.",
-        "type": "ai",
-        "category": None,
-        "query_template": "프로젝트 성과 달성 경험 결과 활동 인턴 교육",
-        "guide": "이력서 활동 2개 연결. 활동 간 인과관계 및 성장 분석.",
+        "type": "template",
+        "template": "다음은 직무경험관련 질문입니다. 이력서를 보니 경력사항에 {act_org}에서 {act_role}일을 하셨고, {proj_org}에서 {proj_name} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤 일을 하셨는지 설명해 주세요.",
+        "variables": ["act_org", "act_role", "proj_org", "proj_name"],
         "order": 5
     },
     
@@ -69,7 +65,7 @@ INTERVIEW_STAGES = [
         "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
         "parent": "experience",
-        "guide": "의사결정 근거 및 해결 논리 파악.",
+        "guide": "답변 내용을 요약하며 공감을 표시한 뒤, 당시 내린 의사결정의 기술적 근거나 혹은 다른 대안 대신 그 방법을 선택한 이유를 깊이 있게 질문하십시오.",
         "order": 6
     },
     

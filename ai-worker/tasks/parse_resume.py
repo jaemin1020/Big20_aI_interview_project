@@ -179,11 +179,12 @@ def parse_resume_final(input_source):
                             "organization": role
                         })
                     else:
+                        # 사용자 지정 포맷 반영: 0:기간, 1:프로젝트명, 2:역할(인턴 등), 3:기관(하이브본사 등)
                         data["activities"].append({
                             "period": period,
-                            "organization": org,
-                            "role": role,
-                            "description": desc
+                            "title": safe_row[1] if len(safe_row) > 1 else "",
+                            "role": safe_row[2] if len(safe_row) > 2 else "",
+                            "organization": safe_row[3] if len(safe_row) > 3 else ""
                         })
 
                 elif current_section == "awards" and len(safe_row) >= 2:
@@ -216,10 +217,11 @@ def parse_resume_final(input_source):
                     })
 
                 elif current_section == "projects" and len(safe_row) >= 2:
+                    # 사용자 지정 포맷 반영: 0:기간, 1:과정명/제목, 2:기관/장소
                     data["projects"].append({
                         "period": safe_row[0],
                         "title": safe_row[1],
-                        "description": safe_row[2] if len(safe_row) > 2 else ""
+                        "organization": safe_row[2] if len(safe_row) > 2 else ""
                     })
 
     # -------------------------------------------------------
