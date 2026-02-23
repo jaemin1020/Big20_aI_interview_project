@@ -47,19 +47,18 @@ async def create_transcript(
     
     logger.info(f"Transcript saved: Interview={transcript.interview_id}, Speaker={transcript.speaker}")
     
-    # 사용자 답변인 경우 AI 태스크 트리거 (비동기)
+    # 사용자 답변인 경우 AI 평가 요청 (비동기)
     if transcript.speaker == Speaker.USER:
-        # 1. 다음 질문 생성 태스크 즉시 트리거 (question 존재 여부와 무관하게 항상 실행)
-        celery_app.send_task(
-            "tasks.question_generation.generate_next_question",
-            args=[transcript.interview_id],
-            queue="gpu_queue"
-        )
-        logger.info(f"[NextQ] Triggered question generation for interview {transcript.interview_id}")
-
-        # 2. 답변 분석 및 평가 요청 (question이 있을 때만)
-        question = db.get(Question, transcript.question_id) if transcript.question_id else None
+        question = db.get(Question, transcript.question_id)
         if question:
+            # 1. 다음 질문 생성 태스크 즉시 트리거 (실시간성 확보가 최우선)
+            celery_app.send_task(
+                "tasks.question_generation.generate_next_question",
+                args=[transcript.interview_id],
+                queue="gpu_queue"
+            )
+
+            # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
             celery_app.send_task(
                 "tasks.evaluator.analyze_answer",
                 args=[
@@ -71,8 +70,6 @@ async def create_transcript(
                 ],
                 queue="gpu_queue"
             )
-            logger.info(f"[Eval] Triggered answer evaluation for transcript {transcript.id}")
-        else:
-            logger.warning(f"[Eval] Skipped: question_id={transcript.question_id} not found in DB")
+            logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
     
     return {"id": transcript.id, "status": "saved"}

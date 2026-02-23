@@ -5,7 +5,6 @@ import {
   getInterviewQuestions,
   createTranscript,
   completeInterview,
-  triggerNextQuestion,
   getEvaluationReport,
   uploadResume,
   getAllInterviews,
@@ -672,19 +671,10 @@ function App() {
           wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
         }
       } else {
-        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 2분 대기)
+        // 2. 서버에서 새로운 질문이 생성되었는지 폴링 (최대 300초 대기)
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
-
-        // 폴링 시작 전 즉시 한 번 트리거 (transcript 저장 직후 race condition 방지)
-        try {
-          await triggerNextQuestion(interview.id);
-          console.log('[nextQuestion] Initial trigger sent.');
-        } catch (triggerErr) {
-          console.warn('[nextQuestion] Initial trigger failed (non-critical):', triggerErr.message);
-        }
-
-        for (let i = 0; i < 60; i++) { // 2초 간격으로 60번 시도 (최대 2분)
+        for (let i = 0; i < 60; i++) { // 2초 간격으로 60번 시도 (최대 2분으로 단축)
           await new Promise(r => setTimeout(r, 2000));
           const data = await getInterviewQuestions(interview.id);
           const updatedQs = data.questions || [];
@@ -694,7 +684,7 @@ function App() {
           if (currentStatus === 'COMPLETED') {
             console.log('[nextQuestion] Server signaled COMPLETED status. Finalizing.');
             setQuestions(updatedQs);
-            foundNew = false;
+            foundNew = false; // 더 이상의 질문은 없음
             break;
           }
 
@@ -702,8 +692,10 @@ function App() {
           const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
-            const nextIdx = questions.length;
-            console.log('✅ [Next Question] New question ready. Showing immediately.');
+            const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
+
+            // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
+            console.log("✅ [Next Question] New question ready. Showing immediately.");
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
             setTranscript('');
@@ -715,19 +707,10 @@ function App() {
             }
             break;
           }
-
-          // 30번(60초)마다 질문 생성 재트리거 (GPU 워커 바쁜 경우 대비)
-          if (i > 0 && i % 30 === 0) {
-            try {
-              console.log(`[nextQuestion] Re-triggering question generation (attempt ${i / 30 + 1})...`);
-              await triggerNextQuestion(interview.id);
-            } catch (retriggerErr) {
-              console.warn('[nextQuestion] Re-trigger failed (non-critical):', retriggerErr.message);
-            }
-          }
         } // end for loop
 
         if (!foundNew) {
+          // [수정] 폴링 타임아웃 시 무조건 종료하지 않고, 서버 상태가 COMPLETED일 때만 자동 종료
           const finalCheck = await getInterviewQuestions(interview.id);
           if (finalCheck.status === 'COMPLETED') {
             console.log('[nextQuestion] Server confirmed COMPLETED. Finishing.');
@@ -735,10 +718,8 @@ function App() {
             if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
             await finishInterview();
           } else {
-            // 타임아웃 시 마지막으로 한 번 더 트리거 후 사용자에게 알림
-            console.warn('[nextQuestion] Polling timed out. Sending final trigger...');
-            try { await triggerNextQuestion(interview.id); } catch (_) {}
-            alert('AI 면접관의 질문 생성이 지연되고 있습니다.\n[다음 질문] 버튼을 다시 눌러주세요.');
+            console.warn('[nextQuestion] Polling timed out but interview not marked as COMPLETED by server.');
+            alert('AI 면접관의 다음 질문 생성이 지연되고 있습니다. 잠시 후 다시 [다음 질문] 버튼을 눌러주세요.');
           }
         }
         setIsLoading(false);
