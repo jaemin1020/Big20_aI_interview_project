@@ -5,7 +5,7 @@ import json
 import gc 
 import logging
 import torch
-from datetime import datetime
+from datetime import datetime, timezone
 from celery import shared_task
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -84,9 +84,15 @@ def generate_next_question_task(self, interview_id: int):
             last_ai_transcript = session.exec(stmt_ai).first()
 
             # [중복 방지] 마지막 AI 발화가 3초 이내라면 스킵 (같은 요청이 동시에 여러 번 들어온 경우)
+            # abs()로 timezone mismatch(UTC vs KST)에 의한 음수 diff 문제 해결
             if last_ai_transcript:
-                diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
-                if diff < 3:
+                ts = last_ai_transcript.timestamp
+                now = datetime.now()
+                # timezone-aware vs naive 혼용 방지
+                if ts.tzinfo is not None:
+                    now = datetime.now(timezone.utc)
+                diff = (now - ts).total_seconds()
+                if abs(diff) < 3:
                     logger.info(f"Skipping near-instant duplicate for interview {interview_id} (diff={diff:.1f}s)")
                     return {"status": "skipped"}
 
@@ -130,9 +136,13 @@ def generate_next_question_task(self, interview_id: int):
             if last_ai_transcript:
                 last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
                 if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
-                    diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
-                    if diff < 120:  # 2분 이내 동일 stage 재생성 방지 (120초로 상향)
-                        logger.info(f"Next stage '{next_stage['stage']}' already generated {diff:.1f}s ago, skipping duplicate")
+                    ts2 = last_ai_transcript.timestamp
+                    now2 = datetime.now()
+                    if ts2.tzinfo is not None:
+                        now2 = datetime.now(timezone.utc)
+                    diff2 = (now2 - ts2).total_seconds()
+                    if 0 < diff2 < 120:  # 양수 & 2분 이내 동일 stage 재생성 방지
+                        logger.info(f"Next stage '{next_stage['stage']}' already generated {diff2:.1f}s ago, skipping duplicate")
                         return {"status": "skipped"}
 
             # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
