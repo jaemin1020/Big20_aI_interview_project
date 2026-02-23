@@ -303,7 +303,10 @@ async def get_interview_questions(
         if filepath.exists():
             # 브라우저 캐싱 방지를 위해 타임스탬프 추가
             timestamp = int(datetime.now().timestamp())
-            return f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
+            url = f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
+            logger.info(f"🔊 [TTS Found] ID: {question_id}, URL: {url}")
+            return url
+        logger.warning(f"⏳ [TTS Missing] ID: {question_id}, Path: {filepath}")
         # 파일 없으면 비동기로 TTS 생성 트리거 (fire-and-forget)
         import threading
         threading.Thread(
