@@ -427,11 +427,9 @@ async def start_video_analysis(track, session_id):
                 frame_count += 1
                 curr = time.time()
                 
-                # [HEARTBEAT] 첫 프레임 및 100프레임마다 로그
+                # [HEARTBEAT] 첫 프레임 로그만 출력
                 if frame_count == 1:
-                    print(f"🎉 [{session_id}] 첫 프레임 수신 성공!", flush=True)
-                if frame_count % 100 == 0:
-                    print(f"📽️ [{session_id}] 현재까지 {frame_count} 프레임 수신됨...", flush=True)
+                    print(f"🎉 [{session_id}] 첫 영상 프레임 수신 성공!", flush=True)
 
                 # [성능 조절] 5FPS (0.2s 간격) 분석 
                 # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
@@ -472,32 +470,19 @@ async def start_remote_stt(track, session_id):
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
     CHUNK_DURATION_MS = 3000 
     accumulated_frames = []
-    audio_frame_count = 0  # [DEBUG] 오디오 프레임 수신 카운터 (recording 상태 무관)
-    
     try:
         while True:
             # 1. 오디오 프레임 수신 (항상)
             frame = await track.recv()
-            audio_frame_count += 1
 
-            # [DEBUG] 100프레임(약 2초)마다 무조건 출력 → 오디오 WebRTC 트랙 수신 여부 확인
-            if audio_frame_count % 100 == 0:
-                print(f"[{session_id}] 🎵 [AUDIO-DEBUG] 오디오 프레임 #{audio_frame_count} 수신 "
-                      f"(recording={active_recording_flags.get(session_id, False)})", flush=True)
-
-            # [핵심 수정] 녹음 버튼이 ON일 때만 프레임을 누적
+            # 녹음 버튼이 ON일 때만 프레임을 누적
             if not active_recording_flags.get(session_id, False):
-                continue  # 녹음 중 아니면 프레임 수신만 하고 버림 (버퍼 차단 방지)
+                continue
 
             accumulated_frames.append(frame)
-            
-            # [DEBUG] 10프레임마다 누적 현황 출력 (150프레임 목표)
-            if len(accumulated_frames) % 10 == 0:
-                print(f"[{session_id}] 🎙️ [STEP1] 오디오 누적: {len(accumulated_frames)}/150 프레임", flush=True)
 
             # 150프레임(약 3초) 모이면 STT 전송
             if len(accumulated_frames) >= 150:
-                print(f"[{session_id}] ✅ [STEP2] 150프레임 도달! WAV 변환 시작...", flush=True)
 
                 # 2. WAV 변환 (In-Memory)
                 output_buffer = io.BytesIO()
@@ -516,25 +501,25 @@ async def start_remote_stt(track, session_id):
                 # 4. Base64 인코딩
                 wav_bytes = output_buffer.getvalue()
                 audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
-                print(f"[{session_id}] ✅ [STEP3] WAV 변환 완료: {len(wav_bytes)} bytes", flush=True)
 
-                # [오디오 자신감 분석] NumPy RMS Volume & Density (NumPy 사용)
+                # [오디오 자신감 분석] NumPy RMS Volume & Density
                 try:
-                    # NumPy로 WAV 바이트 → int16 배열 → float32 정규화 (-1.0 ~ 1.0)
                     audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                    print(f"[{session_id}] ✅ [STEP4] NumPy 배열 변환 완료: {len(audio_np)} 샘플", flush=True)
 
                     if len(audio_np) > 0:
-                        # NumPy RMS 계산: sqrt(평균(x²))
                         volume_rms = np.sqrt(np.mean(audio_np**2))
-                        print(f"[{session_id}] 🔊 [STEP5] RMS 계산 완료: {volume_rms:.6f} (임계값: 0.02) → {'통과 ✅' if volume_rms > 0.02 else '미달 ❌'}", flush=True)
                         
                         if volume_rms > 0.02:
-                            volume_score = min(volume_rms * 500, 100) 
-                            threshold = 0.05
-                            # NumPy: 절댓값이 threshold 초과하는 샘플 수 / 전체 샘플 수
-                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
-                            speed_score = min(speaking_ratio * 200, 100)
+                            # 성량 점수: WebRTC 오디오 기준 (RMS 0.02~0.15 범위)
+                            # 영상 점수와 동일하게 40점 기본 + 올라갈수록 최대 100점
+                            volume_score = min(max((volume_rms - 0.02) / (0.15 - 0.02) * 60 + 40, 40), 100)
+
+                            # 발화 비율: threshold 0.05 → 0.02로 낮춤 (WebRTC 압축 오디오 기준)
+                            # 0.05는 너무 높아서 실제 발화 샘플도 잘 안 잡힘
+                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > 0.02) / len(audio_np)
+                            # 20% 이상 발화 시 100점 (기본 40점)
+                            speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
+
                             confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
 
                             if confidence_score >= 70:
@@ -551,11 +536,8 @@ async def start_remote_stt(track, session_id):
                             )
                             
                             # VideoTrack에 점수 저장
-                            video_track_exists = session_id in active_video_tracks
-                            print(f"[{session_id}] 🎬 [STEP6] VideoTrack 존재: {video_track_exists}", flush=True)
-                            if video_track_exists:
+                            if session_id in active_video_tracks:
                                 active_video_tracks[session_id].audio_scores.append(confidence_score)
-                                print(f"[{session_id}] ✅ [STEP7] 점수 저장 완료! 누적 점수 개수: {len(active_video_tracks[session_id].audio_scores)}", flush=True)
 
                 except Exception as e:
                     print(f"[{session_id}] ❌ [ERROR] NumPy 오디오 분석 실패: {e}", flush=True)
