@@ -484,9 +484,14 @@ async def start_remote_stt(track, session_id):
 
             accumulated_frames.append(frame)
             
+            # [DEBUG] 10프레임마다 누적 현황 출력 (150프레임 목표)
+            if len(accumulated_frames) % 10 == 0:
+                print(f"[{session_id}] 🎙️ [STEP1] 오디오 누적: {len(accumulated_frames)}/150 프레임", flush=True)
+
             # 150프레임(약 3초) 모이면 STT 전송
             if len(accumulated_frames) >= 150:
-                
+                print(f"[{session_id}] ✅ [STEP2] 150프레임 도달! WAV 변환 시작...", flush=True)
+
                 # 2. WAV 변환 (In-Memory)
                 output_buffer = io.BytesIO()
                 output_container = av.open(output_buffer, mode='w', format='wav')
@@ -504,17 +509,23 @@ async def start_remote_stt(track, session_id):
                 # 4. Base64 인코딩
                 wav_bytes = output_buffer.getvalue()
                 audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+                print(f"[{session_id}] ✅ [STEP3] WAV 변환 완료: {len(wav_bytes)} bytes", flush=True)
 
-                # [오디오 자신감 분석] NumPy RMS Volume & Density
+                # [오디오 자신감 분석] NumPy RMS Volume & Density (NumPy 사용)
                 try:
+                    # NumPy로 WAV 바이트 → int16 배열 → float32 정규화 (-1.0 ~ 1.0)
                     audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                    print(f"[{session_id}] ✅ [STEP4] NumPy 배열 변환 완료: {len(audio_np)} 샘플", flush=True)
 
                     if len(audio_np) > 0:
+                        # NumPy RMS 계산: sqrt(평균(x²))
                         volume_rms = np.sqrt(np.mean(audio_np**2))
+                        print(f"[{session_id}] 🔊 [STEP5] RMS 계산 완료: {volume_rms:.6f} (임계값: 0.02) → {'통과 ✅' if volume_rms > 0.02 else '미달 ❌'}", flush=True)
                         
                         if volume_rms > 0.02:
                             volume_score = min(volume_rms * 500, 100) 
                             threshold = 0.05
+                            # NumPy: 절댓값이 threshold 초과하는 샘플 수 / 전체 샘플 수
                             speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
                             speed_score = min(speaking_ratio * 200, 100)
                             confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
@@ -532,10 +543,15 @@ async def start_remote_stt(track, session_id):
                                 f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
                             )
                             
-                            if session_id in active_video_tracks:
+                            # VideoTrack에 점수 저장
+                            video_track_exists = session_id in active_video_tracks
+                            print(f"[{session_id}] 🎬 [STEP6] VideoTrack 존재: {video_track_exists}", flush=True)
+                            if video_track_exists:
                                 active_video_tracks[session_id].audio_scores.append(confidence_score)
+                                print(f"[{session_id}] ✅ [STEP7] 점수 저장 완료! 누적 점수 개수: {len(active_video_tracks[session_id].audio_scores)}", flush=True)
 
                 except Exception as e:
+                    print(f"[{session_id}] ❌ [ERROR] NumPy 오디오 분석 실패: {e}", flush=True)
                     logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
                 
                 # 5. Celery Task 배달 (AI Worker에게)
