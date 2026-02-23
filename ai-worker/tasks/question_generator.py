@@ -83,11 +83,11 @@ def generate_next_question_task(self, interview_id: int):
             ).order_by(Transcript.order.desc(), Transcript.id.desc())  # id를 tiebreaker로 사용 (order 같을 때 최신 AI 발화 보장)
             last_ai_transcript = session.exec(stmt_ai).first()
 
-            # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
+            # [중복 방지] 마지막 AI 발화가 3초 이내라면 스킵 (같은 요청이 동시에 여러 번 들어온 경우)
             if last_ai_transcript:
                 diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
-                if diff < 10:
-                    logger.info(f"Skipping duplicate request for interview {interview_id}")
+                if diff < 3:
+                    logger.info(f"Skipping near-instant duplicate for interview {interview_id} (diff={diff:.1f}s)")
                     return {"status": "skipped"}
 
             # [수정] 3. 전공/직무 기반 시나리오 결정
@@ -131,7 +131,7 @@ def generate_next_question_task(self, interview_id: int):
                 last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
                 if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
                     diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
-                    if diff < 30:
+                    if diff < 120:  # 2분 이내 동일 stage 재생성 방지 (120초로 상향)
                         logger.info(f"Next stage '{next_stage['stage']}' already generated {diff:.1f}s ago, skipping duplicate")
                         return {"status": "skipped"}
 
