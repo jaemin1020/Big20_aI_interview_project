@@ -32,13 +32,14 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 제공된 [이력서 문맥]과 [면접 진행 상황]을 바탕으로, 지원자에게 던질 '다음 질문' 1개만 생성하십시오.
 
 [절대 규칙]
-1. 반드시 한국어로 답변하십시오.
-2. 질문은 명확하고 구체적이어야 하며, 150자 이내로 작성하십시오.
-3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
-4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
-5. 이전 질문과 중복되지 않도록 하십시오.
-7. **꼬리질문(Follow-up) 규칙**: 반드시 "답변 감사합니다. 추가적으로 궁금한 점이 있습니다."로 시작하십시오. 이어서 지원자의 답변 중 가장 핵심적인 기술 키워드나 프로젝트 성과를 나타내는 **구절(일부)**을 골라 반드시 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 연결하십시오. 문장 전체를 그대로 인용하기보다 핵심 의미가 담긴 '구절' 위주로 인용하십시오.
-8. **심층 질문 전개**: 작은따옴표로 인용한 구절 속 키워드의 정의를 묻고, 지원하신 직무({target_role})에서 해당 기술이 실무적으로 어떻게 활용될 수 있을지 질문하십시오. 인용구(' ') 외에 볼드체(**) 등 어떠한 특수 기호도 사용하지 마십시오.
+ 1. 반드시 한국어로 답변하십시오.
+ 2. 질문은 명확하고 구체적이어야 하며, 150자 이내로 작성하십시오.
+ 3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
+ 4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
+ 5. 이전 질문과 중복되지 않도록 하십시오.
+ 6. **어조 규칙**: 모든 질문은 반드시 '~주세요.'로 끝내십시오. 물음표(?)를 절대 사용하지 마십시오. (예: ~말씀해 주세요. / ~설명해 주세요.)
+ 7. **꼬리질문(Follow-up) 규칙**: 지원자의 답변 중 핵심적인 구절을 골라 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 요약하며 시작하십시오. (예: 'RAG 아키텍처'라고 말씀하셨는데,)
+ 8. **심층 질문 전개**: 인용 후 질문을 던질 때도 반드시 '~주세요.'로 끝맺음하고, 지원자가 답변한 내용 내에서만 심도 있게 질문하십시오. 외부 지식 인용이나 가짜 경험 조작은 절대 금지입니다.
 
 [이력서 및 답변 문맥]
 {context}
@@ -164,23 +165,41 @@ def generate_next_question_task(interview_id: int):
 
                 # 4. 경력 사항 및 프로젝트 분리 추출
                 act_org, act_role = "관련 기관", "담당 업무"
-                proj_org, proj_name = "해당 기관", "관련 프로젝트"
+                proj_org, proj_name = "해당 기관", "수행한 프로젝트"
 
                 if interview.resume and interview.resume.structured_data:
                     sd = interview.resume.structured_data
                     if isinstance(sd, str): sd = json.loads(sd)
                     
-                    # 4-1. 경력 (activities)
-                    acts = sd.get("activities", [])
-                    if acts:
-                        act_org = acts[0].get("organization") or acts[0].get("name") or act_org
-                        act_role = acts[0].get("role") or acts[0].get("position") or act_role
+                # 4. 경력 사항 및 프로젝트 분리 추출 (엄격 분리)
+                act_org, act_role = "관련 기관", "담당 업무"
+                proj_org, proj_name = "해당 기관", "수행한 프로젝트"
+
+                if interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str): sd = json.loads(sd)
                     
-                    # 4-2. 프로젝트 (projects) - 신규 포맷 반영 (0:기간, 1:제목, 2:기관)
+                    # 4-1. 경력 (activities) - 헤더 제외 로직
+                    acts = sd.get("activities", [])
+                    act_header_kws = ["기간", "역할", "기관", "소속", "장소", "제목", "내용"]
+                    for act in acts:
+                        tmp_org = act.get("organization") or act.get("name") or ""
+                        tmp_role = act.get("role") or act.get("position") or ""
+                        if not any(kw in tmp_org for kw in act_header_kws) and not any(kw in tmp_role for kw in act_header_kws):
+                            act_org = tmp_org or act_org
+                            act_role = tmp_role or act_role
+                            break
+                    
+                    # 4-2. 프로젝트 (projects) - 헤더 제외 로직
                     projs = sd.get("projects", [])
-                    if projs:
-                        proj_name = projs[0].get("title") or proj_name
-                        proj_org = projs[0].get("organization") or proj_org
+                    proj_header_kws = ["기간", "제목", "과정명", "기관", "설명", "내용"]
+                    for proj in projs:
+                        tmp_name = proj.get("title") or proj.get("name") or ""
+                        tmp_org = proj.get("organization") or ""
+                        if not any(kw in tmp_name for kw in proj_header_kws) and not any(kw in tmp_org for kw in proj_header_kws):
+                            proj_name = tmp_name or proj_name
+                            proj_org = tmp_org or proj_org
+                            break
 
                 template_vars = {
                     "candidate_name": candidate_name, 
