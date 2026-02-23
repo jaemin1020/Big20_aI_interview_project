@@ -1040,7 +1040,8 @@ function App() {
             onFinish={finishInterview}
             videoRef={videoRef}
             isLoading={isLoading}
-            visionData={visionData} // [NEW] Pass vision data
+            visionData={visionData}
+            streamingQuestion={questions[currentIdx + 1]?.isStreaming ? questions[currentIdx + 1]?.content : null}
           />
         )}
 
