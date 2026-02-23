@@ -127,7 +127,7 @@ async def withdraw(
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
     db_user.is_withdrawn = True
-    db_user.withdrawn_at = datetime.utcnow()
+    db_user.withdrawn_at = datetime.now()
     db.add(db_user)
     db.commit()
 

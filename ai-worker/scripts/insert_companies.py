@@ -89,8 +89,8 @@ def insert_companies():
                 ideal=company_data["ideal"],
                 description=company_data["description"],
                 embedding=embedding,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(),
+                updated_at=datetime.now()
             )
             
             session.add(company)

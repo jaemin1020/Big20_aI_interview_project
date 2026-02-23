@@ -93,7 +93,7 @@ def generate_next_question_task(interview_id: int):
 
             # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
             if last_ai_transcript:
-                diff = (datetime.utcnow() - last_ai_transcript.timestamp).total_seconds()
+                diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
                 if diff < 10:
                     logger.info(f"Skipping duplicate request for interview {interview_id}")
                     return {"status": "skipped"}
@@ -138,7 +138,7 @@ def generate_next_question_task(interview_id: int):
             if last_ai_transcript:
                 last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
                 if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
-                    diff = (datetime.utcnow() - last_ai_transcript.timestamp).total_seconds()
+                    diff = (datetime.now() - last_ai_transcript.timestamp).total_seconds()
                     if diff < 30:
                         logger.info(f"Next stage '{next_stage['stage']}' already generated {diff:.1f}s ago, skipping duplicate")
                         return {"status": "skipped"}
