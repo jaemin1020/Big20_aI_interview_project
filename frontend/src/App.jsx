@@ -646,6 +646,35 @@ function App() {
     }
   };
 
+  // [추가] 현재 질문의 오디오 URL이 없을 경우 폴링하여 갱신 (TTS 지연 대응)
+  const questionsRef = useRef(questions);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
+  useEffect(() => {
+    // 인터뷰 중이고, 현재 질문은 있는데 audio_url이 없는 경우에만 실행
+    const currentQuestion = questionsRef.current[currentIdx];
+    if (step !== 'interview' || !interview || !currentQuestion || currentQuestion.audio_url) return;
+
+    const interval = setInterval(async () => {
+      console.log(`🔄 [TTS Polling] Fetching audio URL for Question index ${currentIdx + 1}...`);
+      try {
+        const data = await getInterviewQuestions(interview.id);
+        const updatedQs = data.questions || [];
+
+        // 현재 인덱스의 질문에 오디오 URL이 생겼는지 확인
+        if (updatedQs[currentIdx]?.audio_url) {
+          console.log(`✅ [TTS Polling] Audio URL found: ${updatedQs[currentIdx].audio_url}`);
+          setQuestions(updatedQs);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("[TTS Polling] Failed to fetch questions:", err);
+      }
+    }, 2000); // 2초 간격으로 확인
+
+    return () => clearInterval(interval);
+  }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
+
   const nextQuestion = async () => {
     console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
     if (!interview || !questions || !questions[currentIdx]) {
