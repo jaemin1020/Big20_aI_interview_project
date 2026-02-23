@@ -57,8 +57,23 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 # 3. 메인 작업: 질문 생성 태스크
 # ==========================================
 
-@shared_task(name="tasks.question_generation.generate_next_question")
-def generate_next_question_task(interview_id: int):
+@shared_task(name="tasks.question_generation.preload_model")
+def preload_model_task():
+    """
+    EXAONE 모델을 메모리에 미리 로드해두는 웜업(Warmup) 태스크.
+    면접 세션 생성 시 즉시 실행하여, AI 질문이 필요한 시점에 모델이 이미 준비된 상태가 되도록 합니다.
+    """
+    try:
+        from utils.exaone_llm import get_exaone_llm
+        logger.info("🔥 [Preload] EXAONE 모델 사전 로딩 시작...")
+        get_exaone_llm()  # 싱글톤 - 한 번 로딩되면 이후 태스크에서 재사용
+        logger.info("✅ [Preload] EXAONE 모델 사전 로딩 완료. AI 질문 생성 준비됨.")
+    except Exception as e:
+        logger.warning(f"⚠️ [Preload] 모델 사전 로딩 실패 (AI 질문 생성 시 자동 재시도): {e}")
+
+
+@shared_task(bind=True, name="tasks.question_generation.generate_next_question")
+def generate_next_question_task(self, interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
@@ -289,8 +304,8 @@ def generate_next_question_task(interview_id: int):
                         # Redis Pub/Sub으로 토큰 발행 (실시간 스트리밍)
                         try:
                             r.publish(channel, chunk)
-                        except Exception as re:
-                            logger.error(f"Redis publish failed: {re}")
+                        except Exception as pub_err:
+                            logger.error(f"Redis publish failed: {pub_err}")
 
                 final_content = "".join(full_tokens)
 

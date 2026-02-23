@@ -97,6 +97,8 @@ function App() {
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
+  const aiStreamWsRef = useRef(null); // AI 질문 스트리밍용 WS
+  const currentIdxRef = useRef(0); // stale closure 방지용 : currentIdx 최신값 동기화
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
@@ -188,6 +190,11 @@ function App() {
   useEffect(() => {
     liveTranscriptRef.current = transcript;
   }, [transcript]);
+
+  // currentIdx 상태 → ref 동기화 (AI 스트리밍 클로저 stale 방지)
+  useEffect(() => {
+    currentIdxRef.current = currentIdx;
+  }, [currentIdx]);
 
   // 상태 변화 시마다 sessionStorage에 저장
   useEffect(() => {
@@ -409,6 +416,47 @@ function App() {
 
     ws.onerror = (error) => console.error('[WebSocket] Error:', error);
     ws.onclose = () => console.log('[WebSocket] Closed');
+  };
+
+  const setupAiStreamWebSocket = (interviewId) => {
+    // 백엔드 코어(8000)의 스트리밍 채널에 연결
+    const ws = new WebSocket(`ws://localhost:8000/interviews/ws/${interviewId}`);
+    aiStreamWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ai_token' && data.token) {
+          const token = data.token;
+
+          setQuestions(prev => {
+            // currentIdxRef.current 로 항상 최신 인덱스 참조 (stale closure 방지)
+            // 생성되는 건 '다음 질문'이므로 현재 인덱스 + 1 자리에 스트리밍
+            const nextSlot = currentIdxRef.current + 1;
+            const newQs = [...prev];
+
+            // 다음 질문 슬롯이 아직 없으면 스트리밍용 빈 객체 생성
+            if (!newQs[nextSlot]) {
+              newQs[nextSlot] = { id: `streaming_${Date.now()}`, content: '', isStreaming: true };
+            }
+
+            // 토큰 이어붙이기
+            const existing = newQs[nextSlot].content || '';
+            newQs[nextSlot] = {
+              ...newQs[nextSlot],
+              content: existing + token,
+              isStreaming: true
+            };
+            return newQs;
+          });
+        }
+      } catch (err) {
+        console.error('[AI Stream WS] Parse error:', err);
+      }
+    };
+
+    ws.onerror = (err) => console.error('[AI Stream WS] Error:', err);
+    ws.onclose = () => console.log('[AI Stream WS] Closed');
   };
 
   const setupWebRTC = async (interviewId) => {
@@ -748,6 +796,7 @@ function App() {
         try {
           await setupWebRTC(interview.id);
           setupWebSocket(interview.id);
+          setupAiStreamWebSocket(interview.id); // [NEW] AI 스트리밍 연결
         } catch (err) {
           console.error("Media init error:", err);
         }
@@ -774,6 +823,7 @@ function App() {
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
+      if (aiStreamWsRef.current) aiStreamWsRef.current.close(); // [NEW]
       if (pcRef.current) pcRef.current.close();
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
     };

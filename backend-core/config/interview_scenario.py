@@ -9,9 +9,8 @@ INTERVIEW_STAGES = [
     {
         "stage": "intro",
         "display_name": "기본 질문",
-        "intro_sentence": "면접을 시작하겠습니다.",
         "type": "template",
-        "template": "반갑습니다. 우선 저희 {company_name} {target_role}에 지원해 주셔서 감사합니다. 저는 오늘 면접을 진행할 면접관 VIEW입니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다. {candidate_name} 지원자님, 자기소개 부탁드립니다.",
+        "template": "반갑습니다. 우선 저희 {company_name} {target_role}에 지원해 주셔서 감사합니다. 저는 오늘 면접을 진행할 면접관 VIEW입니다. {candidate_name} 지원자님,면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
         "variables": ["candidate_name", "target_role", "company_name"],
         "order": 1
     },

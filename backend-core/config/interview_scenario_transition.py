@@ -10,7 +10,7 @@ INTERVIEW_STAGES = [
         "stage": "intro",
         "display_name": "기본 질문",
         "type": "template",
-        "template": "반갑습니다. 우선 저희 {company_name} {target_role} 직무에 지원해 주셔서 감사합니다. 저는 오늘 면접을 진행할 면접관 VIEW 입니다. {candidate_name} 지원자님, 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
+        "template": "반갑습니다. 우선 저희 {company_name} {target_role} 직무에 지원해 주셔서 감사합니다. 저는 오늘 면접을 진행할 면접관 BIG-VIEW 입니다. {candidate_name} 지원자님, 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
         "variables": ["candidate_name", "major", "target_role", "company_name"],
         "order": 1
     },
@@ -135,7 +135,7 @@ INTERVIEW_STAGES = [
         "type": "ai",
         "category": "narrative",
         "query_template": "자기소개서 2번 기술 습득 과정 IDS 구축 시각화 자동화",
-        "guide": "자소서 2번 문항 인용. 기술 트렌드 시너지 및 학습 계획. 질문은 반드시 '~주세요.'로 끝맺음하고 물음표를 사용하지 마십시오.",
+        "guide": "자소서 2번 문항 인용. 기술 트렌드 시너지 및 학습 계획. 질문은 반드시 '주세요.'로 끝맺음하고 물음표를 사용하지 마십시오.",
         "order": 13
     },
 
@@ -145,7 +145,7 @@ INTERVIEW_STAGES = [
         "display_name": "성장가능성심층",
         "type": "followup",
         "parent": "growth",
-        "guide": "최근 기술 한계 극복 시도 및 구체적 학습 활동. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
+        "guide": "최근 기술 한계 극복 시도 및 구체적 학습 활동. 모든 질문은 반드시 '주세요.'로 끝내고 물음표를 사용하지 마십시오.",
         "order": 14
     },
 
