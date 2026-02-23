@@ -106,6 +106,39 @@ class ExaoneLLM(LLM):
             logger.error(f"생성 도중 오류 발생: {e}")
             return ""
 
+    def _stream(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ):
+        """실시간 스트리밍 출력을 위한 메서드"""
+        if ExaoneLLM.llm is None:
+            raise RuntimeError("EXAONE engine is not initialized.")
+
+        try:
+            stop_sequences = ["[|endofturn|]", "[|user|]"] if stop is None else stop
+            
+            # stream=True 옵션으로 llama-cpp 호출
+            responses = ExaoneLLM.llm(
+                prompt,
+                max_tokens=kwargs.get("max_tokens", 512),
+                stop=stop_sequences,
+                temperature=kwargs.get("temperature", 0.7),
+                stream=True
+            )
+
+            from langchain_core.outputs import GenerationChunk
+            for response in responses:
+                chunk = response['choices'][0]['text']
+                if chunk:
+                    yield GenerationChunk(text=chunk)
+                    
+        except Exception as e:
+            logger.error(f"스트리밍 도중 오류 발생: {e}")
+            yield GenerationChunk(text=f"Error: {str(e)}")
+
     @property
     def _llm_type(self) -> str:
         return "exaone_gguf"

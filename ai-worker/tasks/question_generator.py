@@ -9,6 +9,7 @@ from datetime import datetime
 from celery import shared_task
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+import redis
 
 # ==========================================
 # 1. 초기 설정 및 모델 경로 최적화
@@ -268,12 +269,30 @@ def generate_next_question_task(interview_id: int):
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
                 chain = prompt | llm | StrOutputParser()
 
-                final_content = chain.invoke({
+                # Redis 설정 (스트리밍 전송용)
+                redis_host = os.getenv("REDIS_HOST", "redis")
+                r = redis.Redis(host=redis_host, port=6379, db=0)
+                channel = f"interview_{interview_id}_stream"
+
+                logger.info(f"🚀 Starting streaming generation for Interview {interview_id}")
+                
+                full_tokens = []
+                # stream()을 사용하여 토큰 단위로 실시간 수신
+                for chunk in chain.stream({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
                     "guide": next_stage.get('guide', ''),
                     "target_role": interview.position or "지원 직무"
-                })
+                }):
+                    if chunk:
+                        full_tokens.append(chunk)
+                        # Redis Pub/Sub으로 토큰 발행 (실시간 스트리밍)
+                        try:
+                            r.publish(channel, chunk)
+                        except Exception as re:
+                            logger.error(f"Redis publish failed: {re}")
+
+                final_content = "".join(full_tokens)
 
                 # [추가] AI 응답 정제: 따옴표, 숫자, '질문:' 등 불필요한 장식 제거
                 final_content = final_content.strip()
