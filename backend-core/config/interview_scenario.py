@@ -47,15 +47,13 @@ INTERVIEW_STAGES = [
         "order": 4
     },
     
-    # 5. 직무 경험 평가 (AI 생성)
+    # 5. 직무 경험 평가 (템플릿)
     {
         "stage": "experience",
         "display_name": "실무경험질문",
-        "intro_sentence": "다음은 실무경험질문입니다.",
-        "type": "ai",
-        "category": None,
-        "query_template": "프로젝트 성과 달성 경험 결과 활동 인턴 교육",
-        "guide": "이력서 활동 2개 연결. 활동 간 인과관계 및 성장 분석.",
+        "type": "template",
+        "template": "감사합니다. 다음은 실무경험질문입니다. 이력서를 보니 경력사항에 {org_name}에서 {role_name}일을 하셨고 {project_title} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤일을 하셨는지 설명해주세요.",
+        "variables": ["org_name", "role_name", "project_title"],
         "order": 5
     },
     

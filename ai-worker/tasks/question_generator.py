@@ -149,6 +149,9 @@ def generate_next_question_task(interview_id: int):
                 target_role = interview.position or "해당 직무"
                 course_name = "관련 프로젝트"
                 cert_name = "관련 자격"
+                org_name = "관련 기관"
+                role_name = "담당 업무"
+                project_title = "주요 프로젝트"
 
                 if interview.resume and interview.resume.structured_data:
                     sd = interview.resume.structured_data
@@ -179,18 +182,18 @@ def generate_next_question_task(interview_id: int):
                             if title and not any(bl in title for bl in blacklist):
                                 found_project = title
                                 break
-                    if found_project: course_name = found_project
+                    if found_project: 
+                        course_name = found_project
+                        project_title = found_project
                     
-                    # 자격증 전문 데이터에서 이름 추출
+                    # 3. 자격증 전문 데이터에서 이름 추출
                     certs = sd.get("certifications", [])
                     found_cert = None
-                    # 우선순위 키워드 자격증 찾기
                     for c in certs:
                         title = c.get("title") or c.get("name") or ""
                         if any(kw in title for kw in priority_keywords) and not any(bl in title for bl in blacklist):
                             found_cert = title
                             break
-                    # 못 찾았다면 블랙리스트(운전면허 등) 피해서 찾기
                     if not found_cert:
                         for c in certs:
                             title = c.get("title") or c.get("name") or ""
@@ -199,12 +202,23 @@ def generate_next_question_task(interview_id: int):
                                 break
                     if found_cert: cert_name = found_cert
 
+                    # 4. 경력 사항 (activities) 추출
+                    acts = sd.get("activities", [])
+                    if acts:
+                        # 첫 번째 유효한 경력 가져오기
+                        first_act = acts[0]
+                        org_name = first_act.get("organization") or first_act.get("name") or org_name
+                        role_name = first_act.get("role") or first_act.get("position") or role_name
+
                 template_vars = {
                     "candidate_name": candidate_name, 
                     "target_role": target_role, 
-                    "major": major or "보관 전공",
+                    "major": major or "해당 전공",
                     "course_name": course_name,
-                    "cert_name": cert_name
+                    "cert_name": cert_name,
+                    "org_name": org_name,
+                    "role_name": role_name,
+                    "project_title": project_title
                 }
                 
                 tpl = next_stage.get("template", "{candidate_name} 지원자님, 계속해주세요.")
