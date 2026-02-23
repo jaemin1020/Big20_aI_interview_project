@@ -690,12 +690,18 @@ function App() {
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
+        // [추가/수정] 미리 생성된 다음 질문(2번 등)의 최신 정보(특히 audio_url)를 서버에서 다시 가져옴
+        const freshData = await getInterviewQuestions(interview.id);
+        if (freshData.questions && freshData.questions.length > 0) {
+          setQuestions(freshData.questions);
+        }
+
         const nextIdx = currentIdx + 1;
         setCurrentIdx(nextIdx);
         setTranscript('');
         setIsLoading(false);
 
-        // [추가] WebSocket으로 질문 전환 알림
+        // WebSocket으로 질문 전환 알림
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
         }

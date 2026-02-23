@@ -180,6 +180,7 @@ async def create_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
+            logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created at backend.")
 
         # 모든 질문/대화가 준비되었을 때 한꺼번에 커밋
         new_interview.status = InterviewStatus.LIVE
@@ -631,6 +632,7 @@ async def create_realtime_interview(
                 order=stage_config.get("order", 0)
             )
             db.add(transcript)
+            logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created successfully.")
 
 
         # 일괄 커밋

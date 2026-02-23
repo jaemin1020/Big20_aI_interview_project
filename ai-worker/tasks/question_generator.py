@@ -32,13 +32,15 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 제공된 [이력서 문맥]과 [면접 진행 상황]을 바탕으로, 지원자에게 던질 '다음 질문' 1개만 생성하십시오.
 
 [절대 규칙]
-1. 반드시 한국어로 답변하십시오.
-2. 질문은 명확하고 구체적이어야 하며, 150자 이내로 작성하십시오.
-3. 특수문자(JSON 기호, 역따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
-4. "질문:" 이라는 수식어 없이 바로 질문 본문만 출력하십시오.
-5. 이전 질문과 중복되지 않도록 하십시오.
-7. **꼬리질문(Follow-up) 규칙**: 반드시 "답변 감사합니다. 추가적으로 궁금한 점이 있습니다."로 시작하십시오. 이어서 지원자의 답변 중 가장 핵심적인 기술 키워드나 프로젝트 성과를 나타내는 **구절(일부)**을 골라 반드시 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 연결하십시오. 문장 전체를 그대로 인용하기보다 핵심 의미가 담긴 '구절' 위주로 인용하십시오.
-8. **심층 질문 전개**: 작은따옴표로 인용한 구절 속 키워드의 정의를 묻고, 지원하신 직무({target_role})에서 해당 기술이 실무적으로 어떻게 활용될 수 있을지 질문하십시오. 인용구(' ') 외에 볼드체(**) 등 어떠한 특수 기호도 사용하지 마십시오.
+ 1. 반드시 한국어로 답변하십시오.
+ 2. 질문은 명확하고 구체적이어야 하며, 150자 이내로 작성하십시오.
+ 3. 특수문자(JSON 기호, 역따옴표, 작은따옴표 등)를 절대 사용하지 마십시오. 오직 순수 텍스트만 출력하십시오.
+ 4. 질문 앞머리에 '1.', '질문:' 또는 따옴표(') 등을 절대 붙이지 마십시오. 바로 본문만 시작하십시오.
+ 5. 이전 질문과 중복되지 않도록 하십시오.
+ 6. **어조 규칙**: 기본적으로 모든 질문은 '~주세요.'로 끝맺음하고 물음표(?)를 사용하지 마십시오. 단, 별도의 지시가 있는 [가이드]가 제공될 경우 해당 가이드의 어조(예: '~인가요?')와 물음표 사용 유무를 최우선으로 따르십시오.
+ 7. **꼬리질문(Follow-up) 규칙**: 지원자의 답변 중 핵심적인 구절을 골라 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 요약하며 시작하십시오. (예: 'RAG 아키텍처'라고 말씀하셨는데,)
+ 8. **심층 질문 전개**: 지원자가 답변한 내용 내에서만 심도 있게 질문하십시오. 외부 지식 인용이나 가짜 경험 조작은 절대 금지입니다. 가이드에서 요청하는 경우 어조를 유연하게 변경하십시오.
+ 9. **문장 검증(Self-Correction)**: 질문을 출력하기 전, 문장이 비논리적이거나 도중에 끊기지 않았는지, 그리고 질문의 의도가 명확한지 스스로 최종 확인하십시오. 어색한 비문은 자동으로 수정하여 완결된 문장만 출력하십시오.
 
 [이력서 및 답변 문맥]
 {context}
@@ -73,35 +75,24 @@ def generate_next_question_task(self, interview_id: int):
                 logger.error(f"Interview {interview_id} not found.")
                 return {"status": "error", "message": "Interview not found"}
 
-            # 2. 마지막 AI 발화 확인 (Stage 판별 + 중복 방지)
-            # [수정] User transcript는 question_id가 없어 stage 판별 불가 → 마지막 AI 발화 기준으로 판별
-            stmt_all = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order.desc())
+            # 2. 마지막 발화 확인 및 Stage 판별
+            # [수정] 마지막 발화 확인 (Order 필드 대신 ID/시간순으로 변경하여 정합성 확보)
+            stmt_all = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.id.desc())
             last_transcript = session.exec(stmt_all).first()
 
             stmt_ai = select(Transcript).where(
                 Transcript.interview_id == interview_id,
                 Transcript.speaker == Speaker.AI
-            ).order_by(Transcript.order.desc(), Transcript.id.desc())  # id를 tiebreaker로 사용 (order 같을 때 최신 AI 발화 보장)
+            ).order_by(Transcript.id.desc())
             last_ai_transcript = session.exec(stmt_ai).first()
 
-            # [수정] RAG 쿼리로 사용할 지원자의 '진짜' 마지막 답변 별도 추출
             stmt_user = select(Transcript).where(
                 Transcript.interview_id == interview_id,
                 Transcript.speaker == Speaker.USER
-            ).order_by(Transcript.order.desc(), Transcript.id.desc())
+            ).order_by(Transcript.id.desc())
             last_user_transcript = session.exec(stmt_user).first()
 
-            # 마지막 AI 발화가 10초 이내라면 스킵 (Race Condition 방지)
-            if last_ai_transcript:
-                ts = last_ai_transcript.timestamp
-                now = datetime.now()
-                # timezone-aware vs naive 혼용 방지
-                if ts.tzinfo is not None:
-                    now = datetime.now(timezone.utc)
-                diff = (now - ts).total_seconds()
-                if abs(diff) < 3:
-                    logger.info(f"Skipping near-instant duplicate for interview {interview_id} (diff={diff:.1f}s)")
-                    return {"status": "skipped"}
+            # [삭제] 10초 이내 스킵 로직 (Race Condition 방지 목적이었으나 초기 템플릿 로드 시 방해됨)
 
             # [수정] 3. 전공/직무 기반 시나리오 결정
             major = ""
@@ -132,68 +123,78 @@ def generate_next_question_task(self, interview_id: int):
                 session.commit()
                 return {"status": "completed"}
 
-            # [수정] 꼬리질문(followup) 생성 제한 로직
-            # 다음 단계가 followup인데, 마지막 발화자가 여전히 AI라면 지원자가 아직 답변을 안 한 것임.
-            if next_stage.get("type") == "followup":
-                if last_transcript and last_transcript.speaker == "AI":
-                    logger.info(f"Next stage is followup, but WAITING for user answer. Skipping generation.")
-                    return {"status": "waiting_for_user"}
+            # [수정] 동기화 로직: 이미 AI가 다음 질문(들)을 던졌는데 사용자가 아직 이전 질문에 답하는 중이라면 대기
+            if last_ai_transcript and last_user_transcript:
+                # 마지막 AI 발화가 아직 사용자 답변에 의해 참조되지 않았다면? (즉, 아직 답하지 않은 질문이 있다면)
+                if last_user_transcript.question_id != last_ai_transcript.question_id:
+                    logger.info(f"AI has already spoken up to stage '{last_stage_name}', but user just answered a previous question. Waiting for user to answer current question.")
+                    return {"status": "waiting_for_user_to_catch_up"}
 
-            # [중복 방지 개선] next_stage가 이미 생성됐는지 확인 (timestamp 기반 X → stage 기반 O)
+            # [수정] 중복 방지 로직 개선: 이미 생성된 경우 정보를 함께 리턴
             if last_ai_transcript:
                 last_q_for_check = session.get(Question, last_ai_transcript.question_id) if last_ai_transcript.question_id else None
                 if last_q_for_check and last_q_for_check.question_type == next_stage['stage']:
-                    ts2 = last_ai_transcript.timestamp
-                    now2 = datetime.now()
-                    if ts2.tzinfo is not None:
-                        now2 = datetime.now(timezone.utc)
-                    diff2 = (now2 - ts2).total_seconds()
-                    if 0 < diff2 < 120:  # 양수 & 2분 이내 동일 stage 재생성 방지
-                        logger.info(f"Next stage '{next_stage['stage']}' already generated {diff2:.1f}s ago, skipping duplicate")
-                        return {"status": "skipped"}
-
+                    logger.info(f"Next stage '{next_stage['stage']}' already exists. Re-triggering TTS/Broadcast.")
+                    # TTS 다시 한 번 찔러줌 (이미 있으면 1초도 안 걸림)
+                    synthesize_task.delay(last_ai_transcript.text, language="auto", question_id=last_ai_transcript.question_id)
+                    return {
+                        "status": "success", 
+                        "stage": next_stage['stage'], 
+                        "question": last_ai_transcript.text,
+                        "question_id": last_ai_transcript.question_id
+                    }
             # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
             if next_stage.get("type") == "template":
                 candidate_name = "지원자"
                 target_role = interview.position or "해당 직무"
+                cert_list = ""
+                
+                act_org, act_role = "관련 기관", "담당 업무"
+                proj_org, proj_name = "해당 기관", "수행한 프로젝트"
                 
                 if interview.resume and interview.resume.structured_data:
                     sd = interview.resume.structured_data
                     if isinstance(sd, str): sd = json.loads(sd)
-                    candidate_name = sd.get("header", {}).get("name") or sd.get("header", {}).get("candidate_name") or "지원자"
-                    target_role = sd.get("header", {}).get("target_role") or target_role
                     
+                    header = sd.get("header", {})
+                    candidate_name = header.get("name") or header.get("candidate_name") or candidate_name
+                    target_role = header.get("target_role") or target_role
+                    company_name = header.get("target_company") or header.get("company") or "저희 회사"
+
                     # 1. 자격증 리스트업 (모두 추출)
                     certs = sd.get("certifications", [])
                     if certs:
                         cert_names = [c.get("title") or c.get("name") for c in certs if (c.get("title") or c.get("name"))]
                         cert_list = ", ".join(cert_names)
+                    
+                    # 4-1. 경력 (activities) - 헤더 제외 로직
+                    acts = sd.get("activities", [])
+                    act_header_kws = ["기간", "역할", "기관", "소속", "장소", "제목", "내용"]
+                    for act in acts:
+                        tmp_org = act.get("organization") or act.get("name") or ""
+                        tmp_role = act.get("role") or act.get("position") or ""
+                        if not any(kw in tmp_org for kw in act_header_kws) and not any(kw in tmp_role for kw in act_header_kws):
+                            act_org = tmp_org or act_org
+                            act_role = tmp_role or act_role
+                            break
+                    
+                    # 4-2. 프로젝트 (projects) - 헤더 제외 로직
+                    projs = sd.get("projects", [])
+                    proj_header_kws = ["기간", "제목", "과정명", "기관", "설명", "내용"]
+                    for proj in projs:
+                        tmp_name = proj.get("title") or proj.get("name") or ""
+                        tmp_org = proj.get("organization") or ""
+                        if not any(kw in tmp_name for kw in proj_header_kws) and not any(kw in tmp_org for kw in proj_header_kws):
+                            proj_name = tmp_name or proj_name
+                            proj_org = tmp_org or proj_org
+                            break
                 
                 if not cert_list: cert_list = "관련 자격"
-
-                # 4. 경력 사항 및 프로젝트 분리 추출
-                act_org, act_role = "관련 기관", "담당 업무"
-                proj_org, proj_name = "해당 기관", "관련 프로젝트"
-
-                if interview.resume and interview.resume.structured_data:
-                    sd = interview.resume.structured_data
-                    if isinstance(sd, str): sd = json.loads(sd)
-                    
-                    # 4-1. 경력 (activities)
-                    acts = sd.get("activities", [])
-                    if acts:
-                        act_org = acts[0].get("organization") or acts[0].get("name") or act_org
-                        act_role = acts[0].get("role") or acts[0].get("position") or act_role
-                    
-                    # 4-2. 프로젝트 (projects) - 신규 포맷 반영 (0:기간, 1:제목, 2:기관)
-                    projs = sd.get("projects", [])
-                    if projs:
-                        proj_name = projs[0].get("title") or proj_name
-                        proj_org = projs[0].get("organization") or proj_org
 
                 template_vars = {
                     "candidate_name": candidate_name, 
                     "target_role": target_role, 
+                    "company_name": company_name if 'company_name' in locals() else "저희 회사",
                     "major": major or "해당 전공",
                     "cert_list": cert_list,
                     "act_org": act_org,
@@ -205,9 +206,12 @@ def generate_next_question_task(self, interview_id: int):
                 tpl = next_stage.get("template", "{candidate_name} 지원자님, 계속해주세요.")
                 try:
                     formatted = tpl.format(**template_vars)
-                except KeyError:
-                    # 필요한 키가 없을 경우를 대비한 안전 장치
-                    formatted = tpl.replace("{candidate_name}", candidate_name).replace("{course_name}", course_name).replace("{cert_name}", cert_name)
+                except Exception as e:
+                    logger.warning(f"Template formatting error: {e}")
+                    # 폴백: 직접 문자열 치환
+                    for k, v in template_vars.items():
+                        tpl = tpl.replace("{" + k + "}", str(v))
+                    formatted = tpl
 
                 intro_msg = next_stage.get("intro_sentence", "")
                 display_name = next_stage.get("display_name", "면접질문")
@@ -270,6 +274,15 @@ def generate_next_question_task(self, interview_id: int):
                     "guide": next_stage.get('guide', ''),
                     "target_role": interview.position or "지원 직무"
                 })
+
+                # [추가] AI 응답 정제: 따옴표, 숫자, '질문:' 등 불필요한 장식 제거
+                final_content = final_content.strip()
+                # 1. 앞뒤 따옴표 제거
+                final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
+                # 2. 앞줄 번호나 '질문:' 등의 태그 제거 (예: '1.', '질문:', "'1.")
+                final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
+                # 3. 중복 공백 제거 및 다시 한번 다듬기
+                final_content = final_content.strip()
 
                 # 인트로 메시지 조합 (3번 질문 전용 로직 포함)
                 candidate_name = "지원자"
