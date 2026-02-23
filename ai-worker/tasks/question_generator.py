@@ -147,81 +147,50 @@ def generate_next_question_task(interview_id: int):
             if next_stage.get("type") == "template":
                 candidate_name = "지원자"
                 target_role = interview.position or "해당 직무"
-                course_name = "관련 프로젝트"
-                cert_name = "관련 자격"
-                org_name = "관련 기관"
-                role_name = "담당 업무"
-                project_title = "주요 프로젝트"
-
+                
                 if interview.resume and interview.resume.structured_data:
                     sd = interview.resume.structured_data
-                    if isinstance(sd, str):
-                        sd = json.loads(sd)
-                    
+                    if isinstance(sd, str): sd = json.loads(sd)
                     candidate_name = sd.get("header", {}).get("name") or sd.get("header", {}).get("candidate_name") or "지원자"
                     target_role = sd.get("header", {}).get("target_role") or target_role
                     
-                    # 1. 지원 직무와 관련된 핵심 키워드 (우선순위 부여용)
-                    priority_keywords = ["데이터", "분석", "RAG", "AI", "클라우드", "이커머스", "시스템", "예측", "모델링", "SQL", "보안","정보",'컴퓨터']
-                    # 2. 제외해야 할 단어 (가이드 문구나 무관한 데이터)
-                    blacklist = ["과정명", "내용", "상세 내용", "상세내용", "제목", "기간", "자격증명", "운전면허"]
-
-                    # 프로젝트 전문 데이터에서 이름 추출
-                    projects = sd.get("projects", [])
-                    found_project = None
-                    # 우선순위 키워드가 포함된 프로젝트 먼저 찾기
-                    for p in projects:
-                        title = p.get("title") or p.get("name") or ""
-                        if any(kw in title for kw in priority_keywords) and not any(bl in title for bl in blacklist):
-                            found_project = title
-                            break
-                    # 못 찾았다면 블랙리스트만 피해서 찾기
-                    if not found_project:
-                        for p in projects:
-                            title = p.get("title") or p.get("name") or ""
-                            if title and not any(bl in title for bl in blacklist):
-                                found_project = title
-                                break
-                    if found_project: 
-                        course_name = found_project
-                        project_title = found_project
-                    
-                    # 3. 자격증 전문 데이터에서 이름 추출
+                    # 1. 자격증 리스트업 (모두 추출)
                     certs = sd.get("certifications", [])
-                    found_cert = None
-                    for c in certs:
-                        title = c.get("title") or c.get("name") or ""
-                        if any(kw in title for kw in priority_keywords) and not any(bl in title for bl in blacklist):
-                            found_cert = title
-                            break
-                    if not found_cert:
-                        for c in certs:
-                            title = c.get("title") or c.get("name") or ""
-                            if title and not any(bl in title for bl in blacklist):
-                                found_cert = title
-                                break
-                    if found_cert: cert_name = found_cert
+                    if certs:
+                        cert_names = [c.get("title") or c.get("name") for c in certs if (c.get("title") or c.get("name"))]
+                        cert_list = ", ".join(cert_names)
+                
+                if not cert_list: cert_list = "관련 자격"
 
-                    # 4. 경력 사항 (activities) 추출
-                    # 신규 포맷: title(1), role(2), organization(3)
+                # 4. 경력 사항 및 프로젝트 분리 추출
+                act_org, act_role = "관련 기관", "담당 업무"
+                proj_org, proj_name = "해당 기관", "관련 프로젝트"
+
+                if interview.resume and interview.resume.structured_data:
+                    sd = interview.resume.structured_data
+                    if isinstance(sd, str): sd = json.loads(sd)
+                    
+                    # 4-1. 경력 (activities)
                     acts = sd.get("activities", [])
                     if acts:
-                        first_act = acts[0]
-                        org_name = first_act.get("organization") or org_name
-                        role_name = first_act.get("role") or role_name
-                        # 활동 내에 프로젝트명이 있다면 우선 사용
-                        if first_act.get("title"):
-                            project_title = first_act.get("title")
+                        act_org = acts[0].get("organization") or acts[0].get("name") or act_org
+                        act_role = acts[0].get("role") or acts[0].get("position") or act_role
+                    
+                    # 4-2. 프로젝트 (projects) - 신규 포맷 반영 (0:기간, 1:제목, 2:기관)
+                    projs = sd.get("projects", [])
+                    if projs:
+                        proj_name = projs[0].get("title") or proj_name
+                        proj_org = projs[0].get("organization") or proj_org
 
                 template_vars = {
                     "candidate_name": candidate_name, 
                     "target_role": target_role, 
                     "major": major or "해당 전공",
-                    "course_name": course_name,
-                    "cert_name": cert_name,
-                    "org_name": org_name,
-                    "role_name": role_name,
-                    "project_title": project_title
+                    "cert_list": cert_list,
+                    "act_org": act_org,
+                    "act_role": act_role,
+                    "proj_org": proj_org,
+                    "proj_name": proj_name
                 }
                 
                 tpl = next_stage.get("template", "{candidate_name} 지원자님, 계속해주세요.")
