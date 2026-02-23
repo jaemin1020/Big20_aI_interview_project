@@ -78,33 +78,15 @@ graph TD
 
 ## 4. 데이터베이스 및 저장소 구조 (Database Schema)
 
-본 환경은 SQLModel(SQLAlchemy 기반)을 활용한 관계형 데이터 구조와 고차원 벡터 임베딩 검색을 위한 `pgvector` 확장을 바탕으로 구축되었습니다. 정형 트랜잭션 데이터와 비정형 AI 데이터(텍스트, 벡터)를 동일 RDBMS에서 일관성 있게 관리합니다.
+관계형 구조 및 `pgvector` 확장을 함께 응용하여, 정형/비정형 AI 데이터를 한 곳에서 일관되게 다룹니다.
 
-### 4.1. Core Entities (핵심 기본 정보)
-*   **`users`**: 시스템 사용자 계정 체계입니다. 
-    *   역할(`role`): `candidate`(지원자), `recruiter`(채용담당자), `admin`(관리자)
-    *   정보: 사용자 자격 증명(`password_hash`), 희망 기업/직무(`desired_positions`), 프로필 등의 메타데이터 포괄 및 소프트 딜리트(`is_withdrawn`) 기능 지원.
-*   **`companies`**: 플랫폼 내에 등록된 기업이나 직무군 단위의 채용 요건(인재상) 관리 테이블.
-    *   정보: 회사 소개, 이상적인 인재상(`ideal`) 정보.
-    *   차별점: 회사의 핵심 가치관을 1024차원 벡터(`embedding`)로 변환 및 저장하여, 문화/직무 적합성 핏(Cultural Fit) 매칭 시나리오에 응용.
-*   **`resumes`**: 이력서 원문 및 파싱 처리된 문서 기반 데이터 테이블.
-    *   구조화 데이터: PDF 텍스트 파싱 결과(`extracted_text`), 핵심 정보 항목화(`structured_data` - JSONB 포맷).
-    *   AI 지원: 전체 문서 내용을 길이 제한 없이 내포하는 1024차원의 문서 임베딩(`embedding`)을 저장해 RAG 파이프라인의 1차 문서 검색 대상이 됨.
-
-### 4.2. Session & Evaluation Entities (면접 세션 및 평가 지표)
-*   **`interviews`**: 단일 면접 세션(1-Session)의 생명주기를 다룹니다.
-    *   상태 관리: `SCHEDULED`, `LIVE`, `COMPLETED`, `CANCELLED` 등 타임라인에 따른 상태 이동 관리.
-    *   결과 관리: 전체 총점(`overall_score`), 누적 감정/태도 요약 통계(`emotion_summary`).
-*   **`transcripts`**: 면접 진행 동안 AI와 사용자 간 이루어진 상호작용 기록.
-    *   형태: 화자(`speaker`: AI 또는 User), 시간별 발화 텍스트 기록(`text`).
-    *   Vision/NLP 분석 연동: 각 발화 턴마다 측정된 감정 부호(`emotion`)와 스코어(`sentiment_score`) 저장.
-*   **`questions`**: 백엔드 내 다면 평가용 문항 은행 플랫폼 기능.
-    *   카테고리 다변화: 평가 영역(`category`: 기술, 상황, 인성, 행동 등), 난이도, 원 질문 추적기능(`is_follow_up`, `parent_question_id`).
-    *   평가 지원: 모델이 답변을 채점할 때 참조하는 제약 조건 및 루브릭 맵(`rubric_json`), 1024차원 문항 임베딩 보유.
-*   **`answer_bank`**: 질문 문항에 대한 모범/우수 답변(`answer_text`)을 벡터화하여 축적. 향후 지원자 답변의 상대적 품질 분석이나 검색을 통한 참조용으로 기능.
-*   **`evaluation_reports`**: 인터뷰 종료 시나리오 시 발급되는 최종 합산 성적 및 리뷰 리포트.
-    *   다면 스코어: 직무/기술(`technical_score`), 소통/전달(`communication_score`), 조직적합성(`cultural_fit_score`).
-    *   AI 코멘트: 총평 문단(`summary_text`)과 세부 평가 지표(`details_json` - 장단점, 직무지식 등 JSONB 구조), 기여한 평가 모델(`evaluator_model`) 정보 포함.
+*   `users`: 시스템 사용자 계정 체계 (`candidate`, `recruiter`, `admin`) 및 해시 비밀번호.
+*   `resumes`: 업로드된 이력서 원본 및 병합 파싱된 구조화 메타데이터 (JSONB 형태), 벡터 임베딩(`embedding`).
+*   `companies`: 평가 대상 기업(혹은 직무군)별 특성 및 인재상 관리 데이터.
+*   `interviews`: 1-Session 체계. 지원 직무(`position`), 세션 상태(`status`), 감정 요약 등 종합 지표 관리.
+*   `transcripts`: 화자(AI vs. User) 단위 발화 로깅 및 개별 발화에 대한 감정 분포 기록.
+*   `questions`: 카테고리(CS/역량/경험) 및 생성된 질문 내용, 질문 평가 루브릭 보관.
+*   `evaluation_reports`: 면접 최종 종료 후 생성되는 정밀 평가 정보(JSONB) – 기술, 의사소통, Fit 점수.
 
 ---
 
