@@ -9,10 +9,10 @@ INTERVIEW_STAGES = [
     {
         "stage": "intro",
         "display_name": "기본 질문",
-        "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
+        "intro_sentence": "면접을 시작하겠습니다.",
         "type": "template",
-        "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.",
-        "variables": ["candidate_name"],
+        "template": "반갑습니다. 우선 저희 {company_name} {target_role}에 지원해 주셔서 감사합니다. 저는 오늘 면접을 진행할 면접관 VIEW입니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다. {candidate_name} 지원자님, 자기소개 부탁드립니다.",
+        "variables": ["candidate_name", "target_role", "company_name"],
         "order": 1
     },
     
@@ -63,7 +63,7 @@ INTERVIEW_STAGES = [
         "display_name": "실무심층질문",
         "type": "followup",
         "parent": "experience",
-        "guide": "답변 내용을 요약하며 공감을 표시한 뒤, 당시 내린 의사결정의 기술적 근거나 혹은 다른 대안 대신 그 방법을 선택한 이유를 깊이 있게 질문하십시오. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
+        "guide": "지원자의 이전 답변 중 핵심 기술이나 방법론을 하나 요약하며 '~라고 하셨는데,'와 같이 인용하십시오. 그 후, 당시 내린 의사결정의 기술적 근거나 혹은 다른 대안 대신 그 방법을 선택한 구체적인 이유를 질문하십시오. 이 단계에서는 반드시 '~인가요?' 혹은 '~무엇인가요?' 어조를 사용하고 물음표를 포함하십시오.",
         "order": 6
     },
     
@@ -83,18 +83,17 @@ INTERVIEW_STAGES = [
         "display_name": "문제해결심층",
         "type": "followup",
         "parent": "problem_solving",
-        "guide": "실패/돌발 변수 대처 및 사후 학습 확인. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
+        "guide": "지원자의 이전 답변을 '~라고 하셨는데,'와 같이 한 줄 요약하며 인용하십시오. 그 후, 해당 해결책을 선택한 기술적 근거가 무엇인지, 혹은 예상치 못한 변수나 한계점은 없었는지 질문하십시오. 이 단계에서는 반드시 '~인가요?' 혹은 '~무엇인가요?' 어조를 사용하고 물음표를 포함하십시오.",
         "order": 8
     },
     
-    # 9. 의사소통 및 협업 평가 (AI 생성)
+    # 9. 의사소통 및 협업 평가 (템플릿)
     {
         "stage": "communication",
         "display_name": "협업소통질문",
-        "type": "ai",
-        "category": "narrative",
-        "query_template": "자기소개서 3번 의사소통 협업 갈등 해결 사례",
-        "guide": "자소서 3번 인용. 조율 근거 및 객관적 데이터 확인. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 절대 사용하지 마십시오.",
+        "type": "template",
+        "template": "{candidate_name} 지원자님, 자기소개서에 팀 프로젝트에 대해 상세히 적어주셨는데요. 해당 프로젝트에서 구체적으로 어떤 직무를 담당하셨고, 협업 과정에서는 본인이 어떤 기여를 하셨는지 말씀해 주시겠어요?",
+        "variables": ["candidate_name"],
         "order": 9
     },
     
@@ -104,7 +103,7 @@ INTERVIEW_STAGES = [
         "display_name": "협업소통심층",
         "type": "followup",
         "parent": "communication",
-        "guide": "반대 의견 설득 원칙 및 커뮤니케이션 스타일. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
+        "guide": "지원자의 이전 답변에서 언급된 '구체적인 기여 내용'을 '~라고 하셨는데,' 와 같이 요약하며 시작하십시오. 그 후 다음 문구를 반드시 포함하여 질문하십시오: '팀 프로젝트 당시 겪었던 의견 충돌이 있으셨나요? 만약 있었다면 어떻게 의견 충돌을 해결하셨는지도 구체적으로 말씀해 주세요.' 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
         "order": 10
     },
     
@@ -114,8 +113,8 @@ INTERVIEW_STAGES = [
         "display_name": "가치관책임질문",
         "type": "ai",
         "category": "narrative",
-        "query_template": "자기소개서 1번 지원동기 보안 전문가 윤리의식 사명감",
-        "guide": "자소서 1번 동기 인용. 윤리적 딜레마 상황 대처 질문. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 절대 사용하지 마십시오.",
+        "query_template": "자기소개서 가치관 직업윤리 사명감 생활신조",
+        "guide": "지원자의 자기소개서(특히 1번 문항)에서 '가치관', '직업윤리', '사명감', '생활신조'와 관련된 핵심 문장을 찾아 인용하십시오. 그 후, '{candidate_name} 지원자님, 자기소개서에 \"{찾아낸 구절}\"이라고 하셨는데, {target_role}로서 이는 어떤 가치관을 의미하는 것인지 구체적으로 말씀해 주세요.'라는 형식으로 질문하십시오. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 절대 사용하지 마십시오.",
         "order": 11
     },
     
@@ -125,7 +124,7 @@ INTERVIEW_STAGES = [
         "display_name": "가치관책임심층",
         "type": "followup",
         "parent": "responsibility",
-        "guide": "개인 신념과 조직 문화 충돌 시 조화 방안. 모든 질문은 반드시 '~주세요.'로 끝내고 물음표를 사용하지 마십시오.",
+        "guide": "지원자가 11번에서 언급한 가치관을 바탕으로, 그 신념이 시험받거나 조직의 이익과 충돌하는 구체적인 가상 상황(딜레마)을 제시하십시오. 그 후, '만약 {가상 상황}이라면 어떠한 선택을 하실 건가요?'와 같은 형식으로 질문하십시오. 반드시 어미는 '~건가요?' 혹은 '~인가요?'로 끝내고 물음표를 포함하십시오.",
         "order": 12
     },
     
@@ -194,6 +193,6 @@ def get_next_stage(current_stage: str):
 
 def get_initial_stages():
     """
-    면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기)
+    면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기, 직무지식)
     """
-    return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] <= 2]
+    return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] <= 3]
