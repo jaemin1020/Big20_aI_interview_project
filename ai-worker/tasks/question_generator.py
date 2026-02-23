@@ -53,8 +53,8 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 # 3. 메인 작업: 질문 생성 태스크
 # ==========================================
 
-@shared_task(name="tasks.question_generation.generate_next_question")
-def generate_next_question_task(interview_id: int):
+@shared_task(bind=True, name="tasks.question_generation.generate_next_question")
+def generate_next_question_task(self, interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
