@@ -10,7 +10,7 @@ from utils.auth_utils import get_current_user
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 logger = logging.getLogger("Transcript-Router")
 
-celery_app = Celery("ai_worker", broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+from celery_app import celery_app
 
 # 대화 기록 저장
 @router.post("")
@@ -58,7 +58,7 @@ async def create_transcript(
                 queue="gpu_queue"
             )
 
-            # 2. 답변 분석 및 평가 요청 (분석용 - 백그라운드 진행)
+            # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
             celery_app.send_task(
                 "tasks.evaluator.analyze_answer",
                 args=[

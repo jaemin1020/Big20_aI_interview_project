@@ -27,15 +27,15 @@ INTERVIEW_STAGES = [
         "order": 2
     },
     
-    # 3. 직무 지식 평가 (AI 생성)
+    # 3. 직무 지식 평가 (자격증 중심)
     {
         "stage": "skill",
         "display_name": "직무지식질문",
-        "intro_sentence": "다음은 직무지식질문입니다.",
+        "intro_sentence": "{candidate_name} 지원자님, {cert_name} 자격증을 취득하셨네요.",
         "type": "ai",
-        "category": None,
-        "query_template": "{target_role} 기술 스킬 도구 활용 능력",
-        "guide": "이력서 기술 키워드 1개 인용. 실무 적용 원리 검증.",
+        "category": "certification",
+        "query_template": "보유 자격증 취득 과정 학습 내용 {target_role}",
+        "guide": "자격증을 통해 익힌 핵심 기술을 설명하고, 지원 직무에서의 활용 방안을 묻는 형태로 구성하십시오. 마지막은 '~설명해주세요'로 정중하게 마무리하십시오.",
         "order": 3
     },
     

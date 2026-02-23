@@ -5,113 +5,177 @@
 """
 
 INTERVIEW_STAGES = [
-    # 1. 자기소개 및 전공-직무 매칭 질문 (템플릿)
+    # 1. 자기소개 (템플릿)
     {
         "stage": "intro",
         "display_name": "기본 질문",
         "intro_sentence": "반갑습니다. 면접을 시작하기 위해 먼저 간단히 자기소개 부탁드립니다.",
         "type": "template",
-        "template": "{candidate_name} 지원자님, {major}를 전공하셨는데 어떤 계기로 {target_role} 분야에 관심을 갖게 되셨는지, 그 시작점을 포함해 자기소개 부탁드립니다.",
+        "template": "{candidate_name} 지원자님, 간단히 자기소개 부탁드립니다.",
         "variables": ["candidate_name", "major", "target_role"],
         "order": 1
     },
-    
-    # 2. 지원동기 (템플릿) - [추가됨]
+
+    # 2. 지원동기 (템플릿 - 즉시)
     {
         "stage": "motivation",
         "display_name": "기본 질문",
         "intro_sentence": "감사합니다. 이어서 지원하신 동기에 대해 들어보고 싶습니다.",
         "type": "template",
-        "template": "{candidate_name} 지원자님, 본인의 배경과 다른 {target_role} 직무에 지원하시게 된 핵심 동기와, 이를 위해 어떤 노력을 하셨는지 구체적으로 말씀해 주세요.",
-        "variables": ["candidate_name", "target_role"],
+        "template": "{candidate_name} 지원자님, 지원하신 직무인 '{target_role}'에 지원하게 된 동기는 무엇입니까? 또한 {major}을 전공하셨는데 어떤 계기로 {target_role}에 관심을 갖게 되셨나요?",
+        "variables": ["candidate_name", "target_role", "major"],
         "order": 2
     },
 
-    # 3. 전공 지식의 활용 가능성 (AI 생성)
+    # 3. 직무 지식 평가 (자격증 중심)
     {
-        "stage": "major_synergy",
-        "display_name": "전공협업질문",
-        "intro_sentence": "다음은 전공협업질문입니다.",
+        "stage": "skill",
+        "display_name": "직무지식질문",
+        "intro_sentence": "다음은 직무지식질문입니다.",
         "type": "ai",
-        "category": "narrative",
-        "query_template": "전공 지식 직무 활용 시너지 인문학적 관점 기술 결합",
-        "guide": "{major}라는 배경이 오히려 {target_role}로서 업무를 수행할 때 가질 수 있는 본인만의 독특한 강점이나 차별화된 시각은 무엇인지 질문하세요.",
+        "category": "certification",
+        "query_template": "보유 자격증 취득 과정 학습 내용 {target_role}",
+        "guide": "지원자가 보유한 자격증(Certification) 정보를 바탕으로만 질문하십시오. 자격증 취득 과정에서 배운 핵심 내용이 무엇인지, 그리고 그것이 현재 지원한 직무에 어떻게 기여할 수 있는지 물어보세요. 다른 경력이나 프로젝트 이야기는 배제하십시오.",
         "order": 3
     },
-    
-    # 4. 전직/전환에 대한 확신 검증 (꼬리질문)
+
+    # 4. 직무 지식 꼬리질문 (AI 생성 - 답변 기반)
     {
-        "stage": "conviction_check",
-        "display_name": "전직확신심층",
+        "stage": "skill_followup",
+        "display_name": "직무심층질문",
         "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
-        "parent": "major_synergy",
-        "guide": "전공 분야로 돌아가지 않고 이 직무에서 장기적으로 성장할 수 있다는 확신을 보여준 구체적 증거(프로젝트, 학습량 등)를 요구하세요.",
+        "parent": "skill",
+        "guide": "이전 답변 기술의 한계 및 예외 상황 검증.",
         "order": 4
     },
-    
-    # 5. 독학 과정의 기술적 한계 돌파 (AI 생성)
+
+    # 5. 직무 경험 평가 (AI 생성)
     {
-        "stage": "learning_grit",
-        "display_name": "직무습득질문",
-        "intro_sentence": "다음은 직무습득질문입니다.",
+        "stage": "experience",
+        "display_name": "실무경험질문",
+        "intro_sentence": "다음은 실무경험질문입니다.",
         "type": "ai",
-        "category": "skill",
-        "query_template": "비전공자 기술 학습 난관 극복 독학 부트캠프",
-        "guide": "비전공자로서 {target_role} 기술을 습득하며 느꼈던 가장 큰 벽은 무엇이었고, 이를 '전공자가 아닌 본인만의 방식'으로 어떻게 극복했는지 질문하세요.",
+        "category": "behavioral",
+        "query_template": "프로젝트 성과 달성 경험 결과 활동 인턴 교육",
+        "guide": "이력서 활동 2개 연결. 활동 간 인과관계 및 성장 분석.",
         "order": 5
     },
-    
-    # 6. 기술적 깊이 검증 (꼬리질문)
+
+    # 6. 직무 경험 꼬리질문 (AI 생성 - 답변 기반)
     {
-        "stage": "technical_followup",
-        "display_name": "학습깊이심층",
+        "stage": "experience_followup",
+        "display_name": "실무심층질문",
         "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
-        "parent": "learning_grit",
-        "guide": "방금 답변한 해결책에서 사용한 기술의 원리를 더 깊게(예: CS 기초 지식 등) 파고들어 학습 비전공자의 '학습 깊이'를 테스트하세요.",
+        "parent": "experience",
+        "guide": "의사결정 근거 및 해결 논리 파악.",
         "order": 6
     },
-    
-    # 7. 협업 및 커뮤니케이션 (AI 생성)
+
+    # 7. 문제 해결 능력 평가 (AI 생성)
     {
-        "stage": "collaboration",
+        "stage": "problem_solving",
+        "display_name": "문제해결질문",
+        "intro_sentence": "다음은 문제해결질문입니다.",
+        "type": "ai",
+        "category": "situational",
+        "query_template": "문제 해결 기술적 난관 극복",
+        "guide": "고난도 프로젝트 인용. 제약 조건 및 극복 Action 질문.",
+        "order": 7
+    },
+
+    # 8. 문제 해결 꼬리질문 (AI 생성 - 답변 기반)
+    {
+        "stage": "problem_solving_followup",
+        "display_name": "문제해결심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
+        "type": "followup",
+        "parent": "problem_solving",
+        "guide": "실패/돌발 변수 대처 및 사후 학습 확인.",
+        "order": 8
+    },
+
+    # 9. 의사소통 및 협업 평가 (AI 생성)
+    {
+        "stage": "communication",
         "display_name": "협업소통질문",
         "intro_sentence": "다음은 협업소통질문입니다.",
         "type": "ai",
         "category": "narrative",
-        "query_template": "협업 방식 갈등 해결 소통 노하우 비전공자 관점",
-        "guide": "이전 배경(전공/경력)에서의 협업 스타일과 현재 {target_role} 정체성 사이의 조화 방안을 묻고, 본인만의 독특한 소통 방식이 팀에 줄 수 있는 이점을 검증하세요.",
-        "order": 7
+        "query_template": "자기소개서 3번 의사소통 협업 갈등 해결 사례",
+        "guide": "자소서 3번 인용. 조율 근거 및 객관적 데이터 확인.",
+        "order": 9
     },
-    
-    # 8. 협업 꼬리질문 (AI 생성)
+
+    # 10. 의사소통 꼬리질문 (AI 생성 - 답변 기반)
     {
-        "stage": "collaboration_followup",
+        "stage": "communication_followup",
         "display_name": "협업소통심층",
         "intro_sentence": "추가적으로 궁금한 게 있습니다.",
         "type": "followup",
-        "parent": "collaboration",
-        "guide": "기술적 이해도가 다른 팀원(예: 전공자 또는 비기술직군)과의 의견 충돌 시 이를 어떻게 논리적으로 설득할 것인지 구체적 상황을 가정해 질문하세요.",
-        "order": 8
+        "parent": "communication",
+        "guide": "반대 의견 설득 원칙 및 커뮤니케이션 스타일.",
+        "order": 10
     },
-    
-    # 9. 마지막 발언 (템플릿)
+
+    # 11. 책임감 및 가치관 평가 (AI 생성)
+    {
+        "stage": "responsibility",
+        "display_name": "가치관책임질문",
+        "intro_sentence": "다음은 가치관책임질문입니다.",
+        "type": "ai",
+        "category": "narrative",
+        "query_template": "자기소개서 1번 지원동기 보안 전문가 윤리의식 사명감",
+        "guide": "자소서 1번 동기 인용. 윤리적 딜레마 상황 대처 질문.",
+        "order": 11
+    },
+
+    # 12. 책임감 꼬리질문 (AI 생성 - 답변 기반)
+    {
+        "stage": "responsibility_followup",
+        "display_name": "가치관책임심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
+        "type": "followup",
+        "parent": "responsibility",
+        "guide": "개인 신념과 조직 문화 충돌 시 조화 방안.",
+        "order": 12
+    },
+
+    # 13. 성장의지 평가 (AI 생성)
+    {
+        "stage": "growth",
+        "display_name": "성장가능성질문",
+        "intro_sentence": "다음은 성장가능성질문입니다.",
+        "type": "ai",
+        "category": "narrative",
+        "query_template": "자기소개서 2번 기술 습득 과정 IDS 구축 시각화 자동화",
+        "guide": "자소서 2번 문항 인용. 기술 트렌드 시너지 및 학습 계획.",
+        "order": 13
+    },
+
+    # 14. 성장의지 꼬리질문 (AI 생성 - 답변 기반)
+    {
+        "stage": "growth_followup",
+        "display_name": "성장가능성심층",
+        "intro_sentence": "추가적으로 궁금한 게 있습니다.",
+        "type": "followup",
+        "parent": "growth",
+        "guide": "최근 기술 한계 극복 시도 및 구체적 학습 활동.",
+        "order": 14
+    },
+
+    # 15. 최종 발언 (템플릿 - 즉시)
     {
         "stage": "final_statement",
         "display_name": "최종 발언",
         "type": "template",
-        "template": "{major}라는 기초 위에 {target_role}이라는 기술을 쌓아 올린 과정이 인상 깊었습니다. 마지막으로 포부 한 말씀 부탁드립니다.",
-        "variables": ["candidate_name", "major", "target_role"],
-        "order": 9
+        "template": "{candidate_name} 지원자님, 지금까지 많은 답변 감사드립니다. 마지막으로 하고 싶으신 말씀이나 궁금한 점이 있으신가요?",
+        "variables": ["candidate_name"],
+        "order": 15
     }
 ]
 
-# ... (함수들)
-
-def get_initial_stages():
-    """면접 시작 시 제공할 초기 단계"""
-    return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] <= 2]
 
 def get_stage_by_name(stage_name: str):
     for stage in INTERVIEW_STAGES:
@@ -119,21 +183,23 @@ def get_stage_by_name(stage_name: str):
             return stage
     return None
 
+
 def get_next_stage(current_stage: str):
     current_order = None
     for stage in INTERVIEW_STAGES:
         if stage["stage"] == current_stage:
             current_order = stage["order"]
             break
-    
+
     if current_order is None:
         return None
-    
+
     for stage in INTERVIEW_STAGES:
         if stage["order"] == current_order + 1:
             return stage
     return None
 
+
 def get_initial_stages():
-    """면접 시작 시 제공할 초기 단계"""
+    """면접 시작 시 제공할 초기 단계 (자기소개만 즉시 생성, 지원동기는 task가 template으로 생성)"""
     return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] == 1]

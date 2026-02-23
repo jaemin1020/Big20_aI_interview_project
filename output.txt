@@ -1,0 +1,4 @@
+--- Current Logic Test ---
+Activity: Period=2025.03-2025.12, Org=AWS 클라우드 기반 빅데이터 분석 및 AI 모델링 전문가 과정, Role=, Desc=
+Award: Date=2025.03, Title=제12회 공공데이터 활용 비즈니스 아이디어 공모전 - 장려상, Org=
+Education: Period=2018-2022, School=한국대학교, Major=4.0/4.5, GPA=졸업

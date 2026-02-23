@@ -72,7 +72,7 @@ def generate_resume_embeddings(self, resume_id: int):
             
             # 완료 처리
             resume.processing_status = "completed"
-            resume.processed_at = datetime.utcnow()
+            resume.processed_at = datetime.now()
             session.add(resume)
             session.commit()
             

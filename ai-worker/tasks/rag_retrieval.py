@@ -64,11 +64,11 @@ from langchain_community.vectorstores import PGVector
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (LangChain PGVector 활용)
 # -----------------------------------------------------------
-def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
+def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
     """
     LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
     """
-    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_category})")
+    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_type})")
     
     # 1. 임베딩 모델 및 연결 설정
     embedder = get_embedder()
@@ -86,10 +86,10 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
             collection_name="resume_all_embeddings"
         )
 
-        # 3. 필터 설정 (resume_id + category)
+        # 3. 필터 설정 (resume_id + chunk_type)
         search_filter = {"resume_id": resume_id}
-        if filter_category:
-            search_filter["category"] = filter_category
+        if filter_type:
+            search_filter["chunk_type"] = filter_type
 
         # 4. 유사도 검색 수행
         docs_with_scores = vector_store.similarity_search_with_score(
@@ -110,8 +110,8 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
         print(f"   👉 {len(results)}개의 관련 내용을 찾았습니다.")
         for i, res in enumerate(results):
             preview = res['text'].replace('\n', ' ')[:80]
-            category = res['meta'].get('category', 'N/A')
-            print(f"      [{i+1}] (Dist: {res['score']:.4f}, Cat: {category}): {preview}...")
+            chunk_type = res['meta'].get('chunk_type', 'N/A')
+            print(f"      [{i+1}] (Dist: {res['score']:.4f}, Type: {chunk_type}): {preview}...")
 
         return results
 
@@ -122,7 +122,7 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_category=None):
 # -----------------------------------------------------------
 # [핵심] Retriever 생성 함수 (LangChain LCEL용)
 # -----------------------------------------------------------
-def get_retriever(resume_id=1, top_k=10, filter_category=None):
+def get_retriever(resume_id=1, top_k=10, filter_type=None):
     """
     LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
     """
@@ -137,8 +137,8 @@ def get_retriever(resume_id=1, top_k=10, filter_category=None):
 
     # 필터 설정
     search_filter = {"resume_id": resume_id}
-    if filter_category:
-        search_filter["category"] = filter_category
+    if filter_type:
+        search_filter["chunk_type"] = filter_type
 
     # 검색 결과를 필터링하여 반환하도록 설정
     return vector_store.as_retriever(

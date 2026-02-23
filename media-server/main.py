@@ -113,7 +113,8 @@ celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 active_websockets: Dict[str, WebSocket] = {}
 active_pcs: Dict[str, RTCPeerConnection] = {}
 active_video_tracks: Dict[str, 'VideoAnalysisTrack'] = {}
-active_analysis_tasks: Dict[str, asyncio.Task] = {}  # [추가] 분석 루프 태스크 관리
+active_analysis_tasks: Dict[str, asyncio.Task] = {}  # 분석 루프 태스크 관리
+active_recording_flags: Dict[str, bool] = {}          # [핵심] 세션별 녹음 상태 플래그
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -471,28 +472,27 @@ async def start_remote_stt(track, session_id):
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
     CHUNK_DURATION_MS = 3000 
     accumulated_frames = []
-    accumulated_time = 0
     
     try:
         while True:
-            # 1. 오디오 프레임 수신
+            # 1. 오디오 프레임 수신 (항상)
             frame = await track.recv()
+            
+            # [핵심 수정] 녹음 버튼이 ON일 때만 프레임을 누적
+            if not active_recording_flags.get(session_id, False):
+                continue  # 녹음 중 아니면 프레임 수신만 하고 버림 (버퍼 차단 방지)
+
             accumulated_frames.append(frame)
             
-            # 프레임 시간 누적 (packet.duration 사용하거나 개수로 추정)
-            # 보통 Opus 프레임은 20ms or 60ms
-            # 여기서는 프레임 개수로 대략적인 시간 계산 (50개 = 약 1초 가정)
-            # 정확성을 위해 av.AudioFrame.time 사용 가능하지만 단순화
-            if len(accumulated_frames) >= 150: # 약 3초 (20ms * 150 = 3000ms)
+            # 150프레임(약 3초) 모이면 STT 전송
+            if len(accumulated_frames) >= 150:
                 
                 # 2. WAV 변환 (In-Memory)
-                # av 라이브러리의 Output Container 사용
                 output_buffer = io.BytesIO()
                 output_container = av.open(output_buffer, mode='w', format='wav')
                 output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
                 
                 for f in accumulated_frames:
-                    # 리샘플링 및 패킷 작성
                     for packet in output_stream.encode(f):
                         output_container.mux(packet)
                         
@@ -505,35 +505,20 @@ async def start_remote_stt(track, session_id):
                 wav_bytes = output_buffer.getvalue()
                 audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
 
-                # [NEW] 오디오 자신감 분석 (NumPy RMS Volume & Density)
-                # --------------------------------------------------------------------------------
+                # [오디오 자신감 분석] NumPy RMS Volume & Density
                 try:
-                    # 1. 버퍼에서 바이트 데이터를 가져와서 NumPy 배열로 변환 (int16 -> float32)
-                    #    Normalize: -32768 ~ 32767 범위를 -1.0 ~ 1.0 으로 변환하여 계산하기 쉽게 만듦
-                    #    (예외처리: 데이터가 비어있거나 깨졌을 경우를 대비해 try-except 블록 사용)
                     audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-                    # [중요] 침묵 감지 (Silence Detection)
-                    # RMS가 너무 낮으면(0.005 이하), 사용자가 고민 중이거나 듣고 있는 상태이므로
-                    # 자신감 점수를 계산하지 않고 건너뜀 (Skip) -> 평균 점수 하락 방지
                     if len(audio_np) > 0:
                         volume_rms = np.sqrt(np.mean(audio_np**2))
                         
-                        # [변경] 침묵 감지 기준 상향 (0.005 -> 0.02)
-                        # 작은 잡음이나 숨소리(Thinking Time)는 점수 집계에서 제외하여 평균 점수 하락 방지
                         if volume_rms > 0.02:
-                            # 2. 성량(Volume) 분석
                             volume_score = min(volume_rms * 500, 100) 
-
-                            # 3. 발화 밀도(Speed/Density) 분석
                             threshold = 0.05
                             speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
                             speed_score = min(speaking_ratio * 200, 100)
-
-                            # 4. 최종 자신감 점수 합산
                             confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
 
-                            # [NEW] 점수 구간별 피드백
                             if confidence_score >= 70:
                                 feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
                             elif confidence_score >= 60:
@@ -547,28 +532,17 @@ async def start_remote_stt(track, session_id):
                                 f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
                             )
                             
-                            # [NEW] 최종 리포트를 위해 점수 누적
                             if session_id in active_video_tracks:
-                                track_instance = active_video_tracks[session_id]
-                                track_instance.audio_scores.append(confidence_score)
-                        else:
-                            # 침묵 상황 (로그 생략 가능하지만 디버깅 위해 남김)
-                            # logger.debug(f"[{session_id}] 🤫 침묵 감지됨 (RMS: {volume_rms:.5f}) - 점수 반영 제외")
-                            pass
-
+                                active_video_tracks[session_id].audio_scores.append(confidence_score)
 
                 except Exception as e:
                     logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
-                except Exception as e:
-                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
-                # --------------------------------------------------------------------------------
                 
                 # 5. Celery Task 배달 (AI Worker에게)
-                # 결과값은 비동기로 처리되므로, 여기서는 '보냈다'는 사실만 중요
                 celery_app.send_task(
                     "tasks.stt.recognize",
                     args=[audio_b64],
-                    queue="cpu_queue" # [수정] STT는 CPU 워커가 처리하도록 변경
+                    queue="cpu_queue"
                 )
                 
                 logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
@@ -580,6 +554,7 @@ async def start_remote_stt(track, session_id):
         logger.info(f"[{session_id}] STT 스트림 종료: {e}")
     finally:
         logger.info(f"[{session_id}] STT 리소스 정리")
+        active_recording_flags.pop(session_id, None)
 
 
 @app.websocket("/ws/{session_id}")
@@ -590,17 +565,26 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     
     try:
         while True:
-            # 클라이언트로부터 메시지 수신 대기
             data = await websocket.receive_text()
             try:
                 msg = json.loads(data)
-                # [추가] 질문 전환 신호 처리
-                if msg.get("type") == "next_question":
+                msg_type = msg.get("type")
+
+                # [핵심] 녹음 버튼 상태 동기화
+                if msg_type == "start_recording":
+                    active_recording_flags[session_id] = True
+                    logger.info(f"[{session_id}] 🔴 STT 녹음 시작")
+
+                elif msg_type == "stop_recording":
+                    active_recording_flags[session_id] = False
+                    logger.info(f"[{session_id}] ⬛ STT 녹음 중지")
+
+                elif msg_type == "next_question":
                     new_idx = msg.get("index", 0)
-                    # [변경] active_video_tracks에서 직접 트랙 찾기
                     video_track = active_video_tracks.get(session_id)
                     if video_track:
                         video_track.switch_question(new_idx)
+
             except json.JSONDecodeError:
                 pass
             

@@ -693,27 +693,21 @@ function App() {
 
           if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
-            const nextQ = updatedQs[nextIdx];
 
-            // [개선] 새 질문이 생겼더라도 TTS 음성 주소(audio_url)가 올 때까지 조금 더 기다림 (기계음 방지)
-            if (nextQ && nextQ.audio_url) {
-              console.log("✅ [Next Question] New question and Audio ready.");
-              setQuestions(updatedQs);
-              setCurrentIdx(prev => prev + 1);
-              setTranscript('');
-              foundNew = true;
+            // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
+            console.log("✅ [Next Question] New question ready. Showing immediately.");
+            setQuestions(updatedQs);
+            setCurrentIdx(prev => prev + 1);
+            setTranscript('');
+            foundNew = true;
 
-              // WebSocket으로 신규 질문 전환 알림
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
-              }
-              break;
-            } else {
-              console.log("⏳ [Next Question] New question found, but waiting for Audio...");
-              // 아직 오디오가 없으면 다음 폴링에서 다시 체크하도록Questions 상태만 미리 업데이트하지 않고 기다림
+            // WebSocket으로 신규 질문 전환 알림
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
             }
+            break;
           }
-        }
+        } // end for loop
 
         if (!foundNew) {
           // [수정] 폴링 타임아웃 시 무조건 종료하지 않고, 서버 상태가 COMPLETED일 때만 자동 종료
@@ -729,7 +723,7 @@ function App() {
           }
         }
         setIsLoading(false);
-      }
+      } // end else block
     } catch (err) {
       console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');
