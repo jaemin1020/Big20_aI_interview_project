@@ -354,9 +354,9 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
     if session is None:
         with Session(engine) as new_session:
-            _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
+            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
     else:
-        _save_generated_question_logic(session, interview_id, content, category, stage, guide)
+        return _save_generated_question_logic(session, interview_id, content, category, stage, guide)
 
 def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None):
     # 1. Question 테이블 저장

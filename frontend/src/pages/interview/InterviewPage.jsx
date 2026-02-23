@@ -19,7 +19,7 @@ const InterviewPage = ({
   visionData // [NEW] Receive vision data
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
-  const [isTimerActive, setIsTimerActive] = React.useState(false); // TTS 종료 후 타이머 시작
+  // isTimerActive는 ttsFinished state로 대체됨 (아래 54행)
   const [showTooltip, setShowTooltip] = React.useState(false);
   // 이전 질문 인덱스를 추적하여 질문 변경 시 상태를 즉시 리셋 (Stale State 방지)
   const [prevIdx, setPrevIdx] = React.useState(currentIdx);
@@ -47,73 +47,93 @@ const InterviewPage = ({
   if (currentIdx !== prevIdx) {
     setPrevIdx(currentIdx);
     setTimeLeft(60);
-    setIsTimerActive(false); // 타이머 일시 정지 (TTS 끝날 때까지)
+    // ttsFinished는 useEffect([currentIdx])에서 리셋됨
     isTimeOverRef.current = false;
   }
 
+  // TTS 재생 완료 여부 — true가 되면 타이머 카운트다운 시작
+  const [ttsFinished, setTtsFinished] = React.useState(false);
+  const playedUrlRef = React.useRef(null);
+
+  // 질문 인덱스가 바뀌면 모든 상태 리셋
   React.useEffect(() => {
-    setTimeLeft(60); // 질문이 바뀔 때마다 60초로 리셋
-    setIsTimerActive(false); // TTS 시작 전 타이머 정지
+    console.log(`🔄 [Question Change] Index: ${currentIdx}`);
+    playedUrlRef.current = null;
+    setTtsFinished(false);
+    setTimeLeft(60);
 
-    // TTS 재생 로직 (currentIdx가 바뀌얼 때만 실행 - audioUrl/question 변경으로 재실행 방지)
-    const playTTS = () => {
-      const currentAudioUrl = audioUrlRef.current;  // ← ref에서 최신값 읽기
-      const currentQuestion = questionRef.current;  // ← ref에서 최신값 읽기
-
-      console.log(`🔊 [TTS Play Attempt] URL: ${currentAudioUrl ? 'PRESENT' : 'MISSING'}, Question: ${currentQuestion?.substring(0, 30)}...`);
-
-      if (currentAudioUrl) {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-        const audio = new Audio(currentAudioUrl);
-        audioRef.current = audio;
-
-        // 오디오 종료 시 타이머 시작
-        audio.onended = () => {
-          console.log("Audio ended, starting timer.");
-          setIsTimerActive(true);
-        };
-
-        audio.play().catch(e => {
-          console.error("Audio play failed:", e);
-          setIsTimerActive(true); // 재생 실패 시 바로 타이머 시작
-        });
-      } else if (currentQuestion) {
-        console.log(`⏳ [Waiting for Server Audio] audioUrl is missing... Do NOT use fallback.`);
-        // 서버 TTS 대기 (기계음 Fallback 비활성화)
-      } else {
-        setIsTimerActive(true); // 읽을 질문도 없으면 바로 시작
-      }
-    };
-
-    playTTS();
-
-    // Cleanup: 질문 변경 또는 언마운트 시 오디오 중지
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.onended = null;
+        audioRef.current.onerror = null;
         audioRef.current = null;
       }
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
     };
-  }, [currentIdx]); // ← currentIdx만 의존: audioUrl/question 변경으로 TTS 재실행 방지
+  }, [currentIdx]);
 
+  // audioUrl이 도착하면 재생
   React.useEffect(() => {
-    // 타이머 기능 활성화
-    if (!isTimerActive) return; // TTS 중이면 대기
+    if (!audioUrl || !question) return;
+
+    const stripQuery = (url) => url?.split('?')[0] || '';
+    const baseUrl = stripQuery(audioUrl);
+    const playedBaseUrl = stripQuery(playedUrlRef.current);
+
+    if (playedBaseUrl === baseUrl) return;
+
+    console.log(`🔊 [TTS Play] Index: ${currentIdx}, URL: ${baseUrl}`);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    playedUrlRef.current = audioUrl;
+
+    audio.onended = () => {
+      // 현재 활성 오디오인지 확인 (stale 콜백 방지)
+      if (audioRef.current !== audio) {
+        console.warn("⚠️ [TTS] onended fired for stale audio, ignoring");
+        return;
+      }
+      console.log("✅ [TTS] Audio ENDED → setTtsFinished(true)");
+      setTtsFinished(true);
+    };
+
+    audio.onerror = (e) => {
+      if (audioRef.current !== audio) {
+        console.warn("⚠️ [TTS] onerror fired for stale audio, ignoring");
+        return;
+      }
+      console.error("❌ [TTS] Audio ERROR → setTtsFinished(true)", e);
+      setTtsFinished(true);
+    };
+
+    audio.play().then(() => {
+      console.log("▶️ [TTS] 재생 시작됨. duration:", audio.duration);
+    }).catch(e => {
+      if (audioRef.current !== audio) return;
+      console.error("❌ [TTS] play() 실패 → setTtsFinished(true)", e);
+      setTtsFinished(true);
+    });
+  }, [audioUrl, currentIdx, question]);
+
+  // 1분 카운트다운 — ttsFinished가 true일 때만 작동
+  React.useEffect(() => {
+    if (!ttsFinished) return; // ★ TTS 안 끝났으면 interval 안 만듦
 
     if (timeLeft <= 0) {
-      // 이미 타이머 종료 처리를 했다면 중복 호출 방지
       if (isTimeOverRef.current) return;
-
       if (!isRecording) {
-        console.log("Time over. Please click Next to continue.");
-        // isTimeOverRef.current = true;
-        // nextQuestion();
+        console.log("⏰ Time over!");
       }
       return;
     }
@@ -123,8 +143,7 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-
-  }, [timeLeft, nextQuestion, isRecording, isTimerActive]);
+  }, [timeLeft, nextQuestion, isRecording, ttsFinished]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -200,7 +219,7 @@ const InterviewPage = ({
           zIndex: 10
         }}>
           <span style={{ fontSize: '1rem' }} className={timeLeft <= 10 ? 'blink' : ''}>
-            {isTimerActive ? '⏱️' : '🔇'}
+            {ttsFinished ? '⏱️' : '🔇'}
           </span>
           <span style={{
             fontSize: '1.2rem',
@@ -208,7 +227,7 @@ const InterviewPage = ({
             fontFamily: "'Inter', monospace",
             color: timeLeft <= 10 ? '#ef4444' : '#0f172a',
             letterSpacing: '0.05em',
-            opacity: isTimerActive ? 1 : 0.5
+            opacity: ttsFinished ? 1 : 0.5
           }}>
             {formatTime(timeLeft)}
           </span>

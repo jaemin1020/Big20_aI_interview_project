@@ -68,12 +68,45 @@ def get_candidate_info(db: Session, resume_id: int) -> Dict[str, str]:
             # major가 실제로 채워진 첫 번째 항목을 찾습니다.
             major = next((e.get("major", "") for e in education if e.get("major", "").strip()), "")
         
+        # [추가] 3, 5, 7번 템플릿을 위한 상세 정보 추출
+        certs = data.get("certifications", [])
+        cert_names = [c.get("title") or c.get("name") for c in certs if (c.get("title") or c.get("name"))]
+        cert_list = ", ".join(cert_names) if cert_names else "관련 자격"
+
+        act_org, act_role = "관련 기관", "담당 업무"
+        acts = data.get("activities", [])
+        act_header_kws = ["기간", "역할", "기관", "소속", "장소", "제목", "내용"]
+        for act in acts:
+            tmp_org = act.get("organization") or act.get("name") or ""
+            tmp_role = act.get("role") or act.get("position") or ""
+            if not any(kw in tmp_org for kw in act_header_kws) and not any(kw in tmp_role for kw in act_header_kws):
+                act_org = tmp_org or act_org
+                act_role = tmp_role or act_role
+                break
+
+        proj_org, proj_name = "해당 기관", "수행한 프로젝트"
+        projs = data.get("projects", [])
+        proj_header_kws = ["기간", "제목", "과정명", "기관", "설명", "내용"]
+        for proj in projs:
+            tmp_name = proj.get("title") or proj.get("name") or ""
+            tmp_org = proj.get("organization") or ""
+            if not any(kw in tmp_name for kw in proj_header_kws) and not any(kw in tmp_org for kw in proj_header_kws):
+                proj_name = tmp_name or proj_name
+                proj_org = tmp_org or proj_org
+                break
+
         return {
             "candidate_name": header.get("name", "지원자"),
             "target_role": header.get("target_role", "해당 직무"),
+            "company_name": header.get("target_company") or header.get("company") or "저희 회사",
             "major": major,
             "email": header.get("email", ""),
-            "phone": header.get("phone", "")
+            "phone": header.get("phone", ""),
+            "cert_list": cert_list,
+            "act_org": act_org,
+            "act_role": act_role,
+            "proj_org": proj_org,
+            "proj_name": proj_name
         }
         
     except Exception as e:
