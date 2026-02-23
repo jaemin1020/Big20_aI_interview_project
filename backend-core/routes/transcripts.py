@@ -34,42 +34,44 @@ async def create_transcript(
     생성자: ejm
     생성일자: 2026-02-06
     """
-    
-    transcript = Transcript(
-        interview_id=transcript_data.interview_id,
-        speaker=transcript_data.speaker,
-        text=transcript_data.text,
-        question_id=transcript_data.question_id
-    )
-    db.add(transcript)
-    db.commit()
-    db.refresh(transcript)
-    
-    logger.info(f"Transcript saved: Interview={transcript.interview_id}, Speaker={transcript.speaker}")
-    
-    # 사용자 답변인 경우 AI 평가 요청 (비동기)
-    if transcript.speaker == Speaker.USER:
-        question = db.get(Question, transcript.question_id)
-        if question:
-            # 1. 다음 질문 생성 태스크 즉시 트리거 (실시간성 확보가 최우선)
-            celery_app.send_task(
-                "tasks.question_generation.generate_next_question",
-                args=[transcript.interview_id],
-                queue="gpu_queue"
-            )
+    try:
+        transcript = Transcript(
+            interview_id=transcript_data.interview_id,
+            speaker=transcript_data.speaker,
+            text=transcript_data.text,
+            question_id=transcript_data.question_id
+        )
+        db.add(transcript)
+        db.commit()
+        db.refresh(transcript)
+        
+        logger.info(f"Transcript saved: Interview={transcript.interview_id}, Speaker={transcript.speaker}")
+        
+        # 사용자 답변인 경우 AI 평가 요청 (비동기)
+        if transcript.speaker == Speaker.USER:
+            question = db.get(Question, transcript.question_id)
+            if question:
+                # 1. 다음 질문 생성 태스크 즉시 트리거 (실시간성 확보가 최우선)
+                celery_app.send_task(
+                    "tasks.question_generation.generate_next_question",
+                    args=[transcript.interview_id],
+                    queue="gpu_queue"
+                )
 
-            # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
-            celery_app.send_task(
-                "tasks.evaluator.analyze_answer",
-                args=[
-                    transcript.id,
-                    question.content,
-                    transcript.text,
-                    question.rubric_json,
-                    question.id
-                ],
-                queue="gpu_queue"
-            )
-            logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
-    
+                # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
+                celery_app.send_task(
+                    "tasks.evaluator.analyze_answer",
+                    args=[
+                        transcript.id,
+                        question.content,
+                        transcript.text,
+                        question.rubric_json,
+                        question.id
+                    ],
+                    queue="gpu_queue"
+                )
+                logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
+    except Exception as e:
+        logger.error(f"Failed to save transcript: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save transcript")
     return {"id": transcript.id, "status": "saved"}
