@@ -52,7 +52,7 @@ INTERVIEW_STAGES = [
         "stage": "experience",
         "display_name": "실무경험질문",
         "type": "template",
-        "template": "감사합니다. 다음은 실무경험질문입니다. 이력서를 보니 경력사항에 {org_name}에서 {role_name}일을 하셨고 {project_title} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤일을 하셨는지 설명해주세요.",
+        "template": "감사합니다. 다음은 직무경험관련 질문입니다. 이력서를 보니 경력사항에 {org_name}에서 {role_name}일을 하셨고 {project_title} 관련 프로젝트를 하셨네요. 각 분야에서 구체적으로 어떤일을 하셨는지 설명해주세요.",
         "variables": ["org_name", "role_name", "project_title"],
         "order": 5
     },
