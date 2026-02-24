@@ -4,11 +4,13 @@ import JobPostingCreatePage from './JobPostingCreatePage';
 import JobPostingListPage from './JobPostingListPage';
 import CandidateManagementPage from './CandidateManagementPage';
 import InterviewManagementPage from './InterviewManagementPage';
+import ResultManagementPage from './ResultManagementPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
     const [interviewStatusMenuOpen, setInterviewStatusMenuOpen] = useState(false);
+    const [interviewResultsMenuOpen, setInterviewResultsMenuOpen] = useState(false);
     const [currentCandidatePage, setCurrentCandidatePage] = useState(0);
 
     // Mock Data - 실제로는 API에서 가져옴
@@ -67,6 +69,8 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 return { title: '지원자 관리', subtitle: '지원자의 제출 서류 및 진행 상황을 관리하세요' };
             case 'interview_management':
                 return { title: '면접 관리', subtitle: '면접 결과 및 현황을 관리하세요' };
+            case 'result_management':
+                return { title: '결과 관리', subtitle: '각 전형별 합격 및 불합격을 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -110,7 +114,7 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                     {/* 면접 현황 메뉴 (드롭다운) */}
                     <div className="nav-dropdown">
                         <button
-                            className={`nav-item ${activeMenu === 'interview-status' ? 'active' : ''}`}
+                            className={`nav-item ${activeMenu === 'interview_status' ? 'active' : ''}`}
                             onClick={() => setInterviewStatusMenuOpen(!interviewStatusMenuOpen)}
                         >
                             <span className="nav-icon">📋</span>
@@ -125,13 +129,22 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         )}
                     </div>
 
-                    <button
-                        className={`nav-item ${activeMenu === 'interview_results' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('interview_results')}
-                    >
-                        <span className="nav-icon">📊</span>
-                        <span className="nav-label">면접 결과</span>
-                    </button>
+                    {/* 면접 결과 메뉴 (드롭다운) */}
+                    <div className="nav-dropdown">
+                        <button
+                            className={`nav-item ${activeMenu === 'interview_results' ? 'active' : ''}`}
+                            onClick={() => setInterviewResultsMenuOpen(!interviewResultsMenuOpen)}
+                        >
+                            <span className="nav-icon">📊</span>
+                            <span className="nav-label">면접 결과</span>
+                            <span className={`dropdown-arrow ${interviewResultsMenuOpen ? 'open' : ''}`}>▼</span>
+                        </button>
+                        {interviewResultsMenuOpen && (
+                            <div className="dropdown-menu">
+                                <button className="dropdown-item" onClick={() => setActiveMenu('result_management')}>결과 관리</button>
+                            </div>
+                        )}
+                    </div>
 
                     <button
                         className={`nav-item ${activeMenu === 'rubrics' ? 'active' : ''}`}
@@ -332,6 +345,13 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 {activeMenu === 'interview_management' && (
                     <div className="dashboard-content">
                         <InterviewManagementPage />
+                    </div>
+                )}
+
+                {/* 결과 관리 콘텐츠 */}
+                {activeMenu === 'result_management' && (
+                    <div className="dashboard-content">
+                        <ResultManagementPage />
                     </div>
                 )}
             </main>
