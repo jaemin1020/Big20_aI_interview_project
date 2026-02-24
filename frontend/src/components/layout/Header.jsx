@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle, hideMenuButtons = false }) => {
+const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isInterviewing = false, isComplete = false, isRecruiter = false, onHistory, onAccountSettings, onProfileManagement, onLogin, onRegister, pageTitle, hideMenuButtons = false }) => {
   const [activeMenu, setActiveMenu] = React.useState(null); // 'manage', 'myinfo', null
 
   // Close dropdowns when clicking outside
@@ -25,9 +25,9 @@ const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isIntervi
       left: 0,
       right: 0,
       zIndex: 1000,
-      background: (isInterviewing || isComplete) ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
+      background: isRecruiter ? '#1e293b' : (isInterviewing || isComplete) ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
       backdropFilter: 'blur(10px)',
-      borderBottom: (isInterviewing || isComplete) ? '1px solid var(--glass-border)' : 'none'
+      borderBottom: isRecruiter ? '1px solid rgba(255, 255, 255, 0.08)' : (isInterviewing || isComplete) ? '1px solid var(--glass-border)' : 'none'
     }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div
@@ -170,7 +170,7 @@ const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isIntervi
                   animation: 'fadeIn 0.2s ease',
                   zIndex: 1001
                 }}>
-                  <button className="dropdown-item" onClick={() => { onHistory(); setActiveMenu(null); }}>면접 이력</button>
+                  <button className="header-dropdown-item" onClick={() => { onHistory(); setActiveMenu(null); }}>면접 이력</button>
                 </div>
               )}
             </div>
@@ -216,8 +216,8 @@ const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isIntervi
                   animation: 'fadeIn 0.2s ease',
                   zIndex: 1001
                 }}>
-                  <button className="dropdown-item" onClick={() => { onProfileManagement(); setActiveMenu(null); }}>프로필 관리</button>
-                  <button className="dropdown-item" onClick={() => { onAccountSettings(); setActiveMenu(null); }}>계정 관리</button>
+                  <button className="header-dropdown-item" onClick={() => { onProfileManagement(); setActiveMenu(null); }}>프로필 관리</button>
+                  <button className="header-dropdown-item" onClick={() => { onAccountSettings(); setActiveMenu(null); }}>계정 관리</button>
                 </div>
               )}
             </div>
@@ -248,7 +248,7 @@ const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isIntervi
               from { opacity: 0; transform: translateY(-10px); }
               to { opacity: 1; transform: translateY(0); }
             }
-            .dropdown-item {
+            .header-dropdown-item {
               padding: 10px 12px;
               border-radius: 8px;
               background: transparent;
@@ -261,7 +261,7 @@ const Header = ({ userName, onLogout, showLogout = false, onLogoClick, isIntervi
               white-space: nowrap;
               outline: none;
             }
-            .dropdown-item:hover {
+            .header-dropdown-item:hover {
               background: rgba(255, 255, 255, 0.1);
             }
           `}</style>

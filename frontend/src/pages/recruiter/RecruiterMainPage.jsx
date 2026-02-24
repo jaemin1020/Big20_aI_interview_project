@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react';
 import './RecruiterMainPage.css';
 import JobPostingCreatePage from './JobPostingCreatePage';
 import JobPostingListPage from './JobPostingListPage';
+import CandidateManagementPage from './CandidateManagementPage';
+import InterviewManagementPage from './InterviewManagementPage';
+import ResultManagementPage from './ResultManagementPage';
+import ResultAnalysisPage from './ResultAnalysisPage';
+import RubricsPage from './RubricsPage';
 
-function RecruiterMainPage({ user, onLogout, onNavigate }) {
-    const [activeMenu, setActiveMenu] = useState('dashboard');
+function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMenu }) {
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
     const [interviewStatusMenuOpen, setInterviewStatusMenuOpen] = useState(false);
+    const [interviewResultsMenuOpen, setInterviewResultsMenuOpen] = useState(false);
     const [currentCandidatePage, setCurrentCandidatePage] = useState(0);
 
     // Mock Data - 실제로는 API에서 가져옴
@@ -61,6 +66,16 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 return { title: '공고 등록', subtitle: '새로운 채용 공고를 등록하세요' };
             case 'job_posting_list':
                 return { title: '공고 현황', subtitle: '등록된 채용 공고를 관리하세요' };
+            case 'candidate_management':
+                return { title: '지원자 관리', subtitle: '지원자의 제출 서류 및 진행 상황을 관리하세요' };
+            case 'interview_management':
+                return { title: '면접 관리', subtitle: '면접 결과 및 현황을 관리하세요' };
+            case 'result_management':
+                return { title: '결과 관리', subtitle: '각 전형별 합격 및 불합격을 관리하세요' };
+            case 'result_analysis':
+                return { title: '결과 분석', subtitle: '면접 결과를 분석하고 통계를 확인하세요' };
+            case 'rubrics':
+                return { title: 'Rubrics 설정', subtitle: '직무별 평가 영역 및 세부 기준을 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -104,7 +119,7 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                     {/* 면접 현황 메뉴 (드롭다운) */}
                     <div className="nav-dropdown">
                         <button
-                            className={`nav-item ${activeMenu === 'interview-status' ? 'active' : ''}`}
+                            className={`nav-item ${activeMenu === 'interview_status' ? 'active' : ''}`}
                             onClick={() => setInterviewStatusMenuOpen(!interviewStatusMenuOpen)}
                         >
                             <span className="nav-icon">📋</span>
@@ -119,13 +134,23 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         )}
                     </div>
 
-                    <button
-                        className={`nav-item ${activeMenu === 'interview_results' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('interview_results')}
-                    >
-                        <span className="nav-icon">📊</span>
-                        <span className="nav-label">면접 결과</span>
-                    </button>
+                    {/* 면접 결과 메뉴 (드롭다운) */}
+                    <div className="nav-dropdown">
+                        <button
+                            className={`nav-item ${activeMenu === 'interview_results' ? 'active' : ''}`}
+                            onClick={() => setInterviewResultsMenuOpen(!interviewResultsMenuOpen)}
+                        >
+                            <span className="nav-icon">📊</span>
+                            <span className="nav-label">면접 결과</span>
+                            <span className={`dropdown-arrow ${interviewResultsMenuOpen ? 'open' : ''}`}>▼</span>
+                        </button>
+                        {interviewResultsMenuOpen && (
+                            <div className="dropdown-menu">
+                                <button className="dropdown-item" onClick={() => setActiveMenu('result_management')}>결과 관리</button>
+                                <button className="dropdown-item" onClick={() => setActiveMenu('result_analysis')}>결과 분석</button>
+                            </div>
+                        )}
+                    </div>
 
                     <button
                         className={`nav-item ${activeMenu === 'rubrics' ? 'active' : ''}`}
@@ -135,15 +160,7 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         <span className="nav-label">Rubrics</span>
                     </button>
 
-                    <div className="nav-divider"></div>
 
-                    <button
-                        className={`nav-item ${activeMenu === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('settings')}
-                    >
-                        <span className="nav-icon">⚙️</span>
-                        <span className="nav-label">설정</span>
-                    </button>
                 </nav>
             </aside>
 
@@ -312,6 +329,41 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                             user={user}
                             onNavigate={(page) => setActiveMenu(page)}
                         />
+                    </div>
+                )}
+
+                {/* 지원자 관리 콘텐츠 */}
+                {activeMenu === 'candidate_management' && (
+                    <div className="dashboard-content">
+                        <CandidateManagementPage />
+                    </div>
+                )}
+
+                {/* 면접 관리 콘텐츠 */}
+                {activeMenu === 'interview_management' && (
+                    <div className="dashboard-content">
+                        <InterviewManagementPage />
+                    </div>
+                )}
+
+                {/* 결과 관리 콘텐츠 */}
+                {activeMenu === 'result_management' && (
+                    <div className="dashboard-content">
+                        <ResultManagementPage />
+                    </div>
+                )}
+
+                {/* 결과 분석 콘텐츠 */}
+                {activeMenu === 'result_analysis' && (
+                    <div className="dashboard-content">
+                        <ResultAnalysisPage />
+                    </div>
+                )}
+
+                {/* Rubrics 콘텐츠 */}
+                {activeMenu === 'rubrics' && (
+                    <div className="dashboard-content">
+                        <RubricsPage />
                     </div>
                 )}
             </main>

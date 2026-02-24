@@ -1,17 +1,31 @@
+:root {
+    --bg-main: #0f172a;
+    --bg-sidebar: #1e293b;
+    --bg-card: #1e293b;
+    --bg-header: rgba(15, 23, 42, 0.8);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+    --accent-soft: rgba(99, 102, 241, 0.1);
+    --hover-bg: rgba(255, 255, 255, 0.05);
+}
+
 .recruiter-main-container {
     display: flex;
     min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* ==================== 사이드바 ==================== */
 .recruiter-sidebar {
     width: 280px;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-sidebar);
     backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.1);
+    border-right: 1px solid var(--border-color);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
     position: sticky;
@@ -39,20 +53,20 @@
     transition: all 0.3s ease;
     font-size: 0.95rem;
     font-weight: 500;
-    color: #4a5568;
+    color: #ffffff;
     text-align: left;
 }
 
 .nav-item:hover {
-    background: rgba(102, 126, 234, 0.1);
-    color: #667eea;
+    background: var(--hover-bg);
+    color: var(--text-primary);
     transform: translateX(4px);
 }
 
 .nav-item.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: var(--accent-gradient);
     color: white;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .nav-icon {
@@ -91,20 +105,21 @@
     border-radius: 8px;
     cursor: pointer;
     font-size: 0.875rem;
-    color: #718096;
+    color: #ffffff;
     text-align: left;
     transition: all 0.2s ease;
+    font-weight: 600;
 }
 
 .dropdown-item:hover {
-    background: rgba(102, 126, 234, 0.08);
-    color: #667eea;
+    background: var(--hover-bg);
+    color: #ffffff;
     transform: translateX(4px);
 }
 
 .nav-divider {
     height: 1px;
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--border-color);
     margin: 1rem 0;
 }
 
@@ -117,14 +132,14 @@
 }
 
 .recruiter-header {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-header);
     backdrop-filter: blur(20px);
     padding: 1.5rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -137,13 +152,13 @@
 .dashboard-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #2d3748;
+    color: var(--text-primary);
     margin: 0 0 0.25rem 0;
 }
 
 .dashboard-subtitle {
     font-size: 0.95rem;
-    color: #718096;
+    color: var(--text-secondary);
     margin: 0;
 }
 
@@ -155,8 +170,8 @@
 
 .notification-btn {
     position: relative;
-    background: rgba(102, 126, 234, 0.1);
-    border: none;
+    background: var(--hover-bg);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     width: 44px;
     height: 44px;
@@ -165,6 +180,7 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s ease;
+    color: var(--text-primary);
 }
 
 .notification-btn:hover {
@@ -195,7 +211,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 1rem;
-    background: rgba(102, 126, 234, 0.08);
+    background: var(--hover-bg);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
 }
 
@@ -212,7 +229,7 @@
 .user-name {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #2d3748;
+    color: var(--text-primary);
     margin: 0;
 }
 
@@ -233,7 +250,7 @@
 .avatar-placeholder {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: var(--accent-gradient);
     color: white;
     display: flex;
     align-items: center;
@@ -273,15 +290,15 @@
 }
 
 .stat-card {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-card);
     backdrop-filter: blur(20px);
     border-radius: 16px;
     padding: 1.75rem;
     display: flex;
     gap: 1.25rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid var(--border-color);
 }
 
 .stat-card:hover {
@@ -318,7 +335,7 @@
 
 .stat-label {
     font-size: 0.875rem;
-    color: #718096;
+    color: var(--text-secondary);
     margin: 0 0 0.5rem 0;
     font-weight: 500;
 }
@@ -326,7 +343,7 @@
 .stat-value {
     font-size: 2rem;
     font-weight: 700;
-    color: #2d3748;
+    color: var(--text-primary);
     margin: 0 0 0.75rem 0;
 }
 
@@ -370,12 +387,12 @@
 
 .chart-card,
 .candidates-card {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-card);
     backdrop-filter: blur(20px);
     border-radius: 16px;
     padding: 1.75rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
 }
 
 .card-header {
@@ -388,7 +405,7 @@
 .card-title {
     font-size: 1.25rem;
     font-weight: 700;
-    color: #2d3748;
+    color: var(--text-primary);
     margin: 0;
 }
 
@@ -443,7 +460,7 @@
 .bar-fill {
     width: 100%;
     max-width: 60px;
-    background: linear-gradient(180deg, #667eea, #764ba2);
+    background: var(--accent-gradient);
     border-radius: 8px 8px 0 0;
     position: relative;
     display: flex;
@@ -511,10 +528,10 @@
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: rgba(102, 126, 234, 0.05);
+    background: var(--hover-bg);
     border-radius: 12px;
     transition: all 0.3s ease;
-    border: 1px solid rgba(102, 126, 234, 0.1);
+    border: 1px solid var(--border-color);
 }
 
 .candidate-item:hover {
@@ -543,7 +560,7 @@
 .candidate-name {
     font-size: 1rem;
     font-weight: 700;
-    color: #2d3748;
+    color: var(--text-primary);
     margin: 0 0 0.25rem 0;
 }
 
