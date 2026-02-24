@@ -289,8 +289,8 @@ const InterviewPage = ({
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
 
-              {/* [NEW] Vision HUD Overlay */}
-              {visionData && (
+              {/* [NEW] Vision HUD Overlay - 얼굴 감지된 경우에만 표시 */}
+              {visionData && visionData.status === 'detected' && (
                 <>
                   {/* 1. Gaze Status (Top Left) */}
                   <div style={{

@@ -408,6 +408,59 @@ async def complete_interview(
     )
     return {"status": "completed", "interview_id": interview_id}
 
+
+# [신규] 행동 분석 점수 저장 (media-server에서 호출)
+@router.patch("/{interview_id}/behavior-scores")
+async def save_behavior_scores(
+    interview_id: int,
+    request: dict,
+    db: Session = Depends(get_session),
+):
+    """
+    media-server에서 면접 종료 시 호출.
+    - interviews.emotion_summary → 최종 평균 점수만 저장
+    - transcripts.emotion → 각 질문별 채점 상세 저장 (User 발화 기준)
+    """
+    import json as json_lib
+    
+    interview = db.get(Interview, interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    # ① interviews 테이블: 최종 평균 점수만 저장
+    averages = request.get("averages", {})
+    interview.emotion_summary = {
+        "averages": averages,
+        "interview_duration_sec": request.get("interview_duration_sec"),
+        "total_questions": request.get("total_questions")
+    }
+    interview.overall_score = averages.get("total")
+    db.add(interview)
+    
+    # ② transcripts 테이블: 질문별 점수를 User transcript의 emotion에 저장
+    per_question = request.get("per_question", [])
+    if per_question:
+        # User(답변자) transcript를 순서대로 조회
+        user_transcripts = db.exec(
+            select(Transcript).where(
+                Transcript.interview_id == interview_id,
+                Transcript.speaker == "User"
+            ).order_by(Transcript.id)
+        ).all()
+        
+        for i, q_score in enumerate(per_question):
+            if i < len(user_transcripts):
+                # emotion 컬럼에 채점 결과를 JSON 문자열로 저장
+                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
+                user_transcripts[i].sentiment_score = q_score.get("total")
+                db.add(user_transcripts[i])
+                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+    
+    db.commit()
+    
+    logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
+    return {"status": "saved", "interview_id": interview_id}
+
 # 평가 리포트 조회
 @router.get("/{interview_id}/report", response_model=EvaluationReportResponse)
 async def get_evaluation_report(
