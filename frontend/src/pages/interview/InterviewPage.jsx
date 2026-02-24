@@ -195,14 +195,17 @@ const InterviewPage = ({
             <span>면접 진행률</span>
             <span>{Math.round(progressPercent)}% ({currentIdx + 1}/{totalQuestions})</span>
           </div>
-          <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{
-              width: `${progressPercent}%`,
-              height: '100%',
-              background: 'var(--gradient-main)',
-              borderRadius: '4px',
-              transition: 'width 0.5s ease-out'
-            }}></div>
+          <div style={{ display: 'flex', width: '100%', height: '8px', gap: '6px' }}>
+            {Array.from({ length: totalQuestions }).map((_, idx) => (
+              <div key={idx} style={{
+                flex: 1,
+                height: '100%',
+                background: idx <= currentIdx ? 'var(--primary)' : 'rgba(0,0,0,0.1)',
+                borderRadius: '4px',
+                transition: 'background 0.4s ease-out',
+                boxShadow: idx <= currentIdx ? '0 0 8px rgba(var(--primary-rgb), 0.4)' : 'none'
+              }}></div>
+            ))}
           </div>
         </div>
 
