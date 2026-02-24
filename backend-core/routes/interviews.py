@@ -418,19 +418,44 @@ async def save_behavior_scores(
 ):
     """
     media-server에서 면접 종료 시 호출.
-    질문별 영상+음성 통합 채점 결과를 Interview.emotion_summary에 저장.
-    
-    Args:
-        interview_id: 면접 ID
-        request: {"per_question": [...], "averages": {...}, ...}
+    - interviews.emotion_summary → 최종 평균 점수만 저장
+    - transcripts.emotion → 각 질문별 채점 상세 저장 (User 발화 기준)
     """
+    import json as json_lib
+    
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     
-    interview.emotion_summary = request
-    interview.overall_score = request.get("averages", {}).get("total")
+    # ① interviews 테이블: 최종 평균 점수만 저장
+    averages = request.get("averages", {})
+    interview.emotion_summary = {
+        "averages": averages,
+        "interview_duration_sec": request.get("interview_duration_sec"),
+        "total_questions": request.get("total_questions")
+    }
+    interview.overall_score = averages.get("total")
     db.add(interview)
+    
+    # ② transcripts 테이블: 질문별 점수를 User transcript의 emotion에 저장
+    per_question = request.get("per_question", [])
+    if per_question:
+        # User(답변자) transcript를 순서대로 조회
+        user_transcripts = db.exec(
+            select(Transcript).where(
+                Transcript.interview_id == interview_id,
+                Transcript.speaker == "User"
+            ).order_by(Transcript.id)
+        ).all()
+        
+        for i, q_score in enumerate(per_question):
+            if i < len(user_transcripts):
+                # emotion 컬럼에 채점 결과를 JSON 문자열로 저장
+                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
+                user_transcripts[i].sentiment_score = q_score.get("total")
+                db.add(user_transcripts[i])
+                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+    
     db.commit()
     
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
