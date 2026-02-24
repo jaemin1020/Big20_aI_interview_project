@@ -11,6 +11,7 @@ from typing import List
 import logging
 import os
 import shutil
+import time
 from pathlib import Path
 
 # DB 설정
@@ -27,10 +28,67 @@ from db_models import (
 # Imports cleaned up
 
 
-logging.basicConfig(level=logging.INFO)
+# 로깅 설정
+LOG_DIR = Path("./uploads/logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# 1. 포맷터 설정
+log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+
+# 2. 핸들러 설정
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(log_formatter)
+
+file_handler = logging.FileHandler(LOG_DIR / "backend.log", encoding='utf-8')
+file_handler.setFormatter(log_formatter)
+
+# 3. 로거 설정
 logger = logging.getLogger("Backend-Core")
+logger.setLevel(logging.INFO)
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
+
+# FastAPI 및 uvicorn 로거에도 추가
+logging.getLogger("uvicorn.access").addHandler(file_handler)
+logging.getLogger("uvicorn.error").addHandler(file_handler)
 
 app = FastAPI(title="AI Interview Backend v2.0")
+
+# 상세 로깅 미들웨어 (Request/Response Body 및 Latency 기록)
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    
+    # 1. 요청 정보 추출
+    method = request.method
+    url = str(request.url)
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # 2. 요청 바디 추출 (스트림 소비 주의)
+    request_body = b""
+    if method in ["POST", "PUT", "PATCH"]:
+        request_body = await request.body()
+        # 스트림을 다시 채워줘야 다음 핸들러가 읽을 수 있음
+        async def receive():
+            return {"type": "http.request", "body": request_body}
+        request.scope["receive"] = receive
+
+    # 요청 로그 기록 (민감정보 보안 유의)
+    body_str = request_body.decode("utf-8", errors="ignore") if request_body else "None"
+    if len(body_str) > 500: body_str = body_str[:500] + "... (truncated)"
+    logger.info(f"▶️ [REQ] {method} {url} | IP: {client_ip} | Body: {body_str}")
+
+    # 3. 실제 요청 처리
+    response = await call_next(request)
+    
+    # 4. 응답 시간 및 상태 기록
+    process_time = time.time() - start_time
+    logger.info(f"◀️ [RES] {method} {url} | Status: {response.status_code} | Duration: {process_time:.3f}s")
+    
+    # 응답 헤더에 요청 처리 시간 추가 (디버깅용)
+    response.headers["X-Process-Time"] = str(process_time)
+    
+    return response
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -50,7 +108,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.on_event("startup")
 def on_startup():
     init_db()
-    logger.info("✅ Database initialized with new schema")
+    logger.info("✅ Database initialized & Logging Middleware active")
 
 # CORS 설정
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
