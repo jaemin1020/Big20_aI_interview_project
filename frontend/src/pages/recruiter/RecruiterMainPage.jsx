@@ -6,6 +6,7 @@ import CandidateManagementPage from './CandidateManagementPage';
 import InterviewManagementPage from './InterviewManagementPage';
 import ResultManagementPage from './ResultManagementPage';
 import ResultAnalysisPage from './ResultAnalysisPage';
+import RubricsPage from './RubricsPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -74,6 +75,8 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 return { title: '결과 관리', subtitle: '각 전형별 합격 및 불합격을 관리하세요' };
             case 'result_analysis':
                 return { title: '결과 분석', subtitle: '면접 결과를 분석하고 통계를 확인하세요' };
+            case 'rubrics':
+                return { title: 'Rubrics 설정', subtitle: '직무별 평가 영역 및 세부 기준을 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -363,6 +366,13 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 {activeMenu === 'result_analysis' && (
                     <div className="dashboard-content">
                         <ResultAnalysisPage />
+                    </div>
+                )}
+
+                {/* Rubrics 콘텐츠 */}
+                {activeMenu === 'rubrics' && (
+                    <div className="dashboard-content">
+                        <RubricsPage />
                     </div>
                 )}
             </main>
