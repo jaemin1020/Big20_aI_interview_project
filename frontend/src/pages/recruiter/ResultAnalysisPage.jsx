@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
+import ResultDetailsPage from './ResultDetailsPage';
 import './ResultAnalysisPage.css';
 
 const mockResults = [
@@ -26,6 +27,9 @@ function ResultAnalysisPage() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [historyTarget, setHistoryTarget] = useState(null);
+
+    // 상세 보기 페이지 상태
+    const [selectedDetailId, setSelectedDetailId] = useState(null);
 
     const handleSearch = () => {
         let result = analysisData;
@@ -113,7 +117,11 @@ function ResultAnalysisPage() {
 
     // row action callbacks
     const handleViewDetails = (id) => {
-        alert('결과 상세 보기 화면(INT-06-1)으로 이동합니다.');
+        setSelectedDetailId(id);
+    };
+
+    const handleCloseDetails = () => {
+        setSelectedDetailId(null);
     };
 
     const handleViewHistory = (item) => {
@@ -129,9 +137,12 @@ function ResultAnalysisPage() {
             });
             setAnalysisData(updated);
             setFilteredData(updated.filter(i => filteredData.find(fi => fi.id === i.id)));
-            alert('재평가 요청이 처리되었습니다.');
         }
     };
+
+    if (selectedDetailId !== null) {
+        return <ResultDetailsPage applicantId={selectedDetailId} onClose={handleCloseDetails} />
+    }
 
     return (
         <div className="result-analysis">

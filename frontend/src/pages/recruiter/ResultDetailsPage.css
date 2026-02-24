@@ -1,0 +1,494 @@
+.result-details-container {
+    background-color: #f3f4f6;
+    min-height: 100%;
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 16px;
+}
+
+.header-left h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.header-left span {
+    font-size: 16px;
+    color: #6b7280;
+    font-weight: 500;
+    margin-left: 12px;
+}
+
+.btn-close-page {
+    background: none;
+    border: none;
+    font-size: 32px;
+    color: #6b7280;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.btn-close-page:hover {
+    color: #111827;
+}
+
+.details-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 2. Applicant Info Section */
+.info-card {
+    background-color: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.applicant-profile {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.details-avatar {
+    width: 80px;
+    height: 80px;
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.details-info-wrap {
+    flex: 1;
+}
+
+.details-info-wrap h3 {
+    margin: 0 0 16px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.job-badge {
+    font-size: 14px;
+    padding: 4px 12px;
+    background-color: #e0f2fe;
+    color: #0284c7;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+.details-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    font-size: 15px;
+    color: #374151;
+}
+
+.meta-label {
+    color: #6b7280;
+    font-weight: 600;
+    width: 80px;
+    display: inline-block;
+}
+
+/* Grid Layout */
+.columns-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 20px;
+}
+
+.left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.right-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.section-card {
+    background-color: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.section-title {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    color: #1f2937;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 12px;
+}
+
+/* 3. Interview Meta */
+.interview-meta-info {
+    background-color: #f9fafb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #e5e7eb;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.info-item:last-child {
+    margin-bottom: 0;
+}
+
+.info-item .label {
+    color: #4b5563;
+    font-weight: 600;
+}
+
+.info-item .value {
+    color: #111827;
+    font-weight: 500;
+}
+
+.interview-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-action {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.btn-action.primary {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.btn-action.primary:hover {
+    background-color: #2563eb;
+}
+
+.btn-action.secondary {
+    background-color: white;
+    color: #374151;
+    border-color: #d1d5db;
+}
+
+.btn-action.secondary:hover {
+    background-color: #f3f4f6;
+}
+
+/* 4 & 5. Opinion */
+.opinion-box textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    resize: vertical;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+}
+
+.opinion-box textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.opinion-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.warning-text {
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.btn-save-comment {
+    background-color: #4b5563;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: auto;
+}
+
+.btn-save-comment:hover {
+    background-color: #374151;
+}
+
+.btn-save-comment.saved {
+    background-color: #059669;
+}
+
+/* 6, 7, 8. Questions */
+.questions-section {
+    flex: 1;
+}
+
+.q-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.q-header .section-title {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.q-count {
+    background-color: #f3f4f6;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+}
+
+.questions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.question-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.question-item.expanded {
+    border-color: #93c5fd;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+}
+
+.q-upper {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background-color: white;
+}
+
+.q-num {
+    background-color: #f3f4f6;
+    color: #374151;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.question-item.expanded .q-num {
+    background-color: #dbeafe;
+    color: #1d4ed8;
+}
+
+.q-text {
+    flex: 1;
+    font-size: 15px;
+    color: #111827;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.btn-toggle-answer {
+    background-color: white;
+    color: #3b82f6;
+    border: 1px solid #bfdbfe;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-toggle-answer:hover {
+    background-color: #eff6ff;
+}
+
+.btn-toggle-answer.active {
+    background-color: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+.q-summary-box {
+    background-color: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 16px 16px 16px 64px;
+}
+
+.q-summary-box strong {
+    color: #475569;
+    font-size: 13px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.q-summary-box p {
+    margin: 0;
+    font-size: 14px;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.btn-load-more {
+    width: 100%;
+    padding: 12px;
+    background-color: #f9fafb;
+    border: 1px dashed #cbd5e1;
+    color: #64748b;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-load-more:hover {
+    background-color: #f1f5f9;
+}
+
+/* 9. Evaluation Tabs */
+.eval-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.eval-tab {
+    background: none;
+    border: none;
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.eval-tab:hover {
+    color: #374151;
+}
+
+.eval-tab.active {
+    color: #3b82f6;
+    border-bottom-color: #3b82f6;
+}
+
+.eval-pane {
+    background-color: #f8fafc;
+    border-radius: 8px;
+    padding: 24px;
+    border: 1px solid #e2e8f0;
+}
+
+.text-eval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.text-eval-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.6;
+}
+
+.text-eval-label {
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.text-eval-desc {
+    color: #475569;
+    flex: 1;
+}
+
+.eval-feedback {
+    margin: 0;
+    font-size: 15px;
+    color: #334155;
+    line-height: 1.6;
+}
+
+/* 10. Final Submit */
+.final-submit-wrapper {
+    margin-top: 24px;
+    display: flex;
+}
+
+.btn-final-submit {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+    transition: all 0.2s;
+}
+
+.btn-final-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(16, 185, 129, 0.4);
+}
+
+@media (max-width: 1024px) {
+    .columns-grid {
+        grid-template-columns: 1fr;
+    }
+}
