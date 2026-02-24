@@ -5,6 +5,7 @@ import JobPostingListPage from './JobPostingListPage';
 import CandidateManagementPage from './CandidateManagementPage';
 import InterviewManagementPage from './InterviewManagementPage';
 import ResultManagementPage from './ResultManagementPage';
+import ResultAnalysisPage from './ResultAnalysisPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -71,6 +72,8 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 return { title: '면접 관리', subtitle: '면접 결과 및 현황을 관리하세요' };
             case 'result_management':
                 return { title: '결과 관리', subtitle: '각 전형별 합격 및 불합격을 관리하세요' };
+            case 'result_analysis':
+                return { title: '결과 분석', subtitle: '면접 결과를 분석하고 통계를 확인하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -142,6 +145,7 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                         {interviewResultsMenuOpen && (
                             <div className="dropdown-menu">
                                 <button className="dropdown-item" onClick={() => setActiveMenu('result_management')}>결과 관리</button>
+                                <button className="dropdown-item" onClick={() => setActiveMenu('result_analysis')}>결과 분석</button>
                             </div>
                         )}
                     </div>
@@ -352,6 +356,13 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 {activeMenu === 'result_management' && (
                     <div className="dashboard-content">
                         <ResultManagementPage />
+                    </div>
+                )}
+
+                {/* 결과 분석 콘텐츠 */}
+                {activeMenu === 'result_analysis' && (
+                    <div className="dashboard-content">
+                        <ResultAnalysisPage />
                     </div>
                 )}
             </main>

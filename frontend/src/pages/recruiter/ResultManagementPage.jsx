@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
 import './ResultManagementPage.css';
 
 const mockResults = [
@@ -284,7 +285,8 @@ function ResultManagementPage() {
                 </div>
             </div>
 
-            {showDeleteModal && (
+            {/* 선택 삭제 모달 */}
+            {showDeleteModal && ReactDOM.createPortal(
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <h3>선택 항목 삭제</h3>
@@ -294,14 +296,16 @@ function ResultManagementPage() {
                             <button className="btn-confirm-delete" onClick={confirmDelete}>삭제</button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
-            {showEditResultModal && editingItem && (
+            {/* 결과 수정 모달 */}
+            {showEditResultModal && editingItem && ReactDOM.createPortal(
                 <div className="modal-overlay">
                     <div className="modal-content edit-result-modal">
                         <div className="modal-header-flex">
-                            <h3>평가 수정 <span>(INT-05-1)</span></h3>
+                            <h3>평가 수정</h3>
                             <button className="btn-close-x" onClick={() => setShowEditResultModal(false)}>×</button>
                         </div>
 
@@ -415,7 +419,8 @@ function ResultManagementPage() {
                             <button className="btn-confirm-edit" onClick={confirmEditResult}>저장</button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
