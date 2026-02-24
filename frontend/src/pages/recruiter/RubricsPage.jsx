@@ -21,11 +21,30 @@ function RubricsPage() {
     // 6. 평가 항목 상태
     const [selectedItemId, setSelectedItemId] = useState(1);
     const [evaluationItems, setEvaluationItems] = useState([
-        { id: 1, areaId: 'job_eval', label: '직무 이해도', criteria: '해당 직무에 대한 기초 지식과 프로세스를 안정적으로 이해하고 있는가?' },
-        { id: 2, areaId: 'job_exp', label: '직무 경험', criteria: '관련 분야에서의 실무 경험이 충분하며 즉시 전력감이 될 수 있는가?' },
-        { id: 3, areaId: 'problem_solving', label: '문제 해결 능력', criteria: '예상치 못한 상황에서 논리적이고 효율적인 대안을 제시하는가?' },
-        { id: 4, areaId: 'comm', label: '커뮤니케이션 기술', criteria: '복잡한 기술적 개념을 비전공자도 이해하기 쉽게 설명할 수 있는가?' },
-        { id: 5, areaId: 'attitude', label: '협업 태도', criteria: '팀의 목표를 위해 개인의 성취보다 팀워크를 우선시하는가?' }
+        // 직무평가
+        { id: 1, areaId: 'job_eval', label: '직무 이해 능력', criteria: '해당 직무의 핵심 개념과 프로세스를 정확히 이해하고 있는가?' },
+        { id: 2, areaId: 'job_eval', label: '직무 활용 능력', criteria: '습득한 지식을 실무 상황에 적절히 적용하고 활용할 수 있는가?' },
+        { id: 3, areaId: 'job_eval', label: '직무 적합성', criteria: '본인의 역량이 해당 직무의 요구사항과 얼마나 일치하는가?' },
+
+        // 직무경험
+        { id: 4, areaId: 'job_exp', label: '직무 접근성', criteria: '관련 분야의 프로젝트나 업무에 대한 접근 방식이 논리적인가?' },
+        { id: 5, areaId: 'job_exp', label: '직무 해결 능력', criteria: '과거 경험에서 직면한 직무적 난관을 어떻게 해결하였는가?' },
+        { id: 6, areaId: 'job_exp', label: '직무 적합성', criteria: '경험을 통해 쌓은 노하우가 우리 팀의 업무 방식과 조화를 이루는가?' },
+
+        // 소통능력
+        { id: 7, areaId: 'comm', label: '소통 방법 및 태도', criteria: '상대방의 의견을 경청하고 자신의 의사를 예의 바르게 전달하는가?' },
+        { id: 8, areaId: 'comm', label: '전달 명확성', criteria: '복잡한 내용을 간결하고 이해하기 쉽게 설명할 수 있는가?' },
+        { id: 9, areaId: 'comm', label: '질문 의도 파악 능력', criteria: '상대방이 질문하는 핵심 의도를 정확히 이해하고 답변하는가?' },
+
+        // 업무태도
+        { id: 10, areaId: 'attitude', label: '결과에 대한 책임감', score: 80, label: '결과에 대한 책임감', criteria: '맡은 업무를 끝까지 완수하려는 강한 책임 의식을 가지고 있는가?' },
+        { id: 11, areaId: 'attitude', label: '성실성 및 준비도', criteria: '업무에 임하는 자세가 성실하며 필요한 준비가 선제적으로 되어 있는가?' },
+        { id: 12, areaId: 'attitude', label: '협업 태도 및 수용 태도', criteria: '팀원과 원활히 협력하며 피드백을 열린 마음으로 수용하는가?' },
+
+        // 문제해결능력
+        { id: 13, areaId: 'problem_solving', label: '문제 분석 능력', criteria: '문제의 근본 원인을 논리적으로 파악하고 분석하는 능력이 있는가?' },
+        { id: 14, areaId: 'problem_solving', label: '해결 전략 수립 능력', criteria: '효과적인 문제 해결을 위한 최적의 전략과 대안을 제시하는가?' },
+        { id: 15, areaId: 'problem_solving', label: '결과 실행 능력', criteria: '수립된 해결책을 실행에 옮겨 실제적인 성과를 만들어내는가?' }
     ]);
 
     // 7. 평가 레벨 (단일 점수 슬라이더 및 기준 출력)

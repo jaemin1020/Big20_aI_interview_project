@@ -160,15 +160,7 @@ function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMe
                         <span className="nav-label">Rubrics</span>
                     </button>
 
-                    <div className="nav-divider"></div>
 
-                    <button
-                        className={`nav-item ${activeMenu === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveMenu('settings')}
-                    >
-                        <span className="nav-icon">⚙️</span>
-                        <span className="nav-label">설정</span>
-                    </button>
                 </nav>
             </aside>
 

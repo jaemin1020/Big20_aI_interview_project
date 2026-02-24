@@ -833,6 +833,8 @@ function App() {
           }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
+          isRecruiter={step === 'recruiter_main'}
+          hideMenuButtons={step === 'recruiter_main'}
           onHistory={() => navigateSafe('history')}
           onAccountSettings={() => navigateSafe('settings')}
           onProfileManagement={() => navigateSafe('profile')}
@@ -909,29 +911,7 @@ function App() {
         </div>
       )}
 
-      {/* Theme Toggle Button */}
-      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '50%',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid var(--glass-border)',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-            cursor: 'pointer',
-            fontSize: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease'
-          }}
-        >
-          {isDarkMode ? '☀️' : '🌑'}
-        </button>
-      </div>
+
 
       <div style={{
         flex: 1,
