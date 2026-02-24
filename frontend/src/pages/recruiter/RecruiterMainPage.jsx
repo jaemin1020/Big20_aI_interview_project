@@ -3,6 +3,7 @@ import './RecruiterMainPage.css';
 import JobPostingCreatePage from './JobPostingCreatePage';
 import JobPostingListPage from './JobPostingListPage';
 import CandidateManagementPage from './CandidateManagementPage';
+import InterviewManagementPage from './InterviewManagementPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -63,7 +64,9 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
             case 'job_posting_list':
                 return { title: '공고 현황', subtitle: '등록된 채용 공고를 관리하세요' };
             case 'candidate_management':
-                return { title: '지원자 관리', subtitle: '면접 현황 및 지원자를 관리하세요' };
+                return { title: '지원자 관리', subtitle: '지원자의 제출 서류 및 진행 상황을 관리하세요' };
+            case 'interview_management':
+                return { title: '면접 관리', subtitle: '면접 결과 및 현황을 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -322,6 +325,13 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 {activeMenu === 'candidate_management' && (
                     <div className="dashboard-content">
                         <CandidateManagementPage />
+                    </div>
+                )}
+
+                {/* 면접 관리 콘텐츠 */}
+                {activeMenu === 'interview_management' && (
+                    <div className="dashboard-content">
+                        <InterviewManagementPage />
                     </div>
                 )}
             </main>
