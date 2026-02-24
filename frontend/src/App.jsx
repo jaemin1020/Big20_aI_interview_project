@@ -91,6 +91,9 @@ function App() {
   // Users selected interview for result view
   const [selectedInterview, setSelectedInterview] = useState(null);
 
+  // Recruiter Navigation State (Lifted for Logo Reset)
+  const [recruiterMenu, setRecruiterMenu] = useState('dashboard');
+
 
 
 
@@ -821,7 +824,12 @@ function App() {
               alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
               return;
             }
-            navigateSafe('main');
+            if (user && (user.role === 'recruiter' || user.role === 'admin')) {
+              setRecruiterMenu('dashboard');
+              navigateSafe('recruiter_main');
+            } else {
+              navigateSafe('main');
+            }
           }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
@@ -1112,6 +1120,8 @@ function App() {
             user={user}
             onLogout={handleLogout}
             onNavigate={(page) => setStep(page)}
+            activeMenu={recruiterMenu}
+            setActiveMenu={setRecruiterMenu}
           />
         )}
 

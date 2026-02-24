@@ -9,10 +9,10 @@ function RubricsPage() {
     // 3. 평가 목록 상태
     const [evaluationAreas, setEvaluationAreas] = useState([
         { id: 'job_eval', label: '직무평가', checked: true, active: true },
-        { id: 'job_exp', label: '직무경험', checked: true, active: true },
-        { id: 'comm', label: '소통능력', checked: true, active: true },
-        { id: 'attitude', label: '업무태도', checked: true, active: true },
-        { id: 'problem_solving', label: '문제해결능력', checked: true, active: true }
+        { id: 'job_exp', label: '직무경험', checked: false, active: false },
+        { id: 'comm', label: '소통능력', checked: false, active: false },
+        { id: 'attitude', label: '업무태도', checked: false, active: false },
+        { id: 'problem_solving', label: '문제해결능력', checked: false, active: false }
     ]);
 
     // 5. 탭 상태 (평가항목 / 평가레벨)
@@ -21,9 +21,11 @@ function RubricsPage() {
     // 6. 평가 항목 상태
     const [selectedItemId, setSelectedItemId] = useState(1);
     const [evaluationItems, setEvaluationItems] = useState([
-        { id: 1, label: '직무 이해도', criteria: '해당 직무에 대한 기초 지식과 프로세스를 안정적으로 이해하고 있는가?' },
-        { id: 2, label: '직무 경험', criteria: '관련 분야에서의 실무 경험이 충분하며 즉시 전력감이 될 수 있는가?' },
-        { id: 3, label: '문제 해결 능력', criteria: '예상치 못한 상황에서 논리적이고 효율적인 대안을 제시하는가?' }
+        { id: 1, areaId: 'job_eval', label: '직무 이해도', criteria: '해당 직무에 대한 기초 지식과 프로세스를 안정적으로 이해하고 있는가?' },
+        { id: 2, areaId: 'job_exp', label: '직무 경험', criteria: '관련 분야에서의 실무 경험이 충분하며 즉시 전력감이 될 수 있는가?' },
+        { id: 3, areaId: 'problem_solving', label: '문제 해결 능력', criteria: '예상치 못한 상황에서 논리적이고 효율적인 대안을 제시하는가?' },
+        { id: 4, areaId: 'comm', label: '커뮤니케이션 기술', criteria: '복잡한 기술적 개념을 비전공자도 이해하기 쉽게 설명할 수 있는가?' },
+        { id: 5, areaId: 'attitude', label: '협업 태도', criteria: '팀의 목표를 위해 개인의 성취보다 팀워크를 우선시하는가?' }
     ]);
 
     // 7. 평가 레벨 (단일 점수 슬라이더 및 기준 출력)
@@ -53,8 +55,16 @@ function RubricsPage() {
 
     const toggleArea = (id) => {
         setEvaluationAreas(areas => areas.map(area =>
-            area.id === id ? { ...area, checked: !area.checked, active: !area.checked } : area
+            area.id === id
+                ? { ...area, checked: true, active: true }
+                : { ...area, checked: false, active: false }
         ));
+
+        // 해당 영역의 첫 번째 항목을 자동으로 선택
+        const firstItemOfArea = evaluationItems.find(item => item.areaId === id);
+        if (firstItemOfArea) {
+            setSelectedItemId(firstItemOfArea.id);
+        }
     };
 
     const handleSave = () => {
@@ -96,7 +106,8 @@ function RubricsPage() {
                                     <div key={area.id} className="area-item">
                                         <label className="checkbox-wrap">
                                             <input
-                                                type="checkbox"
+                                                type="radio"
+                                                name="evaluationArea"
                                                 checked={area.checked}
                                                 onChange={() => toggleArea(area.id)}
                                             />
@@ -134,21 +145,23 @@ function RubricsPage() {
                                     <div className="items-management">
                                         {/* 6. 평가 항목 상세 관리 */}
                                         <div className="items-list">
-                                            {evaluationItems.map(item => (
-                                                <div
-                                                    key={item.id}
-                                                    className={`item-row ${selectedItemId === item.id ? 'selected' : ''}`}
-                                                    onClick={() => setSelectedItemId(item.id)}
-                                                >
-                                                    <span className="item-label">{item.label}</span>
-                                                    <div className="item-actions">
-                                                        <button className="btn-mini">수정</button>
-                                                        <button className="btn-mini delete">삭제</button>
+                                            {evaluationItems
+                                                .filter(item => evaluationAreas.find(area => area.id === item.areaId)?.checked)
+                                                .map(item => (
+                                                    <div
+                                                        key={item.id}
+                                                        className={`item-row ${selectedItemId === item.id ? 'selected' : ''}`}
+                                                        onClick={() => setSelectedItemId(item.id)}
+                                                    >
+                                                        <span className="item-label">{item.label}</span>
+                                                        <div className="item-actions">
+                                                            <button className="btn-mini">수정</button>
+                                                            <button className="btn-mini delete">삭제</button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))}
                                         </div>
-                                        {selectedItem && (
+                                        {selectedItem && evaluationAreas.find(area => area.id === selectedItem.areaId)?.checked && (
                                             <div className="item-detail-view">
                                                 <h5>평가 기준 가이드</h5>
                                                 <textarea

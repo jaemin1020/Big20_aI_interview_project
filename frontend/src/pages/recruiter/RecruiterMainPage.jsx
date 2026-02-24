@@ -8,8 +8,7 @@ import ResultManagementPage from './ResultManagementPage';
 import ResultAnalysisPage from './ResultAnalysisPage';
 import RubricsPage from './RubricsPage';
 
-function RecruiterMainPage({ user, onLogout, onNavigate }) {
-    const [activeMenu, setActiveMenu] = useState('dashboard');
+function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMenu }) {
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
     const [interviewStatusMenuOpen, setInterviewStatusMenuOpen] = useState(false);
     const [interviewResultsMenuOpen, setInterviewResultsMenuOpen] = useState(false);

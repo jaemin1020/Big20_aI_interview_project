@@ -108,11 +108,13 @@
     align-items: center;
     gap: 10px;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .check-label {
     font-size: 14px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .status-badge {
