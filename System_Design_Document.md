@@ -3,30 +3,33 @@
 ## 1. 개요 (Overview)
 
 ### 1.1 문서 목적
-본 문서는 **Big20 AI 면접 시스템(Big20 AI Interview Project)**의 데이터 흐름, 시스템 아키텍처, 그리고 각 모듈의 설계 세부사항을 정의하는 기술 종합 보고서입니다. 본 시스템 설계서에 기술된 사항은 실제 구현된 코드베이스 및 설계 환경 등 사실을 기반으로 작성되었습니다.
+본 문서는 **Big20 AI 면접 시스템(Big20 AI Interview Project)**의 전체 구조와 기술적 경계를 정의하는 기술 종합 설계서입니다. 기능 구현의 세부 사항이 아닌, 시스템이 안정적으로 동작하기 위한 아키텍처(인프라, 애플리케이션, 데이터, 모델, 보안, 운영/확장) 관점의 설계 원칙과 현재 프로젝트의 실장 상태를 체계적으로 기술하며, 개발자가 쉽게 이해할 수 있는 핵심 기능 명세를 제공합니다.
 
 ### 1.2 시스템 목적 (System Objective)
-본 시스템은 최신 AI 기술(LLM, Vision AI, STT/TTS)과 실시간 웹 통신 기술(WebRTC/WebSocket)을 결합하여, 지원자의 직무 역량과 이력서를 기반으로 맞춤형 심층 면접 질문을 실시간 생성하고, 지원자의 언어적답변과 비언어적 태도를 종합적으로 분석하여 인사이트가 담긴 평가 리포트를 도출하는 것을 목적으로 합니다.
+본 시스템은 최신 AI 기술(LLM, Vision AI, STT/TTS)과 실시간 웹 통신 기술(WebRTC/WebSocket)을 결합하여, 실제 면접과 유사한 환경을 제공하고 면접자의 직무 역량(답변)과 비언어적 태도(시선, 감정 등)를 실시간으로 분석하여 핵심 인사이트가 담긴 종합 평가 피드백을 제공하는 것을 목적으로 합니다.
 
-### 1.3 핵심 기능 (Core Features)
-1.  **AI 기반 맞춤형 질문 생성 (RAG System)**: 이력서 파싱/임베딩 데이터를 바탕으로 지원 직무에 특화된 꼬리물기 심층 질문 생성
-2.  **실시간 모의 면접 환경 제공**: WebRTC와 STT(Speech-to-Text) / TTS(Text-to-Speech)를 활용하여 자연스러운 대화 흐름 구성
-3.  **다차원 태도 및 감정 분석**: Vision AI(Face Landmarker 등)를 활용하여 시선, 감정 상태 실시간 평가
-4.  **종합 평가 및 피드백**: 면접 종료 후 기술/직무적 측면에 대한 정밀 평가 리포트(대시보드) 제공
+### 1.3 핵심 기능 요약 (Core Features)
+1.  **AI 기반 맞춤형 질문 생성 (RAG System)**: 업로드된 이력서의 파싱/임베딩 데이터와 기업 인재상을 바탕으로 직무에 특화된 심층 꼬리물기 질문 도출
+2.  **실시간 모의 면접 환경 제공**: WebRTC와 STT 기능을 활용하여 지연 없는 대화 기반 인터페이스 구성 
+3.  **다차원 태도 및 감정 분석**: 미디어 스트리밍을 통한 Vision AI 분석으로 시선, 깜빡임 및 감정 상태 실시간 평가 추적 
+4.  **종합 평가 및 피드백 대시보드**: 면접 종료 후 기술적 전문성/의사소통 측면에 대한 정밀 평가 리포팅 기능
 
 ---
 
-## 2. 시스템 아키텍처 (System Architecture)
+## 2. 시스템 아키텍처 관리 범위 및 설계 (Architecture)
 
-본 시스템은 높은 부하의 AI 연산을 효과적으로 분산하고, 시스템의 유연성과 확장성을 보장하기 위해 **마이크로서비스 아키텍처(MSA)**를 채택하고 있습니다.
+본 시스템은 유연성과 확장성, 그리고 고부하 연산 처리를 병렬화하기 위해 **마이크로서비스 아키텍처(MSA)**를 채택하고 있으며, 아키텍처 관리 범위의 6대 요소를 기준으로 논리적 구조를 설계하였습니다.
 
-### 2.1 전체 구성도 (Component Diagram)
-
+### 2.1 인프라 아키텍처 (Infrastructure Layer)
+시스템이 물리적·논리적으로 어디에서, 어떻게 실행되는지를 정의합니다.
+*   **배포 방식**: 컨테이너화된 격리 환경을 보장하기 위해 **Docker & Docker Compose**를 활용하며 전 서비스 모듈의 종속성을 해결합니다.
+*   **컴포넌트 및 역할 분리**: 무거운 AI 모델 로드 및 연산을 담당하는 **GPU AI-Worker 노드**와, 빠른 비즈니스 로직 및 네트워크 중계를 담당하는 **CPU 노드(FastAPI Backend, aiortc Media-Server, React Frontend)**를 분리하여 설계합니다.
+*   **전체 구성도 (Diagram)**:
 ```mermaid
 graph TD
     Client[Frontend: React 18 / Vite] <-->|WebRTC / WebSocket| Media[Media-Server: aiortc, Vision]
     Client <-->|REST API| Backend[Backend-Core: FastAPI]
-    Backend <-->|Celery Task Queue| WorkerGen[AI-Worker: LLM / Parsing]
+    Backend <-->|Celery Task Queue| WorkerGen[AI-Worker: LLM / Parsing / STT]
     Media <-->|Celery Task Queue| WorkerGen
     
     WorkerGen <--> DB[(PostgreSQL + pgvector)]
@@ -36,88 +39,97 @@ graph TD
     Broker <--> WorkerGen
 ```
 
-### 2.2 기술 스택 (Technology Stack)
+### 2.2 애플리케이션 아키텍처 (Application Layer)
+시스템 내부의 논리적 모듈 구성과 전체 흐름 제어 방식을 정의합니다.
+*   **비동기 워크플로우 통제**: 동기식 API 응답 지연을 방지하기 위해, 무거운 AI 작업(음성 인식(STT), 질문 생성, 리포트 결과 도출 등)은 **Celery** 기반의 비동기 Task Queue 모델에 위임합니다.
+*   **면접 세션 파이프라인 설계**: 
+    **문맥파악/질문 생성 → 음성 답변 수집(Whisper STT) → 실시간 영상 분석(Vision) → 언어적 평가 수행 → 결과 구조화 DB 저장 → 종합 리포트 생성**으로 이어지는 일관된 비즈니스 흐름을 백엔드에서 통제합니다.
+*   **RAG 파이프라인 설계**: 지원자 이력서를 의미/항목 단위로 임베딩하여, 이어지는 대화 컨텍스트 추론 과정에서 LLM이 이 벡터를 지속 참조하도록 구성하였습니다.
 
-| 계층 (Layer) | 주요 기술 (Technologies) | 설명 (Description) |
-| :--- | :--- | :--- |
-| **Frontend** | React 18, Vite 5, Axios, Deepgram SDK | 사용자 인터페이스 제공 및 클라이언트 사이드 STT 처리 |
-| **Backend-Core** | FastAPI, SQLModel | 토큰 기반 Auth(JWT), 비즈니스 로직 및 API 게이트웨이 |
-| **Media-Server** | aiortc, OpenCV, MediaPipe | WebRTC 시그널링, 비디오 스트리밍 프레임 단위 실시간 비전 처리 |
-| **AI-Worker (GPU/CPU)**| Celery, LangChain, PyTorch, EXAONE-3.5 | 대용량 LLM 추론(질문 생성, 평가) 및 임베딩, 문서 파싱 |
-| **Database** | PostgreSQL 18, pgvector | 관계형 데이터 저장 및 고차원 임베딩/유사도 벡터 검색 지원 |
-| **Message Broker** | Redis 7 | Celery 비동기 작업 큐 및 상태 관리 |
-| **Infra/Deploy**| Docker, Docker Compose | 서비스 컨테이너화 및 리소스 격리 (GPU 할당) |
+### 2.3 데이터 아키텍처 (Data Layer)
+단순 스키마 생성을 넘어 데이터 저장 전략 및 구조 원칙을 다룹니다.
+*   **관계형 DB와 벡터 DB의 결합**: 메인 RDBMS로 **PostgreSQL 18**을 사용하며, `pgvector` 확장을 설치하여 이력서(`resumes`) 및 기업 데이터(`companies`)의 **다차원 임베딩/유사도 벡터 검색**을 단일 데이터 저장소에서 처리함으로써 네트워크 홉(Hop)을 최소화했습니다.
+*   **핵심 테이블 설계 기준**:
+    *   `users`: 시스템 사용자 계정 체계 (`candidate`, `recruiter`, `admin`).
+    *   `resumes`, `companies`: 파싱된 구조화 메타데이터(JSONB) 보관 및 임베딩 필드 지원.
+    *   `interviews`: 트랜잭션 흐름 생명주기에 맞는 면접 상태값(`status`)과 종합 지표 관리.
+    *   `transcripts`: 화자(Speaker) 별 개별 발화 로깅 및 STT/감성 지표 관리.
+    *   `questions`: RAG 기반으로 동적 생성된 면접 질문 데이터 보관.
+    *   `evaluation_reports`: JSONB 칼럼에 평가 루브릭 기반 상세 결과 데이터 저장.
+*   **상태(State) 관리 전략**: 실시간 세션 및 큐 관리를 위해 가벼운 인메모리 저장소인 **Redis 7**을 활용하여 데이터 Lock 문제나 I/O 지연을 방지합니다.
 
----
+### 2.4 AI 모델 아키텍처 (AI Model Architecture)
+시스템 내 언어, 음성 및 시각 지능 모델 배치 전략과 호출 구조를 정의합니다.
+*   **LLM 파이프라인 (텍스트 생성 및 평가)**: 
+    *   LangChain 프레임워크를 기반으로 AI-Worker 컨테이너 위에서 **EXAONE-3.5 7.8B Instruct (혹은 동급 오픈소스/로컬 모델)**를 활용합니다.
+    *   프롬프트 엔지니어링 템플릿과 벡터 스토어 레트리버(Retriever)를 결합하여 질문 생성 및 답변 평가 파이프라인을 구축합니다.
+*   **STT (음성 인식) 아키텍처 연결 구조**: 
+    *   오픈소스 음성 인식 모델인 **Whisper (faster-whisper large-v3-turbo 등)** 모델을 AI-Worker 상에 배치합니다.
+    *   Frontend에서 면접자의 오디오 데이터를 녹음하여 Backend로 전송하면, Backend는 이를 Celery Task로 분리하여 AI-Worker의 Whisper 모델이 텍스트(Transcript)로 변환하는 비동기 파이프라인을 취합니다.
+*   **Vision 추론 구조 (비언어적 요소 분석)**: 
+    *   WebRTC 미디어 서버(`aiortc`)로 스트리밍 되는 비디오 프레임을 시스템적으로 샘플링(예: 2초 간격)합니다.
+    *   **MediaPipe** 혹은 **OpenCV** 기반 모델로 프레임을 분석하여 눈 깜빡임, 시선 처리, 감정(Emotion) 상태 파악 등 1차 특징점 분석을 수행합니다.
 
-## 3. 상세 컴포넌트 설계 (Component Details)
+### 2.5 보안 아키텍처 (Security Architecture)
+시스템 접근 통제 및 데이터 보호 구조를 설계합니다.
+*   **인증 및 인가 (Auth & RBAC)**: 사용자의 세션을 유지하기 위해 암호화된 **JSON Web Token (JWT)** 구조를 사용하며(Stateless 인증), URL 접근 권한을 분류하기 위해 `admin`, `recruiter`, `candidate`로 **역할 기반 매핑** 정책을 적용합니다.
+*   **보안 파라미터 정책**: DB 접속 DSN, JWT 시크릿 키 등 모든 중요한 접속 정보는 코드 레벨에서 하드코딩을 배제하고 전역 `.env` 환경 변수로 주입합니다.
 
-### 3.1 Frontend (User Interface)
-*   **사용자 인터페이스 (Glassmorphism 적용)**: 직관적이고 현대적인 UI/UX 제공
-*   **실시간 STT 연동**: 브라우저 마이크를 통해 획득한 오디오를 Deepgram SDK / Client STT 솔루션으로 즉시 변환하여 서버에 Transcript(전사 데이터) 저장 요청 (STT 부하 분산)
-*   **면접 대시보드 표시**: 면접 결과 데이터의 시각화를 위한 차트와 상세 피드백 화면 제공
-
-### 3.2 Backend-Core (API Server)
-*   **비즈니스 흐름 제어**: 면접 세션(대기, 진행, 완료)의 생명주기를 관리합니다.
-*   **보안 및 인증 (Auth)**: JWT(JSON Web Token) 및 bcrypt 알고리즘을 사용한 사용자 인증 시스템. 관리자, 인사담당자, 지원자의 역할(Role) 분리 체계 구축.
-*   **Database 연동**: SQLModel ORM 패러다임을 통해 비동기/동기 데이터베이스 오퍼레이션 수행
-
-### 3.3 Media-Server (실시간 미디어 중계기)
-*   **WebRTC 통신**: aiortc를 통해 STUN/TURN 서버에 의존하거나 P2P로 직접 비디오/오디오 스트림 연동을 설정.
-*   **Vision Data 처리**: 클라이언트로부터 수신된 비디오 스트림에서 주기로 프레임을 추출, MediaPipe / OpenCV 등을 통해 깜박임, 시선 처리, 감정(Emotion) 상태를 1차 분석 후 필요 시 AI Worker로 위임.
-
-### 3.4 AI-Worker (고부하 AI 작업기)
-분산된 Task Queue를 통해 안정적인 연산 스케줄링 환경을 제공합니다.
-*   **Question Generation (지능형 질문 생성)**:
-    *   **LLM 엔진**: 로컬 양자화 모델(`EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf` 등)을 LangChain과 결합하여 운용.
-    *   **로직**: 현재 면접 단계(Stage)와 이전 대화 문맥(Transcript), 자격증, 프로젝트 경험 등 추출된 이력서 데이터를 프롬프트에 동적으로 반영하여 직무/상황에 알맞은 꼬리 질문(Follow-up)을 도출합니다.
-*   **Resume RAG (이력서 텍스트 마이닝)**: 문서에서 텍스트를 추출해 의미 단위로 Chunking하고 임베딩 벡터 형식(pgvector)으로 DB에 적재합니다.
-*   **TTS 연동 작업**: 생성된 질문 텍스트의 불필요한 메타 태그를 정제 후 빠른 시간 안에 음성 합성(WAV 등) 파일로 변환합니다.
-
----
-
-## 4. 데이터베이스 및 저장소 구조 (Database Schema)
-
-관계형 구조 및 `pgvector` 확장을 함께 응용하여, 정형/비정형 AI 데이터를 한 곳에서 일관되게 다룹니다.
-
-*   `users`: 시스템 사용자 계정 체계 (`candidate`, `recruiter`, `admin`) 및 해시 비밀번호.
-*   `resumes`: 업로드된 이력서 원본 및 병합 파싱된 구조화 메타데이터 (JSONB 형태), 벡터 임베딩(`embedding`).
-*   `companies`: 평가 대상 기업(혹은 직무군)별 특성 및 인재상 관리 데이터.
-*   `interviews`: 1-Session 체계. 지원 직무(`position`), 세션 상태(`status`), 감정 요약 등 종합 지표 관리.
-*   `transcripts`: 화자(AI vs. User) 단위 발화 로깅 및 개별 발화에 대한 감정 분포 기록.
-*   `questions`: 카테고리(CS/역량/경험) 및 생성된 질문 내용, 질문 평가 루브릭 보관.
-*   `evaluation_reports`: 면접 최종 종료 후 생성되는 정밀 평가 정보(JSONB) – 기술, 의사소통, Fit 점수.
+### 2.6 운영 및 확장 아키텍처 (Operational & Scalability Architecture)
+장기 모니터링 및 성능 병목 대응 전략에 관한 영역입니다.
+*   **Worker 확장 시나리오 (Scalability)**: 음성 인식(Whisper)이나 LLM 생성과 같은 무거운 GPU 작업량이 늘어날 것에 대비, Broker(Redis)를 중심에 두고 **AI-Worker 노드를 수평 확장(Scale-out)**할 수 있도록 구독 계층을 확립했습니다.
+*   **장애 대응 및 비동기 복구 전략 (Fault Tolerance)**: 고사양 LLM/STT 응답 지연이나 Redis 네트워크 단절 시 예기치 못한 데이터 유실을 막기 위해, Celery Task의 Backoff/Retry 전략을 통해 일시적 장애를 흡수하도록 조치합니다.
 
 ---
 
-## 5. 핵심 워크플로우 (Core Workflows)
+## 3. 개발자를 위한 상세 기능 명세 (Functional Specifications)
 
-1.  **사전 준비 단계 (Preparation Phase)**
-    *   사용자가 이력서 업로드 → AI-Worker가 문서를 파싱/임베딩하여 DB에 RAG용 벡터(`resumes`) 저장
-2.  **면접 세션 연결 (Session Connect Phase)**
-    *   지원자가 면접 방 접속 시 Frontend가 WebRTC 시그널링을 Media-Server와 시작하고 세션을 `live` 상태로 전환.
-3.  **대화 진행 루프 (Interaction Loop)**
-    *   AI-Worker가 이력서 정보를 반영해 첫 질문 생성 → TTS 워커가 파일 렌더링 → Frontend 재생
-    *   사용자가 마이크로 답변 → Frontend STT가 즉시 텍스트 변환하여 Backend에 전송 (Transcript)
-    *   동시에 Media-Server가 카메라 스트림을 통해 감정 데이터 분석 
-    *   Backend가 답변 완료를 감지하면, AI-Worker를 트리거해 문맥 기반의 후속 질문 반환.
-4.  **세션 종료 및 종합 평가 (Termination & Evaluation Phase)**
-    *   정해진 질문 수 또는 시나리오 종료 감지 시 세션 상태가 `completed`로 전환
-    *   면접 전 과정의 Transcript와 다차원 데이터를 취합하여 AI-Worker 모델이 `EvaluationReports` 발급
-    *   Frontend 대시보드를 통해 지원자 및 평가자에게 리포트 제공
+개발팀(Backend/Frontend/AI Engineer)이 각 도메인에서 정확히 무엇을 구현해야 하는지 명확히 하기 위해 기능 명세를 컴포넌트 단위로 분류합니다.
+
+### 3.1 사용자 및 세션 관리 (Auth & User Domain)
+1. **회원 계정 관리 API (Backend)**
+   - `POST /auth/register`: Role(`candidate`, `recruiter`, `admin`) 기반 사용자 등록 및 bcrypt 패스워드 암호화.
+   - `POST /auth/login`: JWT Access/Refresh Token 발급 (만료 시간 설정 포함).
+   - `GET /users/me`: JWT 토큰을 해독하여 현재 사용자 프로필 및 Role 검증.
+2. **권한 기반 라우팅 제어 (Frontend / Backend)**
+   - 면접관(Recruiter) 전용 기업/직무 관리 페이지 및 대시보드 접근 통제.
+   - 지원자(Candidate)의 본인 인터뷰 세션 외 접근 차단 로직 구현.
+
+### 3.2 면접 준비 및 기업/이력서 데이터 관리 (Preparation Domain)
+1. **기업 및 직무 프로필 관리 API**
+   - 기업의 인재상 텍스트 입력 시 AI-Worker를 호출해 임베딩(Vector) 추출 후 `companies` 테이블에 저장.
+2. **이력서(Resume) 업로드 및 파싱 API**
+   - 사용자가 PDF 등 이력서를 업로드 시 파일 저장 후 비동기 Task 트리거.
+   - **AI 파싱 로직 (AI-Worker)**: 이력서의 텍스트를 추출해 의미 단위(학력, 경력, 스킬)로 분해 및 구조화(JSONB). 데이터 청크를 임베딩 벡터화하여 `resumes` 테이블 저장.
+3. **면접 세션 생성 및 대기방**
+   - 특정 이력서 및 직무(`position`)를 바인딩하여 새로운 `Interviews` 레코드 단위(`scheduled` 상태) 생성.
+   - 대기방에서 Frontend가 장치(카메라/마이크) 사전 점검 및 연결 테스트 수행.
+
+### 3.3 실시간 면접 진행 (Live Interview Domain)
+1. **WebRTC 미디어 시그널링 (Frontend ↔ Media-Server)**
+   - `LiveKit` 혹은 `aiortc` 기반 SDP/ICE Candidate 교환으로 P2P 또는 SFU 채널 연결, 세션 상태를 `live`로 전환.
+2. **AI 면접관의 질문 생성 및 음성(TTS) 재생**
+   - **첫 질문 생성**: 면접 시작 즉시 AI-Worker가 RAG(이력서/기업 임베딩 결합) 기반으로 맞춤형 첫 질문 생성(`EXAONE / Llama`).
+   - 질문 텍스트가 TTS(Text-to-Speech)를 거쳐 오디오로 렌더링되어 Frontend 사용자에게 플레이됨.
+3. **지원자 발화 데이터 수집 및 STT (Backend ↔ AI-Worker)**
+   - 사용자가 마이크를 통해 발화한 오디오 데이터(또는 청크)를 수집.
+   - AI-Worker의 **Whisper 모델** 큐(Task)로 오디오를 비동기 전송하여 Text로 변환 후 `Transcripts` DB에 화자 `User` 측 발화 기록으로 적재.
+4. **실시간 비전 데이터 처리 (Media-Server ↔ AI-Worker)**
+   - 카메라 스트리밍 영상 프레임을 주기로 추출하여 `MediaPipe` 모듈 구동. 
+   - 실시간 얼굴 랜드마크 분석으로 시선 분산도, 눈 깜빡임 빈도, 표정(Emotion) 상태 등의 메타 데이터를 산출하여 메모리(Redis)에 상태 누적 저장.
+5. **동적 꼬리 질문 생성 (Dynamic Follow-up Question)**
+   - 발화(STT)가 종료됨을 감지하면 최근 대화 히스토리(`Transcripts`)를 컨텍스트로 묶어 AI-Worker에 전송. 
+   - LLM이 답변의 부족한 점이나 깊이 있는 기술적 내용을 파고드는 꼬리물기 질문을 신규 생성.
+
+### 3.4 종합 평가 및 대시보드 (Evaluation & Report Domain)
+1. **종합 루브릭 평가 백그라운드 태스크 (AI-Worker)**
+   - 인터뷰 세션 종료 시(`completed`), 해당 면접의 모든 Transcript 대화 이력과 누적된 비전(Vision) 감정 분석 데이터를 패키징.
+   - **LLM 평가 로직**: 사전에 정의된 직무 평가 프롬프트를 이용해 "기술적 정확성", "의사소통 능력", "기업 문화 핏(Culture Fit)" 점수를 도출.
+   - 평가 결과를 JSON 구조화 하여 `evaluation_reports` 테이블에 최종 저장.
+2. **리포트 렌더링 (Frontend ↔ Backend)**
+   - `GET /api/v1/interviews/{session_id}/report` 엔드포인트 호출 시 평가 결과를 클라이언트로 전송.
+   - React 기반 차트 라이브러리를 활용해 시각적 지원자 대시보드 화면 구성 (점수 방사형 차트, 시선 불안정 구간 하이라이트, 스크립트 기반 상세 피드백 등).
 
 ---
-
-## 6. 인프라 및 보안 수준 (Infra & Security Specifications)
-
-*   **배포 아키텍처**:
-    *   운영 체제 환경 독립성 확보를 위해 Docker 및 Docker Compose를 활용하여 전 모듈 컨테이너화 체계 적용.
-    *   NVIDIA Container Toolkit 기반으로 AI-Worker 컴포넌트에 GPU(VRAM 자원)를 독점/분산 할당.
-*   **보안 방침**:
-    *   모든 인증은 Stateless 방식을 취하는 JWT 기반으로 이루어지며, 무결성 검증을 거침.
-    *   민감한 API Key 및 모델 경로 파라미터는 환경 변수(`.env`)를 사용하여 소스 코드 내 하드코딩을 원천 차단.
-    *   Celery Task의 Retry 정책 도입으로 네트워크나 순간 부하에 의한 데이터 유실(Faults)을 최소화.
-
----
-**문서 작성일**: 2026년 2월 23일
-**작성자**: Big20 시스템 자동화 봇
+**문서 업데이트 날짜**: 2026년 2월 24일
+**문서 권한**: Big20 시스템 자동화 봇
