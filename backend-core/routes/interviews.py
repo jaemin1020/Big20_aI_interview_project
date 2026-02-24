@@ -408,6 +408,34 @@ async def complete_interview(
     )
     return {"status": "completed", "interview_id": interview_id}
 
+
+# [신규] 행동 분석 점수 저장 (media-server에서 호출)
+@router.patch("/{interview_id}/behavior-scores")
+async def save_behavior_scores(
+    interview_id: int,
+    request: dict,
+    db: Session = Depends(get_session),
+):
+    """
+    media-server에서 면접 종료 시 호출.
+    질문별 영상+음성 통합 채점 결과를 Interview.emotion_summary에 저장.
+    
+    Args:
+        interview_id: 면접 ID
+        request: {"per_question": [...], "averages": {...}, ...}
+    """
+    interview = db.get(Interview, interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    interview.emotion_summary = request
+    interview.overall_score = request.get("averages", {}).get("total")
+    db.add(interview)
+    db.commit()
+    
+    logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
+    return {"status": "saved", "interview_id": interview_id}
+
 # 평가 리포트 조회
 @router.get("/{interview_id}/report", response_model=EvaluationReportResponse)
 async def get_evaluation_report(
