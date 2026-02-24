@@ -234,6 +234,75 @@ def generate_next_question_task(self, interview_id: int):
                 final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
                 logger.info(f"Template stage '{next_stage['stage']}' (v2) → 즉시 포맷 완료 (Direct Extraction)")
 
+            elif next_stage.get("type") == "template_quoted":
+                # ==========================================
+                # [template_quoted] RAG 문장 추출 후 template 직접 주입 (hallucination 차단)
+                # ==========================================
+                query_template_tq = next_stage.get("query_template", interview.position)
+                try:
+                    query_tq = query_template_tq.format(
+                        target_role=interview.position or "해당 직무",
+                        major=major or ""
+                    )
+                except (KeyError, ValueError):
+                    query_tq = query_template_tq
+
+                rag_results_tq = retrieve_context(query_tq, resume_id=interview.resume_id, top_k=5)
+                raw_text = "\n".join([r['text'] for r in rag_results_tq]) if rag_results_tq else ""
+
+                # 텍스트 정규화: 개행을 공백으로 변환
+                normalized_text = re.sub(r'\n+', ' ', raw_text).strip()
+
+                # 한국어 문장 단위 분리 (하다. / 입니다. / 거니다. 등)
+                sentences = re.split(r'(?<=[\ub2e4\uc694])\. ?', normalized_text)
+
+                extract_keywords = next_stage.get("extract_keywords", [])
+                quote = ""
+
+                if extract_keywords and sentences:
+                    best_sentence = ""
+                    best_score = 0
+                    for sent in sentences:
+                        sent = sent.strip()
+                        if len(sent) < 10:
+                            continue
+                        score = sum(1 for kw in extract_keywords if kw in sent)
+                        if score > best_score or (score == best_score and len(sent) > len(best_sentence)):
+                            best_score = score
+                            best_sentence = sent
+                    if best_sentence and best_score > 0:
+                        # 문장 끝 마침표 복원
+                        quote = best_sentence.rstrip('.') + '.'
+
+                # 폴백: 키워드 매칭 실패 시 첫 번째 의미있는 문장 사용
+                if not quote:
+                    fallback_sents = [s.strip() for s in sentences if len(s.strip()) > 20]
+                    quote = fallback_sents[0].rstrip('.') + '.' if fallback_sents else "자기소개서에 기재하신 내용"
+
+                # template 변수 준비
+                candidate_name_tq = "지원자"
+                target_role_tq = interview.position or "해당 직무"
+                if interview.resume and interview.resume.structured_data:
+                    sd_tq = interview.resume.structured_data
+                    if isinstance(sd_tq, str): sd_tq = json.loads(sd_tq)
+                    candidate_name_tq = sd_tq.get("header", {}).get("name", "지원자")
+
+                tpl_tq = next_stage.get("template", "{candidate_name} 지원자님, 자기소개서에 '{quote}'라고 쓰셨는데, 이에 대해 구체적으로 말씀해 주세요.")
+                try:
+                    formatted = tpl_tq.format(
+                        candidate_name=candidate_name_tq,
+                        quote=quote,
+                        target_role=target_role_tq
+                    )
+                except Exception as fmt_err:
+                    logger.warning(f"template_quoted formatting error: {fmt_err}")
+                    formatted = tpl_tq.replace("{candidate_name}", candidate_name_tq).replace("{quote}", quote).replace("{target_role}", target_role_tq)
+
+                display_name = next_stage.get("display_name", "면접질문")
+                intro_msg = next_stage.get("intro_sentence", "")
+                final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
+                logger.info(f"template_quoted stage '{next_stage['stage']}' → 인용문 추출 성공: '{quote[:60]}...'")
+
             else:
                 # [로직 단순환] 꼬리질문과 일반 질문의 컨텍스트 분리
                 if next_stage.get("type") == "followup":
@@ -362,6 +431,7 @@ def generate_next_question_task(self, interview_id: int):
                 category=db_category,
                 stage=next_stage['stage'],
                 guide=next_stage.get('guide', ''),
+                rubric_json=next_stage.get('rubric'),  # stage별 루브릭 주입
                 session=session
             )
 

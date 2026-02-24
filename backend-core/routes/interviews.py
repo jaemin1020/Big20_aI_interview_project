@@ -199,7 +199,7 @@ async def create_interview(
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config["stage"],
-                rubric_json={"criteria": ["명확성"]},
+                rubric_json=stage_config.get("rubric", {"criteria": ["명확성"]}),
                 position=target_role
             )
             db.add(question)
@@ -716,7 +716,7 @@ async def create_realtime_interview(
                 category=QuestionCategory.BEHAVIORAL,
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config.get("stage", "general"),
-                rubric_json={"criteria": ["명확성"]},
+                rubric_json=stage_config.get("rubric", {"criteria": ["명확성"]}),
                 position=target_role
             )
             db.add(question)

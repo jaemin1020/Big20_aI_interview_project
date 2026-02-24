@@ -350,22 +350,23 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             session.add(interview)
             session.commit()
 
-def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, session: Session = None):
+def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None, session: Session = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
     if session is None:
         with Session(engine) as new_session:
-            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
+            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide, rubric_json)
     else:
-        return _save_generated_question_logic(session, interview_id, content, category, stage, guide)
+        return _save_generated_question_logic(session, interview_id, content, category, stage, guide, rubric_json)
 
-def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None):
+def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None):
     # 1. Question 테이블 저장
+    final_rubric = rubric_json if rubric_json else {"guide": guide}
     question = Question(
         content=content,
         category=category,
         difficulty=QuestionDifficulty.MEDIUM,
         question_type=stage,
-        rubric_json={"guide": guide},
+        rubric_json=final_rubric,
         is_active=True
     )
     session.add(question)
