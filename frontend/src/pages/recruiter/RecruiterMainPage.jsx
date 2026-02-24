@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import './RecruiterMainPage.css';
 import JobPostingCreatePage from './JobPostingCreatePage';
 import JobPostingListPage from './JobPostingListPage';
+import CandidateManagementPage from './CandidateManagementPage';
 
 function RecruiterMainPage({ user, onLogout, onNavigate }) {
     const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -61,6 +62,8 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                 return { title: '공고 등록', subtitle: '새로운 채용 공고를 등록하세요' };
             case 'job_posting_list':
                 return { title: '공고 현황', subtitle: '등록된 채용 공고를 관리하세요' };
+            case 'candidate_management':
+                return { title: '지원자 관리', subtitle: '면접 현황 및 지원자를 관리하세요' };
             case 'dashboard':
             default:
                 return { title: '면접 운영 대시보드', subtitle: '실시간 면접 현황을 한눈에 확인하세요' };
@@ -312,6 +315,13 @@ function RecruiterMainPage({ user, onLogout, onNavigate }) {
                             user={user}
                             onNavigate={(page) => setActiveMenu(page)}
                         />
+                    </div>
+                )}
+
+                {/* 지원자 관리 콘텐츠 */}
+                {activeMenu === 'candidate_management' && (
+                    <div className="dashboard-content">
+                        <CandidateManagementPage />
                     </div>
                 )}
             </main>
