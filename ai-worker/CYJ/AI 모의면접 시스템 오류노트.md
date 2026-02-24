@@ -563,16 +563,16 @@
 
 ### 4.7. 📋 2026-02-23~24 작업 요약
 
-| # | 작업 내용 | 관련 파일 | 상태 |
-|---|----------|----------|------|
-| 1 | session_id 타입 불일치 수정 (str 통일) | `media-server/main.py` | ✅ 완료 |
-| 2 | Vision HUD 크래시 수정 (옵셔널 체이닝) | `frontend/InterviewPage.jsx` | ✅ 완료 |
-| 3 | 음성 점수 보정 (40~100 스케일) | `media-server/main.py` | ✅ 완료 |
-| 4 | 디버그 로그 정리 (서버 부하 감소) | `media-server/main.py` | ✅ 완료 |
-| 5 | 질문별 통합 채점 기능 추가 | `media-server/main.py` | ✅ 완료 |
-| 6 | DB 저장 API 추가 (behavior-scores) | `backend-core/routes/interviews.py` | ✅ 완료 |
-| 7 | DB 전송 로직 추가 (urllib) | `media-server/main.py` | ✅ 완료 |
-| 8 | stt.py 백틱 버그 발견 | `ai-worker/tasks/stt.py` | 🔍 발견 |
-| 9 | TTS AbortError 발견 | `frontend/InterviewPage.jsx` | 🔍 발견 |
+| # | 파트 | 문제 | 원인 | 해결 | 상태 |
+|---|------|------|------|------|------|
+| 1 | 미디어 서버 | 음성 자신감 점수가 항상 0점으로 표시 | `/offer`에서 session_id가 정수(1)로, WebSocket에서는 문자열("1")로 저장되어 딕셔너리 키가 불일치 → 녹음 플래그가 항상 False | session_id를 `str()`로 감싸서 타입 통일 | ✅ 완료 |
+| 2 | 프론트엔드 (영상 분석 HUD) | 답변 제출 시 흰 화면 크래시 발생 | 서버가 얼굴 미감지 시 `scores` 필드 없이 전송하는데, 프론트에서 `visionData.scores.smile`에 바로 접근하여 `undefined` 에러 | `visionData.status === 'detected'` 조건 추가 후 scores 접근 | ✅ 완료 |
+| 3 | 미디어 서버 (음성 분석) | 정상 발화인데 자신감 점수가 6.7점으로 측정 | WebRTC 오디오의 RMS 값이 0.023 수준으로 낮은데, 기존 공식(`RMS * 500`)이 이 범위에 맞지 않음. 발화 임계값(0.05)도 너무 높음 | 점수 공식을 40~100 스케일로 재보정, 발화 임계값을 0.02로 하향 → 73.3점으로 정상화 | ✅ 완료 |
+| 4 | 미디어 서버 | Docker 로그에 불필요한 로그가 초당 수십 줄씩 출력 | aiortc/aioice/av 라이브러리의 RTP/RTCP 패킷 디버그 로그가 과도하게 출력 | 해당 라이브러리 로그 레벨을 WARNING으로 상향 | ✅ 완료 |
+| 5 | 미디어 서버 (채점 시스템) | 질문별 개별 채점이 불가, 전체 평균만 존재 | 질문 단위로 영상+음성 데이터를 분리 관리하는 구조가 없었음 | `_score_question()` 메서드 추가, `switch_question()` 시 자동 채점, 질문별 내역 테이블 출력 | ✅ 완료 |
+| 6 | 백엔드 API | 행동 분석 점수를 DB에 저장할 API가 없음 | 미디어 서버에서 계산된 점수를 백엔드 DB에 전달하는 엔드포인트 미구현 | `PATCH /interviews/{id}/behavior-scores` API 신규 추가 (interviews.emotion_summary + transcripts.emotion 저장) | ✅ 완료 |
+| 7 | 미디어 서버 → 백엔드 연동 | 미디어 서버에서 백엔드로 점수를 보내는 로직이 없음 | generate_final_report()에서 점수 계산만 하고 DB 전송 코드가 없었음 | `urllib.request`로 백엔드 API에 HTTP PATCH 요청 전송하는 로직 추가 | ✅ 완료 |
+| 8 | STT (음성 인식) | 환경변수 `WHISPER_MODEL_SIZE` 설정이 무시됨 | `os.getenv()` 호출 시 변수명에 백틱(`)이 포함되어 있어 OS 환경변수와 이름 불일치 | 발견만 됨 (기본값이 올바른 모델이라 동작에는 영향 없음) | 🔍 발견 |
+| 9 | TTS (음성 합성) / 프론트엔드 | 질문 전환 시 TTS 오디오가 간헐적으로 재생 안 됨 | `pause()` 처리 완료 전에 새 Audio 객체의 `play()` 호출 → 브라우저가 AbortError 발생 | 발견만 됨 (기능적 영향 낮음) | 🔍 발견 |
 
 **핵심 해결**: `session_id` 타입 불일치(정수 vs 문자열) → 음성 녹음 플래그가 False로 고정 → 오디오 점수 계산 불가. `str()` 한 줄 추가로 해결.
