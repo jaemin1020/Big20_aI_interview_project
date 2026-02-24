@@ -186,6 +186,14 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
     
     logger.info(f"🔊 [TTS 태스크 시작] ID: {question_id if question_id else 'N/A'}, 텍스트 길이: {len(text)}")
     
+    # [최적화] 이미 파일이 존재하면 중복 합성 스킵 (여러 곳에서 동시에 trigger 될 수 있음)
+    if question_id is not None:
+        import pathlib
+        existing_file = pathlib.Path(f"/app/uploads/tts/q_{question_id}.wav")
+        if existing_file.exists() and existing_file.stat().st_size > 0:
+            logger.info(f"⏩ [TTS 스킵] 파일 이미 존재: {existing_file} ({existing_file.stat().st_size} bytes)")
+            return {"status": "success", "audio_size_bytes": existing_file.stat().st_size, "duration_ms": 0}
+    
     if tts_engine is None:
         logger.info("⚙️ TTS 엔진 초기화 중...")
         load_tts_engine()

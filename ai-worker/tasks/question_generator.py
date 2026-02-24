@@ -5,7 +5,7 @@ import json
 import gc 
 import logging
 import torch
-from datetime import datetime
+from datetime import datetime, timezone
 from celery import shared_task
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -370,10 +370,19 @@ def generate_next_question_task(self, interview_id: int):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            # 8. TTS 생성 태스크 즉시 트리거
+            # 8. TTS 생성 태스크 즉시 트리거 (중복 방지: 파일 존재 확인)
             if q_id:
-                logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
-                synthesize_task.delay(final_content, language="auto", question_id=q_id)
+                import pathlib
+                tts_file = pathlib.Path(f"/app/uploads/tts/q_{q_id}.wav")
+                if not tts_file.exists():
+                    # [단계] 태그 제거 (TTS가 읽는 클린 텍스트)
+                    clean_text = final_content
+                    if final_content.startswith('[') and ']' in final_content:
+                        clean_text = final_content.split(']', 1)[-1].strip()
+                    logger.info(f"🔊 Triggering TTS synthesis for Question ID: {q_id}")
+                    synthesize_task.delay(clean_text, language="ko", question_id=q_id)
+                else:
+                    logger.info(f"🔊 TTS file already exists for Question ID: {q_id}, skipping.")
 
             return {"status": "success", "stage": next_stage['stage'], "question": final_content}
     except Exception as e:

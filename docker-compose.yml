@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql
       - ./backend-core/data:/data
     ports:
-      - "15432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
 
     networks:
       - interview_network
@@ -107,6 +107,7 @@ services:
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
+      - supertonic_cache_gpu:/root/.cache # Supertonic 모델 캐시 영속화 (22개 파일 재다운로드 방지)
     networks:
       - interview_network
 
@@ -146,6 +147,7 @@ services:
       - ./ai-worker/models:/app/models
       - ./backend-core/uploads:/app/uploads
       - ./backend-core:/backend-core
+      - supertonic_cache_cpu:/root/.cache # Supertonic 모델 캐시 영속화 (22개 파일 재다운로드 방지)
     networks:
       - interview_network
 
@@ -195,3 +197,5 @@ networks:
 
 volumes:
   postgres_data:
+  supertonic_cache_gpu: # AI Worker GPU - Supertonic 모델 캐시
+  supertonic_cache_cpu: # AI Worker CPU - Supertonic 모델 캐시

@@ -135,18 +135,20 @@ class VideoAnalysisTrack(MediaStreamTrack):
         self.current_q_index = 0
         self.current_q_data = self._get_empty_q_data()
         
-        # [신규] 전체 면접 통합 데이터 버켓 (모든 프레임 누적)
+        # 전체 면접 통합 데이터 버켓 (모든 프레임 누적)
         self.session_all_data = self._get_empty_q_data()
         
-        # [신규] 오디오 자신감 점수 누적 리스트 (최종 리포트용)
+        # 오디오 자신감 점수 누적 리스트 (전체 + 질문별)
         self.audio_scores = []
+        
+        # [신규] 질문별 최종 점수 저장 (DB 저장용)
+        self.questions_scores = []
         
         # 실시간 로그 쿨타임
         self.last_log_time = 0
         self.last_tracking_time = 0
         
-        # [DEBUG] 생성 완료 로그
-        print(f"✅ [{session_id}] VideoAnalysisTrack 초기화 완료 (Analyzer: {self.analyzer is not None})", flush=True)
+        print(f"✅ [{self.session_id}] VideoAnalysisTrack 초기화 완료", flush=True)
 
     def _get_empty_q_data(self):
         """새 질문을 위한 빈 데이터 구조 생성"""
@@ -156,18 +158,64 @@ class VideoAnalysisTrack(MediaStreamTrack):
             "gaze_center_frames": 0,
             "posture_stable_frames": 0,
             "total_frames": 0,
+            "audio_scores": [],  # 질문별 음성 자신감 점수
             "start_time": time.time()
         }
 
+    def _score_question(self, q_data, q_index):
+        """질문 하나의 영상+음성 통합 점수 계산 및 로그 출력"""
+        v = self._calculate_scores(q_data)
+        if not v:
+            return None
+        
+        # 영상 점수 (보정된 40~100 스케일)
+        val_smile = v['avg_smile']
+        val_gaze = v['gaze_ratio']
+        val_posture = v['posture_ratio']
+        val_emotion = ((100 - v['avg_anxiety']) * 0.6) + 40
+        
+        # 음성 점수 (해당 질문 동안의 평균)
+        q_audio = q_data.get("audio_scores", [])
+        val_audio = sum(q_audio) / len(q_audio) if q_audio else 0
+        
+        # 가중합 (시선30, 음성30, 미소15, 자세15, 정서10)
+        q_total = (
+            (val_gaze * 0.30) +
+            (val_audio * 0.30) +
+            (val_smile * 0.15) +
+            (val_posture * 0.15) +
+            (val_emotion * 0.10)
+        )
+        
+        result = {
+            "q_idx": q_index,
+            "gaze": round(val_gaze, 1),
+            "audio": round(val_audio, 1),
+            "smile": round(val_smile, 1),
+            "posture": round(val_posture, 1),
+            "emotion": round(val_emotion, 1),
+            "total": round(q_total, 1),
+            "frames": v['total_frames']
+        }
+        
+        print(f"📝 [{self.session_id}] {q_index}번 질문 채점: "
+              f"시선{val_gaze:.0f} 음성{val_audio:.0f} 미소{val_smile:.0f} "
+              f"자세{val_posture:.0f} 정서{val_emotion:.0f} → 합계 {q_total:.1f}점", flush=True)
+        
+        return result
+
     def switch_question(self, new_index):
         """질문이 바뀔 때 호출 (from WebSocket)"""
-        # [변경] 중간 리포트 출력은 생략하고 데이터만 백업
         if self.current_q_data["total_frames"] > 0:
             self.questions_history.append(self.current_q_data)
+            # 질문별 채점 수행
+            score = self._score_question(self.current_q_data, self.current_q_index)
+            if score:
+                self.questions_scores.append(score)
         
         self.current_q_index = new_index
         self.current_q_data = self._get_empty_q_data()
-        print(f"➡️ [{self.session_id}] {new_index}번 질문으로 전환됨 (연속 추적 중...)", flush=True)
+        print(f"➡️ [{self.session_id}] {new_index}번 질문으로 전환됨", flush=True)
 
     def _calculate_scores(self, q_list):
         """질문 리스트(또는 단일 질문)로부터 POC 가중치 기반 점수 계산"""
@@ -245,94 +293,78 @@ class VideoAnalysisTrack(MediaStreamTrack):
         print("-" * 50 + "\n")
 
     def generate_final_report(self):
-        """면접 종료 시 전체 합산 리포트 로그 출력 (POC 디자인)"""
-        # [변경] 모든 프레임이 이미 session_all_data에 모여있으므로 이를 기반으로 계산
-        s = self._calculate_scores(self.session_all_data)
-        if not s: 
-            print(f"⚠️ [{self.session_id}] 세션 동안 분석된 데이터가 없습니다.")
-            return
+        """면접 종료 시 질문별 + 최종 종합 리포트 출력"""
+        # 마지막 질문 채점 (아직 switch_question이 호출 안 됐으므로)
+        if self.current_q_data["total_frames"] > 0:
+            self.questions_history.append(self.current_q_data)
+            score = self._score_question(self.current_q_data, self.current_q_index)
+            if score:
+                self.questions_scores.append(score)
 
-        print("\n" + "="*50)
-        print(f"🏆 AI 면접 [최종 종합] 분석 리포트 [{self.session_id}]")
-        print("="*50)
-        print(f"⏱️ 총 질문 수: {len(self.questions_history) + 1}개")
-        print(f"⏱️ 분석 기간: {int(time.time() - self.session_started_at)}초 / {s['total_frames']} frames")
-        print("-" * 50)
-        # [NEW] 오디오 자신감 최종 리포트 합산 (Video + Audio)
-        # 사용자 요청 가중치: 시선(30), 음성(30), 미소(15), 자세(15), 정서(10)
-        
-        final_audio_score = 0
-        audio_feedback = "(데이터 없음)"
+        print("\n" + "="*60)
+        print(f"🏆 AI 면접 최종 리포트 [{self.session_id}]")
+        print("="*60)
+        print(f"⏱️ 총 질문 수: {len(self.questions_scores)}개")
+        print(f"⏱️ 면접 시간: {int(time.time() - self.session_started_at)}초")
+        print("-" * 60)
 
-        if self.audio_scores:
-            final_audio_score = sum(self.audio_scores) / len(self.audio_scores)
-            if final_audio_score >= 70:
-                audio_feedback = "👍 아주 좋습니다! (자신감 넘침)"
-            elif final_audio_score >= 60:
-                audio_feedback = "👌 안정적입니다. (무난함)"
-            else:
-                audio_feedback = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+        # ── 질문별 점수 내역 ──
+        if self.questions_scores:
+            print(f"\n{'질문':>4} | {'시선':>5} | {'음성':>5} | {'미소':>5} | {'자세':>5} | {'정서':>5} | {'합계':>6}")
+            print("-" * 60)
+            for qs in self.questions_scores:
+                print(f"  Q{qs['q_idx']:>2} | {qs['gaze']:5.1f} | {qs['audio']:5.1f} | {qs['smile']:5.1f} | {qs['posture']:5.1f} | {qs['emotion']:5.1f} | {qs['total']:6.1f}")
+            
+            # 총합 계산 (질문별 합계의 평균)
+            avg_total = sum(qs['total'] for qs in self.questions_scores) / len(self.questions_scores)
+            avg_gaze = sum(qs['gaze'] for qs in self.questions_scores) / len(self.questions_scores)
+            avg_audio = sum(qs['audio'] for qs in self.questions_scores) / len(self.questions_scores)
+            avg_smile = sum(qs['smile'] for qs in self.questions_scores) / len(self.questions_scores)
+            avg_posture = sum(qs['posture'] for qs in self.questions_scores) / len(self.questions_scores)
+            avg_emotion = sum(qs['emotion'] for qs in self.questions_scores) / len(self.questions_scores)
+            
+            print("-" * 60)
+            print(f"  평균 | {avg_gaze:5.1f} | {avg_audio:5.1f} | {avg_smile:5.1f} | {avg_posture:5.1f} | {avg_emotion:5.1f} | {avg_total:6.1f}")
+            print("=" * 60)
+            print(f"\n   ✅ 최종 종합 점수: {avg_total:.1f}점")
+            print(f"   📊 시선(30%): {avg_gaze:.1f} | 음성(30%): {avg_audio:.1f} | 미소(15%): {avg_smile:.1f}")
+            print(f"   📊 자세(15%): {avg_posture:.1f} | 정서(10%): {avg_emotion:.1f}")
+            
+            # ── DB 저장 (backend-core로 HTTP 전송) ──
+            try:
+                import urllib.request
+                import json as json_lib
+                db_payload = {
+                    "per_question": self.questions_scores,
+                    "averages": {
+                        "gaze": round(avg_gaze, 1),
+                        "audio": round(avg_audio, 1),
+                        "smile": round(avg_smile, 1),
+                        "posture": round(avg_posture, 1),
+                        "emotion": round(avg_emotion, 1),
+                        "total": round(avg_total, 1)
+                    },
+                    "interview_duration_sec": int(time.time() - self.session_started_at),
+                    "total_questions": len(self.questions_scores)
+                }
+                backend_url = os.getenv("BACKEND_URL", "http://backend:8000")
+                req = urllib.request.Request(
+                    f"{backend_url}/interviews/{self.session_id}/behavior-scores",
+                    data=json_lib.dumps(db_payload).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'},
+                    method='PATCH'
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    if resp.status == 200:
+                        print(f"   💾 DB 저장 완료! (interview_id={self.session_id})", flush=True)
+                    else:
+                        print(f"   ⚠️ DB 저장 실패: HTTP {resp.status}", flush=True)
+            except Exception as e:
+                print(f"   ⚠️ DB 저장 요청 실패: {e}", flush=True)
+        else:
+            print("   ⚠️ 채점된 질문이 없습니다.")
         
-        # 영상 점수는 이미 s 딕셔너리에 계산되어 있음 (단, 가중치 재조정 필요)
-        # 기존: 미소(30), 시선(30), 자세(20), 정서(20) -> 합 100
-        # 변경: 미소(15), 시선(30), 자세(15), 정서(10) + 음성(30) -> 합 100
-        
-        # 영상 원본 점수(Raw Score) 역산 또는 재사용
-        # s['avg_smile'] 등은 40~100으로 보정된 값임. 이를 그대로 재사용
-        
-        w_smile = 0.15
-        w_gaze = 0.30
-        w_posture = 0.15
-        w_emotion = 0.10
-        w_audio = 0.30
-        
-        # 재계산 (Weighted Sum)
-        new_overall_score = (
-            (s['avg_smile'] * w_smile) + 
-            (s['gaze_ratio'] * w_gaze) + 
-            (s['posture_ratio'] * w_posture) + 
-            ((100 - s['avg_anxiety']) * 0.10) +  # 정서안정 원본 값 사용 주의 (100 - anxiety)
-            (final_audio_score * w_audio)
-        )
-        # 중요: 정서안정(anxiety)은 낮을수록 좋으므로 (100-anxiety) 점수를 씀.
-        # 위 코드에서 s['score_emotion'] 계산 시 이미 보정 들어갔지만, 여기선 원본 비율로 다시 계산함이 정확함.
-        # 편의상 s['avg_smile'] 등은 이미 40~100 보정된 값이므로 그대로 씀. 
-        # 단, 정서안정은 s['avg_anxiety']가 %값이므로 (100 - s['avg_anxiety']) * 0.6 + 40 공식 적용 필요.
-        # 위 _calculate_scores 함수에서 adj_emotion을 이미 계산했으므로 그걸 쓰는게 안전.
-        
-        # 안전한 재계산 (이미 보정된 40~100점 스케일 점수들 사용)
-        # adj_smile, adj_focus(gaze), adj_posture, adj_emotion
-        # _calculate_scores 리턴값 딕셔너리 구조를 보면:
-        # "avg_smile": adj_smile, "gaze_ratio": adj_focus, "posture_ratio": adj_posture
-        # "score_conf": adj_smile * 0.3 ... 이런 식임.
-        
-        # 따라서 딕셔너리의 'avg_smile', 'gaze_ratio' 등은 이미 adj_된(보정된) 값임.
-        # 정서안정은 주의: s['avg_anxiety']는 Raw Anxiety임. 
-        # adj_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40  <- 이 로직이 맞음. 
-        # _calculate_scores에서 adj값을 다 리턴해주지는 않고 섞여있음. 다시 계산하자.
-        
-        val_smile = s['avg_smile'] # 이미 보정됨
-        val_gaze = s['gaze_ratio'] # 이미 보정됨
-        val_posture = s['posture_ratio'] # 이미 보정됨
-        val_emotion = ((100 - s['avg_anxiety']) * 0.6) + 40 # 수동 보정
-        
-        ultimate_score = (
-            (val_smile * 0.15) + 
-            (val_gaze * 0.30) + 
-            (val_posture * 0.15) + 
-            (val_emotion * 0.10) + 
-            (final_audio_score * 0.30)
-        )
-
-        print(f"   1. 시선집중     : {val_gaze:5.1f}점 x 0.30 = {val_gaze*0.30:4.1f}점")
-        print(f"   2. 음성자신감   : {final_audio_score:5.1f}점 x 0.30 = {final_audio_score*0.30:4.1f}점 | {audio_feedback}")
-        print(f"   3. 미소(자신감) : {val_smile:5.1f}점 x 0.15 = {val_smile*0.15:4.1f}점")
-        print(f"   4. 자세안정     : {val_posture:5.1f}점 x 0.15 = {val_posture*0.15:4.1f}점")
-        print(f"   5. 정서안정     : {val_emotion:5.1f}점 x 0.10 = {val_emotion*0.10:4.1f}점")
-        
-        print(f"   -------------------------------------------")
-        print(f"   ∑ 최종 종합 합계: {ultimate_score:.1f}점 (Audio & Video 통합)")
-        print("="*50 + "\n")
+        print("=" * 60 + "\n")
 
     async def process_vision(self, frame, timestamp_ms):
         if not self.analyzer.is_ready:
@@ -427,11 +459,9 @@ async def start_video_analysis(track, session_id):
                 frame_count += 1
                 curr = time.time()
                 
-                # [HEARTBEAT] 첫 프레임 및 100프레임마다 로그
+                # [HEARTBEAT] 첫 프레임 로그만 출력
                 if frame_count == 1:
-                    print(f"🎉 [{session_id}] 첫 프레임 수신 성공!", flush=True)
-                if frame_count % 100 == 0:
-                    print(f"📽️ [{session_id}] 현재까지 {frame_count} 프레임 수신됨...", flush=True)
+                    print(f"🎉 [{session_id}] 첫 영상 프레임 수신 성공!", flush=True)
 
                 # [성능 조절] 5FPS (0.2s 간격) 분석 
                 # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
@@ -472,21 +502,20 @@ async def start_remote_stt(track, session_id):
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
     CHUNK_DURATION_MS = 3000 
     accumulated_frames = []
-    
     try:
         while True:
             # 1. 오디오 프레임 수신 (항상)
             frame = await track.recv()
-            
-            # [핵심 수정] 녹음 버튼이 ON일 때만 프레임을 누적
+
+            # 녹음 버튼이 ON일 때만 프레임을 누적
             if not active_recording_flags.get(session_id, False):
-                continue  # 녹음 중 아니면 프레임 수신만 하고 버림 (버퍼 차단 방지)
+                continue
 
             accumulated_frames.append(frame)
-            
+
             # 150프레임(약 3초) 모이면 STT 전송
             if len(accumulated_frames) >= 150:
-                
+
                 # 2. WAV 변환 (In-Memory)
                 output_buffer = io.BytesIO()
                 output_container = av.open(output_buffer, mode='w', format='wav')
@@ -513,10 +542,16 @@ async def start_remote_stt(track, session_id):
                         volume_rms = np.sqrt(np.mean(audio_np**2))
                         
                         if volume_rms > 0.02:
-                            volume_score = min(volume_rms * 500, 100) 
-                            threshold = 0.05
-                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > threshold) / len(audio_np)
-                            speed_score = min(speaking_ratio * 200, 100)
+                            # 성량 점수: WebRTC 오디오 기준 (RMS 0.02~0.15 범위)
+                            # 영상 점수와 동일하게 40점 기본 + 올라갈수록 최대 100점
+                            volume_score = min(max((volume_rms - 0.02) / (0.15 - 0.02) * 60 + 40, 40), 100)
+
+                            # 발화 비율: threshold 0.05 → 0.02로 낮춤 (WebRTC 압축 오디오 기준)
+                            # 0.05는 너무 높아서 실제 발화 샘플도 잘 안 잡힘
+                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > 0.02) / len(audio_np)
+                            # 20% 이상 발화 시 100점 (기본 40점)
+                            speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
+
                             confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
 
                             if confidence_score >= 70:
@@ -532,10 +567,13 @@ async def start_remote_stt(track, session_id):
                                 f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
                             )
                             
+                            # VideoTrack에 점수 저장
                             if session_id in active_video_tracks:
                                 active_video_tracks[session_id].audio_scores.append(confidence_score)
+                                active_video_tracks[session_id].current_q_data["audio_scores"].append(confidence_score)
 
                 except Exception as e:
+                    print(f"[{session_id}] ❌ [ERROR] NumPy 오디오 분석 실패: {e}", flush=True)
                     logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
                 
                 # 5. Celery Task 배달 (AI Worker에게)
@@ -637,7 +675,7 @@ def force_localhost_candidate(sdp_str):
 async def offer(request: Request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    session_id = params.get("session_id", "unknown")
+    session_id = str(params.get("session_id", "unknown"))
     
     print(f"📨 [{session_id}] Received Offer SDP (First 500 chars): {params['sdp'][:500]}...", flush=True)
 

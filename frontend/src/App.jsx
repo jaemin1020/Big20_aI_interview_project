@@ -91,6 +91,9 @@ function App() {
   // Users selected interview for result view
   const [selectedInterview, setSelectedInterview] = useState(null);
 
+  // Recruiter Navigation State (Lifted for Logo Reset)
+  const [recruiterMenu, setRecruiterMenu] = useState('dashboard');
+
 
 
 
@@ -694,6 +697,35 @@ function App() {
     }
   };
 
+  // [추가] 현재 질문의 오디오 URL이 없을 경우 폴링하여 갱신 (TTS 지연 대응)
+  const questionsRef = useRef(questions);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
+  useEffect(() => {
+    // 인터뷰 중이고, 현재 질문은 있는데 audio_url이 없는 경우에만 실행
+    const currentQuestion = questionsRef.current[currentIdx];
+    if (step !== 'interview' || !interview || !currentQuestion || currentQuestion.audio_url) return;
+
+    const interval = setInterval(async () => {
+      console.log(`🔄 [TTS Polling] Fetching audio URL for Question index ${currentIdx + 1}...`);
+      try {
+        const data = await getInterviewQuestions(interview.id);
+        const updatedQs = data.questions || [];
+
+        // 현재 인덱스의 질문에 오디오 URL이 생겼는지 확인
+        if (updatedQs[currentIdx]?.audio_url) {
+          console.log(`✅ [TTS Polling] Audio URL found: ${updatedQs[currentIdx].audio_url}`);
+          setQuestions(updatedQs);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("[TTS Polling] Failed to fetch questions:", err);
+      }
+    }, 2000); // 2초 간격으로 확인
+
+    return () => clearInterval(interval);
+  }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
+
   const nextQuestion = async () => {
     console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
     if (!interview || !questions || !questions[currentIdx]) {
@@ -842,10 +874,17 @@ function App() {
               alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
               return;
             }
-            navigateSafe('main');
+            if (user && (user.role === 'recruiter' || user.role === 'admin')) {
+              setRecruiterMenu('dashboard');
+              navigateSafe('recruiter_main');
+            } else {
+              navigateSafe('main');
+            }
           }}
           isInterviewing={step === 'interview'}
           isComplete={step === 'complete'}
+          isRecruiter={step === 'recruiter_main'}
+          hideMenuButtons={step === 'recruiter_main'}
           onHistory={() => navigateSafe('history')}
           onAccountSettings={() => navigateSafe('settings')}
           onProfileManagement={() => navigateSafe('profile')}
@@ -922,29 +961,7 @@ function App() {
         </div>
       )}
 
-      {/* Theme Toggle Button */}
-      <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '50%',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid var(--glass-border)',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-            cursor: 'pointer',
-            fontSize: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease'
-          }}
-        >
-          {isDarkMode ? '☀️' : '🌑'}
-        </button>
-      </div>
+
 
       <div style={{
         flex: 1,
@@ -1134,6 +1151,8 @@ function App() {
             user={user}
             onLogout={handleLogout}
             onNavigate={(page) => setStep(page)}
+            activeMenu={recruiterMenu}
+            setActiveMenu={setRecruiterMenu}
           />
         )}
 
