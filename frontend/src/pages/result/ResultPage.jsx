@@ -18,13 +18,14 @@ const ResultPage = ({ results, report, interview, onReset, onBack }) => {
   const getText = (data, defaultText) => data || defaultText;
 
   // Chart Data Preparation (6 Axes) using actual AI scores from report and details_json
+  // 폴백 하드코딩 제거: AI가 생성한 실제 점수만 표시 (없으면 0)
   const chartData = [
-    { subject: '기술 이해도', A: report?.technical_score || 85, fullMark: 100 },
-    { subject: '직무 경험', A: report?.details_json?.experience_score || 88, fullMark: 100 },
-    { subject: '문제 해결', A: report?.details_json?.problem_solving_score || 92, fullMark: 100 },
-    { subject: '의사소통', A: report?.communication_score || 80, fullMark: 100 },
-    { subject: '책임감', A: report?.details_json?.responsibility_score || 95, fullMark: 100 },
-    { subject: '성장 의지', A: report?.details_json?.growth_score || 90, fullMark: 100 },
+    { subject: '기술 이해도', A: report?.technical_score || 0, fullMark: 100 },
+    { subject: '직무 경험', A: report?.details_json?.experience_score || 0, fullMark: 100 },
+    { subject: '문제 해결', A: report?.details_json?.problem_solving_score || 0, fullMark: 100 },
+    { subject: '의사소통', A: report?.communication_score || 0, fullMark: 100 },
+    { subject: '책임감', A: report?.details_json?.responsibility_score || 0, fullMark: 100 },
+    { subject: '성장 의지', A: report?.details_json?.growth_score || 0, fullMark: 100 },
   ];
 
   const handleDownloadPDF = () => {

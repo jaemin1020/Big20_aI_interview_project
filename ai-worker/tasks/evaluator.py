@@ -15,11 +15,25 @@ from db import (
     Session,
     Transcript,
     Interview,
+    Company,
+    Resume,
     update_transcript_sentiment,
     update_question_avg_score,
     get_interview_transcripts,
     get_user_answers
 )
+from sqlmodel import select
+
+# 9~14번 스테이지: 인재상(ideal) 참고가 필요한 stage 목록
+# interview_scenario_transition.py의 order 9~14에 해당
+COMPANY_IDEAL_STAGES = {
+    "communication",          # 9. 협업/소통 질문
+    "communication_followup", # 10. 협업 심층
+    "responsibility",         # 11. 가치관/책임감 질문
+    "responsibility_followup",# 12. 가치관 심층
+    "growth",                 # 13. 성장가능성 질문
+    "growth_followup",        # 14. 성장가능성 심층
+}
 
 # AI-Worker 루트 디렉토리를 찾아 sys.path에 추가
 current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
@@ -63,12 +77,16 @@ class FinalReportSchema(BaseModel):
     responsibility_feedback: str = Field(description="답변의 일관성 및 업무에 임하는 책임감 분석")
     growth_feedback: str = Field(description="자기계발 의지 및 향후 발전 가능성에 대한 제언")
 
-    strengths: List[str] = Field(description="지원자의 주요 강점 2-3가지")
-    improvements: List[str] = Field(description="보완이 필요한 약점 및 개선점 2-3가지")
+    strengths: List[str] = Field(
+        description="지원자의 주요 강점 2-3가지. 각 항목은 면접 답변에서 구체적인 근거를 인용하여 2문장 이상의 완결된 서술형 문장으로 작성하십시오. 예: '프로젝트에서 RAG 도입의 타당성을 실험 데이터로 직접 검증한 점은 기술력과 분석 능력을 동시에 보여줍니다. 특히 키워드 검색 대비 벡터 검색의 hit rate를 수치로 비교한 접근 방식은 실무 역량을 증명합니다.'"
+    )
+    improvements: List[str] = Field(
+        description="보완이 필요한 약점 및 개선점 2-3가지. 각 항목은 면접 중 드러난 구체적인 사례를 인용하여 2문장 이상의 완결된 서술형 문장으로 작성하십시오. 단순 키워드나 나열식 표현은 금지합니다."
+    )
     summary_text: str = Field(description="성장을 위한 시니어 위원장의 최종 한마디 (3문장 내외)")
 
 @shared_task(name="tasks.evaluator.analyze_answer")
-def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
+def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
     """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
     logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
@@ -90,6 +108,52 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         # 엔진 가져오기
         llm_engine = get_exaone_llm()
         
+        # ── 인재상(ideal) 조회 (9~14번 스테이지만) ────────────────────────
+        company_ideal_section = ""
+        if question_type in COMPANY_IDEAL_STAGES:
+            try:
+                with Session(engine) as session:
+                    transcript_obj = session.get(Transcript, transcript_id)
+                    if transcript_obj:
+                        interview_obj = session.get(Interview, transcript_obj.interview_id)
+                        if interview_obj:
+                            company_obj = None
+
+                            # ① company_id가 있으면 직접 조회
+                            if interview_obj.company_id:
+                                company_obj = session.get(Company, interview_obj.company_id)
+
+                            # ② company_id 없으면 이력서의 target_company 이름으로 검색 (fallback)
+                            if not company_obj and interview_obj.resume_id:
+                                resume_obj = session.get(Resume, interview_obj.resume_id)
+                                if resume_obj and resume_obj.structured_data:
+                                    target_company = resume_obj.structured_data.get("header", {}).get("target_company", "")
+                                    if target_company:
+                                        # 공백 제거 후 완전 일치 매칭
+                                        # 예) "삼성전자 DS부문" == "삼성전자DS부문" (공백만 무시, 글자는 정확히 일치)
+                                        from sqlmodel import select as sql_select
+                                        normalized_target = target_company.replace(" ", "").lower()
+                                        all_companies = session.exec(sql_select(Company)).all()
+                                        company_obj = next(
+                                            (c for c in all_companies
+                                             if c.company_name and
+                                             c.company_name.replace(" ", "").lower() == normalized_target),
+                                            None
+                                        )
+                                        if company_obj:
+                                            logger.info(f"📄 '{target_company}' → '{company_obj.company_name}' 매칭 성공")
+
+                            if company_obj and company_obj.ideal:
+                                company_ideal_section = f"""
+
+[회사 인재상 참고]
+지원 회사: {company_obj.company_name}
+인재상: {company_obj.ideal}
+※ 위 인재상과의 부합 여부를 평가 시 반드시 반영하십시오."""
+                                logger.info(f"✅ [{question_type}] 인재상 로드 - {company_obj.company_name}")
+            except Exception as ideal_err:
+                logger.warning(f"⚠️ 인재상 조회 실패 (평가는 계속 진행): {ideal_err}")
+
         # 프롬프트 구성
         system_msg = "귀하는 전문 면접관이며, 지원자의 답변을 기술력과 의사소통 관점에서 평가합니다."
         user_msg = f"""다음 질문에 대한 지원자의 답변을 루브릭 기준에 맞춰 평가하십시오.
@@ -101,7 +165,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
 {answer_text}
 
 [평가 루브릭]
-{json.dumps(rubric, ensure_ascii=False) if rubric else "표준 면접 평가 기준"}
+{json.dumps(rubric, ensure_ascii=False) if rubric else "표준 면접 평가 기준"}{company_ideal_section}
 
 {parser.get_format_instructions()}"""
         
@@ -191,8 +255,10 @@ def generate_final_report(interview_id: int):
 
         conversation = "\n".join([f"{t.speaker}: {t.text}" for t in transcripts])
         if len(conversation) > 12000: # 대략 8000 토큰 내외로 자름 (안전 계수)
-            logger.info(f"⚠️ Conversation too long ({len(conversation)} chars). Truncating to fit LLM context.")
-            conversation = conversation[:5000] + "\n... (중략) ...\n" + conversation[-6000:]
+            logger.info(f"⚠️ Conversation too long ({len(conversation)} chars). Truncating: front 3000 + tail 8000.")
+            # 중후반부(경험/문제해결/협업/가치관/성장 Q&A)를 최대한 보존하기 위해
+            # 앞 3000자(소개/도입)보다 마지막 8000자(핵심 역량) 위주로 유지
+            conversation = conversation[:3000] + "\n... (중략 - 도입부 생략) ...\n" + conversation[-8000:]
 
         try:
             # LangChain Parser 설정
@@ -218,6 +284,7 @@ def generate_final_report(interview_id: int):
 - 결과는 반드시 시스템 연동을 위해 지정된 JSON 포맷으로만 출력하십시오.
 - 각 피드백은 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오.
 - strengths와 improvements는 반드시 문자열 배열([])로 작성하십시오.
+- strengths와 improvements의 각 항목은 반드시 면접 답변의 구체적인 내용을 근거로 인용하여, 2문장 이상의 완결된 서술형 문장으로 작성하십시오. 단순 키워드(예: '소통 능력', '기술력 우수')만 나열하는 것은 절대 금지합니다.
 
 {parser.get_format_instructions()}"""
             

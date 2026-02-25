@@ -66,7 +66,8 @@ async def create_transcript(
                         question.content,
                         transcript.text,
                         question.rubric_json,
-                        question.id
+                        question.id,
+                        question.question_type  # 9~14번 스테이지(협업/가치관/성장) 판별용
                     ],
                     queue="gpu_queue"
                 )

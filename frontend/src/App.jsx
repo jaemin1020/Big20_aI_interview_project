@@ -648,26 +648,32 @@ function App() {
 
   const pollReport = async (interviewId) => {
     setIsReportLoading(true);
-    const maxRetries = 20; // 약 1분간 시도 (3초 * 20)
+    // [버그1 수정] maxRetries 40번(120초)으로 연장. LLM 최종 리포트는 최대 2분 소요 가능
+    const maxRetries = 40;
     let retries = 0;
 
     const interval = setInterval(async () => {
       try {
         const finalReport = await getEvaluationReport(interviewId);
-        if (finalReport && finalReport.id) {
+        // [버그1 수정] id=0은 백엔드가 "아직 생성 중"일 때 반환하는 임시 응답.
+        // id가 1 이상인 경우에만 실제 DB에 저장된 리포트로 인식
+        if (finalReport && finalReport.id > 0) {
           setReport(finalReport);
           setIsReportLoading(false);
           clearInterval(interval);
+          console.log('✅ [pollReport] 리포트 생성 완료 (id:', finalReport.id, ')');
+        } else {
+          console.log(`🔄 [pollReport] 아직 생성 중... (retry: ${retries + 1}/${maxRetries})`);
         }
       } catch (err) {
-        console.log("Report still generating...");
+        console.warn("[pollReport] API 오류, 재시도 중...", err?.response?.status);
       }
 
       retries++;
       if (retries >= maxRetries) {
         setIsReportLoading(false);
         clearInterval(interval);
-        // alert('리포트 생성 시간이 너무 오래 걸립니다. 나중에 다시 확인해주세요.');
+        console.warn('[pollReport] 최대 재시도 횟수 초과. 폴링 종료.');
       }
     }, 3000);
   };
@@ -1068,9 +1074,11 @@ function App() {
           <InterviewCompletePage
             isReportLoading={isReportLoading}
             onCheckResult={() => {
-              // 면접 완료 후 바로 결과 확인: 이력에서 온 것이 아님 -> flag 제거
+              // [버그2 수정] 리포트가 아직 null이어도 result 페이지로 이동 허용
+              // ResultPage 자체에서 report=null 시 "분석 중" 메시지를 보여줌
               sessionStorage.removeItem('from_history');
               setStep('result');
+              console.log('[onCheckResult] report 상태:', report ? `id=${report.id}` : 'null (분석 중)');
             }}
             onExit={() => {
               setStep('main');

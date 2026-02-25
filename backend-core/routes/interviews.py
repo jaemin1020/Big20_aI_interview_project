@@ -603,7 +603,12 @@ async def get_evaluation_report(
         }
 
     # 🔄 데이터 매핑 (EvaluationReportResponse 형식에 맞춤)
-    report_dict = report.dict()
+    # [버그4 수정] .dict()는 최신 SQLModel/Pydantic에서 deprecated → .model_dump() 사용
+    # 구버전 호환을 위해 fallback 처리
+    try:
+        report_dict = report.model_dump()
+    except AttributeError:
+        report_dict = report.dict()
     report_dict["position"] = actual_position
     report_dict["company_name"] = actual_company
     report_dict["candidate_name"] = cand_name

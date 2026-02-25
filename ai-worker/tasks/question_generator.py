@@ -253,8 +253,10 @@ def generate_next_question_task(self, interview_id: int):
                 # 텍스트 정규화: 개행을 공백으로 변환
                 normalized_text = re.sub(r'\n+', ' ', raw_text).strip()
 
-                # 한국어 문장 단위 분리 (하다. / 입니다. / 거니다. 등)
-                sentences = re.split(r'(?<=[\ub2e4\uc694])\. ?', normalized_text)
+                # 한국어 문장 단위 분리
+                # '다.' '요.' 기준 + '십시오.' '세요.' 패턴도 경계로 처리
+                normalized_text = re.sub(r'(십시오|주세요|하세요)\s*\.?\s+', r'\1. ', normalized_text)
+                sentences = re.split(r'(?<=[다요오])\. ?', normalized_text)
 
                 extract_keywords = next_stage.get("extract_keywords", [])
                 quote = ""
@@ -266,18 +268,78 @@ def generate_next_question_task(self, interview_id: int):
                         sent = sent.strip()
                         if len(sent) < 10:
                             continue
+                        # 자소서 질문 문항 제외
+                        # '주십시오', '주세요', '세요' 등이 문장 어디에든 있으면 제외 (끝이 아니어도 포함)
+                        if re.search(r'십시오|주세요|하세요', sent):
+                            continue
                         score = sum(1 for kw in extract_keywords if kw in sent)
                         if score > best_score or (score == best_score and len(sent) > len(best_sentence)):
                             best_score = score
                             best_sentence = sent
                     if best_sentence and best_score > 0:
-                        # 문장 끝 마침표 복원
                         quote = best_sentence.rstrip('.') + '.'
 
-                # 폴백: 키워드 매칭 실패 시 첫 번째 의미있는 문장 사용
+                # 폴백: 키워드 매칭 실패 시 의미있는 문장 중 가장 긴 것 사용
                 if not quote:
-                    fallback_sents = [s.strip() for s in sentences if len(s.strip()) > 20]
+                    fallback_sents = sorted(
+                        [
+                            s.strip() for s in sentences
+                            if len(s.strip()) > 20
+                            # 자소서 질문 문항 제외 (문장 어디에든 포함되면 제외)
+                            and not re.search(r'십시오|주세요|하세요', s.strip())
+                        ],
+                        key=len, reverse=True
+                    )
                     quote = fallback_sents[0].rstrip('.') + '.' if fallback_sents else "자기소개서에 기재하신 내용"
+
+                # ✅ [핵심] quote 클리닝: [자소서 답변2-1], [이력서], [자소서 1번] 등 섹션 태그 제거
+                def clean_quote(q: str) -> str:
+                    q = re.sub(r'\[자소서\s*답변[\w\-]*\]\s*', '', q)   # [자소서 답변2-1] 등
+                    q = re.sub(r'\[자소서[^\]]*\]\s*', '', q)            # [자소서 1번] 등
+                    q = re.sub(r'\[이력서[^\]]*\]\s*', '', q)            # [이력서 ...] 등
+                    q = re.sub(r'\[[^\]]{1,25}\]\s*', '', q)             # 짧은 대괄호 태그 일반 제거
+                    q = re.sub(r'^\s*\.\.+\s*', '', q)                   # 앞에 붙은 '...' 제거
+                    q = re.sub(r'\s{2,}', ' ', q).strip()
+                    return q
+
+                quote = clean_quote(quote)
+                if not quote or len(quote) < 5:
+                    quote = "자기소개서에 기재하신 내용"
+
+                # ✅ [responsibility 전용] 가치관 검증 LLM
+                # 선택된 quote가 "직무에 대한 생각/가치관/철학" 문장인지 LLM이 검증
+                # 부적절하면 value 키워드 기반 후보 문장으로 자동 교체
+                if next_stage.get("stage") == "responsibility":
+                    try:
+                        logger.info(f"🔍 [Responsibility] 가치관 문장 검증 LLM 실행: '{quote[:50]}'")
+                        llm_for_check = get_exaone_llm()
+                        check_prompt = (
+                            f"[|system|]당신은 면접 질문 검수 전문가입니다. "
+                            f"아래 문장이 '지원자가 해당 직무에서 중요하게 생각하는 것, 가치관, 직업 철학, 일하는 방식에 대한 소신'과 관련된 내용이면 YES, "
+                            f"기술 스택·프로젝트 설명·자기소개·성장 계획 등 다른 내용이면 NO로만 답하십시오.\n\n"
+                            f"문장: {quote}\n직무: {interview.position or '해당 직무'}\n\nYES 또는 NO:[|endofturn|]\n[|assistant|]"
+                        )
+                        check_result = llm_for_check.invoke(check_prompt, temperature=0.0)
+                        is_valid = "YES" in check_result.upper()
+                        logger.info(f"🔍 가치관 문장 검증: {'✅ 유효' if is_valid else '❌ 부적절'} → raw='{check_result.strip()[:20]}'")
+
+                        if not is_valid:
+                            logger.info("⚠️ 가치관 검증 실패 → 대체 문장 탐색")
+                            value_kws = ["중요", "가치", "신념", "생각", "직무", "일하는", "임하는",
+                                         "소신", "철학", "중시", "기여", "역할", "바람", "지향"]
+                            alt_sents = [
+                                s.strip() for s in sentences
+                                if len(s.strip()) > 15
+                                and clean_quote(s.strip()).rstrip('.') != quote.rstrip('.')
+                                and any(kw in s for kw in value_kws)
+                            ]
+                            if alt_sents:
+                                new_quote = clean_quote(alt_sents[0]).rstrip('.') + '.'
+                                if len(new_quote) > 5:
+                                    quote = new_quote
+                                    logger.info(f"✅ 교체된 quote: '{quote[:60]}'")
+                    except Exception as check_err:
+                        logger.warning(f"⚠️ 가치관 검증 LLM 실패 (기존 quote 유지): {check_err}")
 
                 # template 변수 준비
                 candidate_name_tq = "지원자"
@@ -384,8 +446,12 @@ def generate_next_question_task(self, interview_id: int):
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
                 # 2. 앞줄 번호나 '질문:' 등의 태그 제거 (예: '1.', '질문:', "'1.")
                 final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
-                # 3. 중복 공백 제거 및 다시 한번 다듬기
-                final_content = final_content.strip()
+                # 3. 허용되지 않은 특수기호 제거
+                # 허용: 한글, 영문, 숫자, 공백, ' , . ?
+                # 제거: ~ ! * # @ [ ] { } / \ | ^ $ % & + = < > ; : " ` 등
+                final_content = re.sub(r'[^\w가-힣\s\',.?\u2019\u2018]', '', final_content)
+                # 4. 중복 공백 정리
+                final_content = re.sub(r'\s{2,}', ' ', final_content).strip()
 
                 # 인트로 메시지 조합 (3번 질문 전용 로직 포함)
                 candidate_name = "지원자"

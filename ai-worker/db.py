@@ -177,7 +177,9 @@ def get_interview_transcripts(interview_id: int):
     생성일자: 2026-02-04
     """
     with Session(engine) as session:
-        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order)
+        # [버그3 수정] User transcript는 order=NULL로 저장되어 order 정렬 시 순서 뒤섞임
+        # timestamp 기준으로 정렬해 AI/User 발화가 실제 시간 순서대로 LLM에 전달되도록 수정
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.timestamp)
         return session.exec(stmt).all()
 
 def get_user_answers(interview_id: int):
