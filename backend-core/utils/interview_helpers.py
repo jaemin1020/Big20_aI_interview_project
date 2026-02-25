@@ -130,7 +130,7 @@ def check_if_transition(major: str, target_role: str) -> bool:
     # 1. 기술(IT) 직무 키워드
     tech_role_keywords = ['개발', '엔지니어', '프로그래머', 'IT', 'SW', '소프트웨어', '데이터', '인공지능', 'AI', '보안', '시스템']
     # 2. 기술(IT) 전공 키워드 (이공계 핵심)
-    tech_major_keywords = ['컴퓨터', '소프트웨어', '정보통신', '전기', '전자', 'IT', '데이터', '인공지능', 'AI', '수학', '통계', '산업공학']
+    tech_major_keywords = ['컴퓨터', '소프트웨어', '정보통신','IT', '데이터', '인공지능', 'AI', '통계']
     
     # 지원 직무가 IT 관련인지 확인
     is_tech_role = any(kw in target_role for kw in tech_role_keywords)

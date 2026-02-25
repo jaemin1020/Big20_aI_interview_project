@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+// const API_BASE_URL = 'http://localhost:8000'; // localhost → IPv6([::1]) → wslrelay 막힘 이슈
+const API_BASE_URL = 'http://127.0.0.1:8000'; // IPv4 명시로 wslrelay 우회
 
 const api = axios.create({
     baseURL: API_BASE_URL,
