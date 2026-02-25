@@ -19,6 +19,7 @@ from utils.auth_utils import get_current_user
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
+logger.setLevel(logging.INFO)
 
 # Celery
 from celery_app import celery_app
@@ -97,18 +98,53 @@ async def create_interview(
 
     logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
 
-    # 이력서에서 지원 직무(target_role) 가져오기
-    from db_models import Resume
+    # 이력서에서 지원 직무(target_role) 및 회사명 가져오기
+    from db_models import Resume, Company
+    import json
     resume = db.get(Resume, interview_data.resume_id)
     target_role = "일반"
+    extracted_company_id = interview_data.company_id
+
     if resume and resume.structured_data:
-        target_role = resume.structured_data.get("header", {}).get("target_role") or "일반"
+        # DB에서 JSONB가 문자열로 넘어오는 경우를 대비한 파싱
+        s_data = resume.structured_data
+        if isinstance(s_data, str):
+            try:
+                s_data = json.loads(s_data)
+                if isinstance(s_data, str): # 이중 인코딩 대응
+                    s_data = json.loads(s_data)
+            except Exception as e:
+                logger.error(f"Failed to parse structured_data for auto-match: {e}")
+                s_data = {}
+
+        header = s_data.get("header", {}) if isinstance(s_data, dict) else {}
+        target_role = header.get("target_role") or "일반"
+
+        # [추가] 이력서에 회사명이 있고, 요청 데이터에 company_id가 없을 경우 자동 검색
+        if not extracted_company_id:
+            target_company_name = header.get("target_company")
+            logger.info(f"🔍 Extracted company name from resume: '{target_company_name}'")
+
+            if target_company_name:
+                stripped_name = str(target_company_name).strip()
+                # 대소문자 구분 없이 검색 (ILIKE 환경 고려)
+                from sqlalchemy import func
+                stmt = select(Company).where(func.lower(Company.company_name) == func.lower(stripped_name))
+                found_company = db.exec(stmt).first()
+                if found_company:
+                    extracted_company_id = found_company.id
+                    logger.info(f"🏢 Company auto-matched: '{stripped_name}' -> ID: {extracted_company_id}")
+                else:
+                    logger.warning(f"⚠️ No company found matching name: '{stripped_name}'")
+
+    # [최종 확인 로그]
+    logger.info(f"💾 Final company_id to be saved: '{extracted_company_id}' (Type: {type(extracted_company_id)})")
 
     # 1. Interview 레코드 생성
     new_interview = Interview(
         candidate_id=current_user.id,
         position=target_role, # 추출된 직무 사용
-        company_id=interview_data.company_id,
+        company_id=extracted_company_id, # 자동 매칭된 또는 입력된 ID 사용
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
@@ -422,11 +458,11 @@ async def save_behavior_scores(
     - transcripts.emotion → 각 질문별 채점 상세 저장 (User 발화 기준)
     """
     import json as json_lib
-    
+
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
+
     # ① interviews 테이블: 최종 평균 점수만 저장
     averages = request.get("averages", {})
     interview.emotion_summary = {
@@ -436,7 +472,7 @@ async def save_behavior_scores(
     }
     interview.overall_score = averages.get("total")
     db.add(interview)
-    
+
     # ② transcripts 테이블: 질문별 점수를 User transcript의 emotion에 저장
     per_question = request.get("per_question", [])
     if per_question:
@@ -447,7 +483,7 @@ async def save_behavior_scores(
                 Transcript.speaker == "User"
             ).order_by(Transcript.id)
         ).all()
-        
+
         for i, q_score in enumerate(per_question):
             if i < len(user_transcripts):
                 # emotion 컬럼에 채점 결과를 JSON 문자열로 저장
@@ -455,9 +491,9 @@ async def save_behavior_scores(
                 user_transcripts[i].sentiment_score = q_score.get("total")
                 db.add(user_transcripts[i])
                 logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
-    
+
     db.commit()
-    
+
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
     return {"status": "saved", "interview_id": interview_id}
 
