@@ -42,6 +42,11 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
  7. **꼬리질문(Follow-up) 규칙**: 지원자의 답변 중 핵심적인 구절을 골라 작은따옴표(' ') 안에 넣어 "...라고 하셨는데,"로 요약하며 시작하십시오. (예: 'RAG 아키텍처'라고 말씀하셨는데,)
  8. **심층 질문 전개**: 지원자가 답변한 내용 내에서만 심도 있게 질문하십시오. 외부 지식 인용이나 가짜 경험 조작은 절대 금지입니다. 가이드에서 요청하는 경우 어조를 유연하게 변경하십시오.
  9. **문장 검증(Self-Correction)**: 질문을 출력하기 전, 문장이 비논리적이거나 도중에 끊기지 않았는지, 그리고 질문의 의도가 명확한지 스스로 최종 확인하십시오. 어색한 비문은 자동으로 수정하여 완결된 문장만 출력하십시오.
+ 10. **지원자 이름 규칙 [중요]**: 지원자를 호칭할 때는 반드시 아래 [지원자 정보]에 명시된 이름만 사용하십시오. 대화 내용이나 답변 텍스트에서 이름을 추츠하거나 일치시키지 마십시오. STT 오인식된 이름이 대화에 나타나도 무시하십시오.
+
+[지원자 정보]
+- 지원자 이름: {candidate_name} (이 이름만 사용하십시오)
+- 지원 직무: {target_role}
 
 [이력서 및 답변 문맥]
 {context}
@@ -108,6 +113,14 @@ def generate_next_question_task(self, interview_id: int):
             ).order_by(Transcript.id.desc())
             last_user_transcript = session.exec(stmt_user).first()
 
+            # [신규] 이력서에서 candidate_name 선제 추출 (모든 분기에서 재사용)
+            candidate_name = "지원자"
+            if interview.resume and interview.resume.structured_data:
+                _sd_early = interview.resume.structured_data
+                if isinstance(_sd_early, str):
+                    _sd_early = json.loads(_sd_early)
+                candidate_name = _sd_early.get("header", {}).get("name", "지원자")
+
             # [삭제] 10초 이내 스킵 로직 (Race Condition 방지 목적이었으나 초기 템플릿 로드 시 방해됨)
 
             # [수정] 3. 전공/직무 기반 시나리오 결정
@@ -131,6 +144,31 @@ def generate_next_question_task(self, interview_id: int):
 
             logger.info(f"Current stage determined: {last_stage_name} (is_transition={is_transition})")
             next_stage = get_next_stage_func(last_stage_name)
+
+            # ── [심리적 안전장치] Redis에서 실시간 긴장도 조회 ────────────────────
+            anxiety_prefix = ""
+            try:
+                _rhost = os.getenv("REDIS_HOST", "redis")
+                _r_chk = redis.Redis(host=_rhost, port=6379, db=0, socket_connect_timeout=1, socket_timeout=1)
+                _anxiety_raw = _r_chk.get(f"interview_{interview_id}_anxiety")
+                _r_chk.close()
+                if _anxiety_raw:
+                    _anxiety_val = float(_anxiety_raw)
+                    if _anxiety_val >= 0.6:
+                        anxiety_prefix = (
+                            f"⚠️ [심리적 안전장치 발동] 지원자가 현재 매우 긴장한 상태입니다 (불안도 {_anxiety_val*100:.0f}%). "
+                            "다음 질문은 반드시 따뜻하고 갪려주는 톤으로 시작하십시오. "
+                            "이전 답변에서 잘 대답한 부분을 한 문장으로 먼저 인정한 뒤, "
+                            "부드럽고 열린 질문을 이어주십시오. "
+                            "절대 압박적이거나 날카로운 어조를 사용하지 마십시오. "
+                        )
+                        logger.warning(
+                            f"⚠️ [심리적 안전장치] Interview {interview_id}: "
+                            f"불안도 {_anxiety_val*100:.0f}% — 부드러운 질문 모드 ON"
+                        )
+            except Exception as _ex:
+                logger.debug(f"[심리적 안전장치] 긴장도 조회 실패 (무시): {_ex}")
+            # ──────────────────────────────────────────────────────────────────────
 
             if not next_stage:
                 logger.info(f"Interview {interview_id} finished. Transitioning to COMPLETED.")
@@ -427,7 +465,8 @@ def generate_next_question_task(self, interview_id: int):
                 for chunk in chain.stream({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
-                    "guide": next_stage.get('guide', ''),
+                    "guide": anxiety_prefix + next_stage.get('guide', ''),  # [심리적 안전장치] 긴장 시 prefix 추가
+                    "candidate_name": candidate_name,  # [이력서 고정] STT 오인식 방지
                     "target_role": interview.position or "지원 직무"
                 }):
                     if chunk:

@@ -59,6 +59,7 @@ async def create_transcript(
                 )
 
                 # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
+                # [성능 최적화] 다음 질문 생성을 방해하지 않도록 120초 지연 후 시작 (GPU Solo Pool 블로킹 방지)
                 celery_app.send_task(
                     "tasks.evaluator.analyze_answer",
                     args=[
@@ -69,7 +70,8 @@ async def create_transcript(
                         question.id,
                         question.question_type  # 9~14번 스테이지(협업/가치관/성장) 판별용
                     ],
-                    queue="gpu_queue"
+                    queue="gpu_queue",
+                    countdown=120
                 )
                 logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
     except Exception as e:
