@@ -362,7 +362,16 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
 
 def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None):
     # 1. Question 테이블 저장
-    final_rubric = rubric_json if rubric_json else {"guide": guide}
+    # [수정] guide는 질문 생성용 가이드이며 평가 기준(rubric)이 아님
+    # rubric_json이 없는 경우 표준 평가 기준을 사용 (guide를 rubric으로 오용 방지)
+    final_rubric = rubric_json if rubric_json else {
+        "criteria": ["기술적 정확성", "논리적 전달력", "직무 연관성"],
+        "focus": "지원자의 답변이 질문 의도에 맞게 구체적이고 논리적으로 전달되었는지 평가",
+        "scoring": {
+            "technical_score": "기술적 지식의 정확성과 깊이 (0-5)",
+            "communication_score": "답변의 논리성과 전달력 (0-5)"
+        }
+    }
     question = Question(
         content=content,
         category=category,
