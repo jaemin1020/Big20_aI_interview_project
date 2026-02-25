@@ -171,7 +171,7 @@ const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTrigge
             // 부모(App.jsx)의 user 상태 갱신
             if (onSave) onSave(updatedUser);
             alert('프로필이 저장되었습니다.');
-            onBack();
+            onBack(true); // force=true 전달하여 확인 모달 없이 즉시 이동
         } catch (err) {
             console.error('프로필 저장 실패:', err);
             const msg = err.response?.data?.detail || err.message || '저장 중 오류가 발생했습니다.';

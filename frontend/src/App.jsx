@@ -107,12 +107,13 @@ function App() {
   const liveTranscriptRef = useRef('');
 
   // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
-  const navigateSafe = (targetStep) => {
-    if (step === 'profile' && profileDirty) {
+  const navigateSafe = (targetStep, force = false) => {
+    if (!force && step === 'profile' && profileDirty) {
       setPendingStep(targetStep);
       setShowProfileLeaveModal(true);
     } else {
       setStep(targetStep);
+      if (force) setProfileDirty(false); // 강제 이동 시 dirty 상태도 초기화
     }
   };
 
@@ -1084,7 +1085,7 @@ function App() {
 
         {step === 'profile' && (
           <ProfileManagementPage
-            onBack={() => navigateSafe('main')}
+            onBack={(force = false) => navigateSafe('main', force)}
             user={user}
             onSave={(updatedUser) => {
               setUser(updatedUser);
