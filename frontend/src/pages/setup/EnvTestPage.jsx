@@ -220,7 +220,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
           <h1 className="text-gradient">음성 인식 테스트</h1>
           <p style={{ marginBottom: '2rem' }}>
             마이크가 정상 작동하는지 확인합니다.<br />
-            <b>[음성 인식 시작]</b> 버튼을 누르고 <b>"안녕하세요"</b>라고 말씀해보세요.
+            <b>[음성 인식 시작]</b> 버튼을 누르고 <b>"음성인식테스트"</b>라고 말씀해보세요.
           </p>
 
           <div style={{ margin: '2rem 0' }}>
