@@ -248,9 +248,30 @@ def generate_next_question_task(self, interview_id: int):
                 elif category_raw == "narrative":
                     if next_stage.get("stage") == "responsibility":
                         # [특생활용] 11번 책임감/가치관 질문은 이력서(자기소개서) 기반으로 생성
-                        logger.info("✨ Responsibility Stage (11): Using Resume context to extract candidate values.")
-                        rag_results = retrieve_context("지원자의 가치관 및 책임감 관련 내용", resume_id=interview.resume_id, top_k=3)
-                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                        logger.info("✨ Responsibility Stage (11): Prioritizing Self-Intro Question 1 for values.")
+                        
+                        # 1. 구조화된 데이터에서 [질문1] 정밀 탐색
+                        values_text = ""
+                        try:
+                            if interview.resume and interview.resume.structured_data:
+                                s_data = interview.resume.structured_data
+                                if isinstance(s_data, str): s_data = json.loads(s_data)
+                                
+                                self_intro_list = s_data.get("self_intro", [])
+                                for item in self_intro_list:
+                                    if "[질문1]" in item.get("question", ""):
+                                        values_text = f"[지원자 자기소개서 질문1 답변]: {item.get('answer', '')}"
+                                        logger.info("📍 Found Question 1 in Self-Intro.")
+                                        break
+                        except Exception as e:
+                            logger.error(f"Failed to extract self_intro values: {e}")
+
+                        # 2. RAG 결과와 결합
+                        rag_results = retrieve_context("지원자의 근본적인 가치관, 생활 신념, 직업 윤리, 정직함", resume_id=interview.resume_id, top_k=2)
+                        rag_context = "\n".join([r['text'] for r in rag_results]) if rag_results else ""
+                        
+                        context_text = f"{values_text}\n\n[추가 참고 정보]:\n{rag_context}".strip()
+                        if not context_text: context_text = "특별한 가치관 정보 없음"
                     else:
                         # 나머지 인재상 기반 질문 단계: 이력서 컨텍스트 비활성화
                         logger.info(f"✨ Narrative mode ({next_stage.get('stage')}): Skipping Resume RAG, focusing strictly on Company Ideal.")
