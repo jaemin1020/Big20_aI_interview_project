@@ -5,19 +5,22 @@
 """
 import sys
 import os
+import importlib.util
+import logging
 
-# backend-core/config 경로를 우선적으로 추가
-_backend_config = "/backend-core"
-if _backend_config not in sys.path:
-    sys.path.insert(0, _backend_config)
+logger = logging.getLogger(__name__)
+
+# 경로 동적 로드 (Docker vs Local)
+docker_path = "/backend-core/config/interview_scenario.py"
+local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend-core", "config", "interview_scenario.py"))
+scenario_path = docker_path if os.path.exists(docker_path) else local_path
 
 # backend-core 버전에서 모든 심볼 임포트 (단일 소스)
 try:
-    import importlib.util
-    _spec = importlib.util.spec_from_file_location(
-        "backend_interview_scenario",
-        "/backend-core/config/interview_scenario.py"
-    )
+    if not os.path.exists(scenario_path):
+        raise FileNotFoundError(f"Scenario file not found at {scenario_path}")
+        
+    _spec = importlib.util.spec_from_file_location("backend_interview_scenario", scenario_path)
     _mod = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)
 
@@ -25,10 +28,11 @@ try:
     get_stage_by_name = _mod.get_stage_by_name
     get_next_stage = _mod.get_next_stage
     get_initial_stages = _mod.get_initial_stages
+    
+    logger.info(f"✅ Standard scenario loaded from {scenario_path}")
 
 except Exception as e:
-    import logging
-    logging.getLogger(__name__).error(f"backend-core 시나리오 로드 실패, fallback 사용: {e}")
+    logger.error(f"backend-core 시나리오 로드 실패 ({scenario_path}), fallback 사용: {e}")
     # Fallback: 기본 구조만 정의
     INTERVIEW_STAGES = []
     def get_stage_by_name(stage_name): return None

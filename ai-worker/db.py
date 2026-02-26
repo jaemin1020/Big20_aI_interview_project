@@ -377,7 +377,7 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         category=category,
         difficulty=QuestionDifficulty.MEDIUM,
         question_type=stage,
-        rubric_json=final_rubric,
+        rubric_json={}, # 질문 생성 guide가 아닌 실제 평가용 rubric을 쓰도록 비워둠
         is_active=True
     )
     session.add(question)

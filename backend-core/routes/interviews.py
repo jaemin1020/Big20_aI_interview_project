@@ -653,6 +653,12 @@ async def get_evaluation_report(
     # [핵심] AI가 분석한 상세 피드백 및 강점/보완점 필드 최상위 노출
     details = report.details_json or {}
 
+    # 점수 필드 추가 노출 (책임감, 성장의지 등)
+    report_dict["responsibility_score"] = details.get("responsibility_score", 0)
+    report_dict["growth_score"] = details.get("growth_score", 0)
+    report_dict["experience_score"] = details.get("experience_score", 0)
+    report_dict["problem_solving_score"] = details.get("problem_solving_score", 0)
+
     # 각 피드백 필드 매핑 및 빈 값 처리
     report_dict["technical_feedback"] = details.get("technical_feedback") or report.summary_text or "기술 역량 분석 결과가 생성 중입니다."
     report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 분석 결과입니다."

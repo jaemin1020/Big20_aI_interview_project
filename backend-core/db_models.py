@@ -222,11 +222,19 @@ class Transcript(SQLModel, table=True):
 
     # 감정 분석 결과
     sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
-    emotion: Optional[str] = None  # happy, neutral, sad, angry 등
-
+    emotion: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSONB)
+    )
+    
     # 메타데이터
     question_id: Optional[int] = Field(default=None, foreign_key="questions.id")
     order: Optional[int] = None  # 대화 순서
+    total_score: Optional[float] = None
+    rubric_score: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSONB)
+    )
 
     # Relationship
     interview: Interview = Relationship(back_populates="transcripts")

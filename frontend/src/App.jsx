@@ -109,12 +109,13 @@ function App() {
   const liveTranscriptRef = useRef('');
 
   // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
-  const navigateSafe = (targetStep) => {
-    if (step === 'profile' && profileDirty) {
+  const navigateSafe = (targetStep, force = false) => {
+    if (!force && step === 'profile' && profileDirty) {
       setPendingStep(targetStep);
       setShowProfileLeaveModal(true);
     } else {
       setStep(targetStep);
+      if (force) setProfileDirty(false); // 강제 이동 시 dirty 상태도 초기화
     }
   };
 
@@ -1143,7 +1144,7 @@ function App() {
 
         {step === 'profile' && (
           <ProfileManagementPage
-            onBack={() => navigateSafe('main')}
+            onBack={(force = false) => navigateSafe('main', force)}
             user={user}
             onSave={(updatedUser) => {
               setUser(updatedUser);
@@ -1165,6 +1166,35 @@ function App() {
         )}
 
       </div>
+
+      {/* 사용자 전용 테마 토글 플로팅 버튼 (관리자 페이지 제외) */}
+      {step !== 'recruiter_main' && (
+        <div className="no-print" style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000 }}>
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            style={{
+              width: '50px',
+              height: '50px',
+              borderRadius: '50%',
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid var(--glass-border)',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+              cursor: 'pointer',
+              fontSize: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s ease',
+              outline: 'none'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            {isDarkMode ? '☀️' : '🌑'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
