@@ -1,7 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select, text
 from celery import Celery
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# KST (Korea Standard Time) 설정
+KST = timezone(timedelta(hours=9))
+
+def get_kst_now():
+    return datetime.now(KST).replace(tzinfo=None)
 from typing import List
 import logging
 import os
@@ -148,7 +154,8 @@ async def create_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.SCHEDULED,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.now()
+        start_time=get_kst_now(),
+        created_at=get_kst_now()
     )
     db.add(new_interview)
     db.commit()
@@ -189,7 +196,8 @@ async def create_interview(
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config["stage"],
                 rubric_json={"criteria": ["명확성"]},
-                position=target_role
+                position=target_role,
+                created_at=get_kst_now()
             )
             db.add(question)
             db.flush() # ID 생성을 위해 메모리 상에서만 반영
@@ -213,7 +221,8 @@ async def create_interview(
                 speaker="AI",
                 text=question_text,
                 question_id=question.id,
-                order=stage_config.get("order", 0)
+                order=stage_config.get("order", 0),
+                timestamp=get_kst_now()
             )
             db.add(transcript)
             logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created at backend.")
@@ -339,7 +348,7 @@ async def get_interview_questions(
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
         if filepath.exists():
             # 브라우저 캐싱 방지를 위해 타임스탬프 추가
-            timestamp = int(datetime.now().timestamp())
+            timestamp = int(get_kst_now().timestamp())
             url = f"{BACKEND_PUBLIC_URL}/uploads/tts/q_{question_id}.wav?t={timestamp}"
             logger.info(f"🔊 [TTS Found] ID: {question_id}, URL: {url}")
             return url
@@ -433,7 +442,7 @@ async def complete_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
 
     interview.status = InterviewStatus.COMPLETED
-    interview.end_time = datetime.now()
+    interview.end_time = get_kst_now()
     db.add(interview)
     db.commit()
 
@@ -557,7 +566,7 @@ async def get_evaluation_report(
     # 리포트가 아직 없거나 생성 중일 때에 대한 처리
     if not report:
         # 데이터는 없지만 기본 정보는 보여주기 위해 가짜 객체 구성 (프론트엔드 미상 방지)
-        now = datetime.now()
+        now = get_kst_now()
         return {
             "id": 0,
             "interview_id": interview_id,
@@ -643,7 +652,8 @@ async def create_realtime_interview(
         resume_id=interview_data.resume_id,
         status=InterviewStatus.IN_PROGRESS,
         scheduled_time=interview_data.scheduled_time,
-        start_time=datetime.now()
+        start_time=get_kst_now(),
+        created_at=get_kst_now()
     )
     db.add(new_interview)
     db.commit()
@@ -694,7 +704,8 @@ async def create_realtime_interview(
                 difficulty=QuestionDifficulty.EASY,
                 question_type=stage_config.get("stage", "general"),
                 rubric_json={"criteria": ["명확성"]},
-                position=target_role
+                position=target_role,
+                created_at=get_kst_now()
             )
             db.add(question)
             db.flush() # question.id를 얻기 위해 flush
@@ -718,7 +729,8 @@ async def create_realtime_interview(
                 speaker="AI",
                 text=question_text,
                 question_id=question.id,
-                order=stage_config.get("order", 0)
+                order=stage_config.get("order", 0),
+                timestamp=get_kst_now()
             )
             db.add(transcript)
             logger.info(f"✨ [PRE-GENERATE] Stage '{stage_config['stage']}' (Order {stage_config['order']}) created successfully.")

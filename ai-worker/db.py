@@ -115,7 +115,13 @@ def update_question_avg_score(question_id: int, new_score: float):
             session.add(question)
             session.commit()
 
-def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emotion: str):
+def update_transcript_sentiment(
+    transcript_id: int,
+    sentiment_score: float,
+    emotion: str,
+    total_score: Optional[float] = None,
+    rubric_score: Optional[Dict[str, Any]] = None
+):
     """
     면접 스크립트 감성 분석 업데이트
     
@@ -123,10 +129,12 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
         transcript_id: 면접 스크립트 ID
         sentiment_score: 감성 점수
         emotion: 감정
+        total_score: 총 평가 점수 (0-100, optional)
+        rubric_score: 루브릭별 상세 점수 JSON (optional)
         
     Returns:
         None
-    
+        
     생성자: ejm
     생성일자: 2026-02-04
     """
@@ -135,6 +143,10 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
         if transcript:
             transcript.sentiment_score = sentiment_score
             transcript.emotion = emotion
+            if total_score is not None:
+                transcript.total_score = total_score
+            if rubric_score is not None:
+                transcript.rubric_score = rubric_score
             session.add(transcript)
             session.commit()
 

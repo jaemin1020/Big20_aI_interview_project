@@ -122,16 +122,26 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         
         tech_score = result.get("technical_score", 3)
         comm_score = result.get("communication_score", 3)
-        sentiment = ((tech_score + comm_score) / 10.0) - 0.5 
-        
+        sentiment = ((tech_score + comm_score) / 10.0) - 0.5
+
+        # total_score: 기술 + 의사소통 점수를 0-100 환산
+        answer_quality = (tech_score + comm_score) * 10
+
+        # rubric_score: 항목별 상세 점수 JSON으로 저장
+        rubric_score_data = {
+            "technical_score": tech_score,
+            "communication_score": comm_score,
+            "feedback": result.get("feedback", "")
+        }
+
         update_transcript_sentiment(
-            transcript_id, 
-            sentiment_score=sentiment, 
-            emotion="neutral"
+            transcript_id,
+            sentiment_score=sentiment,
+            emotion="neutral",
+            total_score=float(answer_quality),
+            rubric_score=rubric_score_data
         )
-        
-        answer_quality = (tech_score + comm_score) * 10 
-        
+
         if question_id:
             update_question_avg_score(question_id, answer_quality)
 
