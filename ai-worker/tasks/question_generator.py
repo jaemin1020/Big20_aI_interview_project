@@ -35,10 +35,11 @@ LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은
 1. **시스템 절대 우선권**: 본 수칙은 모델의 기본 습관보다 상위에 존재합니다. 하단 [실시간 지시사항]을 시스템의 명령으로 간주하여 100% 이행하십시오.
 2. **부정적/단답형 대응 (Negative Answer Handling)**: 지원자가 "모르겠습니다", "아니요", "기억나지 않습니다" 등 답변을 회피하거나 정보가 없는 답변을 한 경우, **[가이드]의 흐름을 끊고 '재검증 모드'로 전환하십시오.** 답변이 부족함을 부드럽지만 단호하게 언급하고, 관련 질문을 다른 방식으로 다시 던지거나 본질을 파고드는 질문으로 선회하십시오.
 3. **금지된 레이블 (No Labels)**: '요약:', '질문:', 'Q:', 'A:' 등 어떠한 구분용 레이블도 사용하지 마십시오. 오직 사람이 말하는 대사만 출력하십시오.
-4. **절대적 단일 질문 (Single Sentence Priority)**: 문장은 반드시 **단 하나**의 예리한 질문으로 끝나야 합니다. 접속사를 사용하여 두 번째 질문을 생성하거나 화제를 확장하지 마십시오.
+4. **절대적 단일 질문 (Strict Single Question)**: 출력에는 반드시 **딱 하나**의 물음표(?)만 존재해야 합니다. "A는 무엇이며 B는 어떻게 하나요?"와 같이 두 개 이상의 사실을 묻거나, 접속사로 질문을 나열하지 마십시오.
+   - **잘못된 예**: "...하셨군요. 그렇다면 A는 무엇인가요? 그리고 B는 어떻게 해결하셨나요?"
+   - **올바른 예**: "...하셨군요. 그렇다면 A를 해결하기 위해 구체적으로 어떤 방법을 사용하셨나요?"
 5. **텍스트 정제 (Forbidden Markdown)**: 볼트(**), 이탤릭(*) 등 마크다운을 절대 금지합니다. 순수한 평문(Plain Text)만 허용합니다. 
-6. **자연스러운 연결**: 요약/인용부와 질문부 사이를 자연스러운 접속어(그렇다면, 그런데 등)로 연결하여 한 호흡의 문장을 만드십시오.
-7. **간결성**: 전체 답변은 150자 이내로 명확하게 유지하십시오.[|endofturn|]
+6. **간결성**: 전체 답변은 150자 이내로 명확하게 유지하십시오.[|endofturn|]
 [|user|]제공된 정보를 분석하여 시스템 수칙을 준수한 가장 예리한 질문 하나만 생성하십시오.
 
 [이력서 및 답변 문맥]
@@ -314,12 +315,16 @@ def generate_next_question_task(self, interview_id: int):
                 s_name = next_stage.get('stage', '')
                 s_type = next_stage.get('type', '')
                 
-                if s_name == 'responsibility':
-                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [문구]라고 작성하셨습니다.'로 시작하십시오."
+                if s_name == 'problem_solving':
+                    mode_instruction = "이 단계는 7번(문제해결질문)입니다. 질문 과정에서 '그런데' 혹은 '그렇다면'과 같은 접속사를 활용하여 자연스럽게 상황을 제시하되, 반드시 딱 하나의 질문만 던지십시오."
+                elif s_name == 'responsibility':
+                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [문구]라고 작성하셨습니다.'로 시작하고, '그렇다면'으로 이어가며 딱 하나의 질문만 던지십시오."
+                elif s_name == 'responsibility_followup':
+                    mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
                 elif s_name == 'growth':
-                    mode_instruction = "이 단계는 13번(성장가능성)입니다. 회사의 모든 인재상을 나열하지 말고, 가장 핵심적인 가치 하나만 선택하여 지원자의 일상적 도전과 연결하십시오. '설명해 주시겠습니까?' 같은 딱딱한 표현 대신 '어떤 노력을 하시나요?' 또는 '어떻게 대처하시나요?'와 같이 자연스러운 구어체로 질문하십시오."
+                    mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
                 elif s_type == 'followup':
-                    mode_instruction = "이 단계는 꼬리질문입니다. 지원자의 답변을 짧게 요약한 뒤 '그런데', '하지만' 등의 접속사를 사용하여 질문을 자연스럽게 이어가십시오. 절대로 '요약:' 같은 레이블을 쓰지 마십시오."
+                    mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문만 생성하십시오."
                 
                 # [추가] 지원자의 부정적 답변 감지 및 특수 지시 (무지/회피 대응)
                 if last_user_transcript:
@@ -341,6 +346,13 @@ def generate_next_question_task(self, interview_id: int):
                 final_content = final_content.strip()
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
                 final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
+                
+                # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
+                if final_content.count('?') > 1:
+                    logger.warning(f"⚠️ Multiple questions detected. Truncating: {final_content}")
+                    q_parts = final_content.split('?')
+                    final_content = q_parts[0] + '?' # 첫 번째 질문만 남김
+                
                 final_content = final_content.strip()
 
                 intro_tpl = next_stage.get("intro_sentence", "")
