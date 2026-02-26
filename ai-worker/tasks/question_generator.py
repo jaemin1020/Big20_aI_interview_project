@@ -47,9 +47,10 @@ PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀하게 검
 
 [현재 면접 단계 정보]
 - 단계명: {stage_name}
+- 회사의 인재상: {company_ideal}
 - 가이드: {guide}
 
-[|user|]위 정보를 바탕으로 면접 질문을 생성해 주세요.[|endofturn|]
+[|user|]위의 [회사의 인재상]과 [가이드]를 최우선으로 고려하여, 지원자의 답변 맥락에 맞는 면접 질문을 생성해 주세요.[|endofturn|]
 [|assistant|]"""
 
 # ==========================================
@@ -61,7 +62,7 @@ def generate_next_question_task(self, interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
-    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question
+    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company
     from utils.exaone_llm import get_exaone_llm
     from tasks.tts import synthesize_task
     from utils.interview_helpers import check_if_transition
@@ -161,6 +162,23 @@ def generate_next_question_task(self, interview_id: int):
                     target_role = header.get("target_role") or target_role
                     company_name = header.get("target_company") or header.get("company") or "저희 회사"
 
+                    # [추가] DB에서 회사의 인재상(ideal) 가져오기
+                    company_ideal = "누구나 사용할 수 있는 기술을 통해 사용자의 세계를 확장하고, 누구나 크리에이터가 될 수 있는 기술을 제공하며, 새로운 관점과 아이디어로 세상을 풍요롭게 하는 인재" # 기본값
+                    
+                    # 1. Interview에 저장된 company_id가 있는 경우 우선 조회
+                    db_company = None
+                    if interview.company_id:
+                        db_company = session.get(Company, interview.company_id)
+                    
+                    # 2. company_id가 없거나 조회가 안된 경우, 회사명으로 검색
+                    if not db_company and company_name and company_name != "저희 회사":
+                        stmt_co = select(Company).where(Company.company_name == company_name)
+                        db_company = session.exec(stmt_co).first()
+                    
+                    if db_company and db_company.ideal:
+                        company_ideal = db_company.ideal
+                        logger.info(f"🏢 Dynamic Talent Image Loaded for {company_name}: {company_ideal[:30]}...")
+
                     # 1. 자격증 리스트업 (모두 추출)
                     certs = sd.get("certifications", [])
                     if certs:
@@ -195,6 +213,7 @@ def generate_next_question_task(self, interview_id: int):
                     "candidate_name": candidate_name, 
                     "target_role": target_role, 
                     "company_name": company_name if 'company_name' in locals() else "저희 회사",
+                    "company_ideal": company_ideal if 'company_ideal' in locals() else "회사의 인재상",
                     "major": major or "해당 전공",
                     "cert_list": cert_list,
                     "act_org": act_org,
@@ -268,10 +287,18 @@ def generate_next_question_task(self, interview_id: int):
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
                 chain = prompt | llm | StrOutputParser()
 
+                # 가이드 내 변수 치환 ({company_ideal} 등)
+                guide_raw = next_stage.get('guide', '')
+                try:
+                    guide_formatted = guide_raw.format(company_ideal=company_ideal if 'company_ideal' in locals() else "회사의 우수한 인재상")
+                except:
+                    guide_formatted = guide_raw
+
                 final_content = chain.invoke({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
-                    "guide": next_stage.get('guide', ''),
+                    "company_ideal": company_ideal if 'company_ideal' in locals() else "공개되지 않음",
+                    "guide": guide_formatted,
                     "target_role": interview.position or "지원 직무"
                 })
 
