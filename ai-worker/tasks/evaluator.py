@@ -26,18 +26,31 @@ current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
 tasks_dir = os.path.dirname(current_file_path) # tasks/
 ai_worker_root = os.path.dirname(tasks_dir)    # ai-worker/
 
-if ai_worker_root not in sys.path:
-    sys.path.insert(0, ai_worker_root)
+# backend-core 경로 추가 (rubric_generator 임포트를 위함)
+backend_core_path = os.path.abspath(os.path.join(ai_worker_root, "..", "backend-core"))
+if backend_core_path not in sys.path:
+    sys.path.insert(0, backend_core_path)
+
+logger = logging.getLogger("AI-Worker-Evaluator")
 
 # utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 try:
     from utils.exaone_llm import get_exaone_llm
+    from utils.rubric_generator import create_evaluation_rubric
 except ImportError:
-    def get_exaone_llm():
-        from ai_worker.utils.exaone_llm import get_exaone_llm
-        return get_exaone_llm()
+    logger.warning("Could not import from backend-core utils. Falling back to basics.")
 
-logger = logging.getLogger("AI-Worker-Evaluator")
+def get_rubric_for_stage(stage_name: str) -> dict:
+    """스테이지 이름에 맞는 루브릭 영역 반환"""
+    try:
+        full_rubric = create_evaluation_rubric()
+        for area in full_rubric["evaluation_areas"]:
+            if stage_name in area["target_stages"]:
+                logger.info(f"✅ Found matching Rubric Area: {area['name']} for stage: {stage_name}")
+                return area
+    except Exception as e:
+        logger.error(f"Error mapping rubric for stage {stage_name}: {e}")
+    return None
 
 # -----------------------------------------------------------
 # [Schema] 평가 데이터 구조 정의 (Pydantic)
@@ -71,19 +84,32 @@ class FinalReportSchema(BaseModel):
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
     """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
-    logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
-    
-    if not answer_text or not answer_text.strip():
-        logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
-        return {
-            "technical_score": 0,
-            "communication_score": 0,
-            "feedback": "답변이 제공되지 않았습니다."
-        }
-    
     start_ts = time.time()
     
     try:
+        # 질문 정보 조회 (Stage 확인용)
+        stage_name = "unknown"
+        if question_id:
+            with Session(engine) as session:
+                question = session.get(Question, question_id)
+                if question:
+                    stage_name = question.question_type or "unknown"
+
+        # [핵심] 기존의 잘못된 'guide' 루브릭 대신, rubric_generator의 진짜 루브릭 사용
+        if not rubric or "guide" in rubric:
+            real_rubric = get_rubric_for_stage(stage_name)
+            if real_rubric:
+                rubric = real_rubric
+                logger.info(f"📊 Using REAL Rubric for {stage_name}")
+
+        if not answer_text or not answer_text.strip():
+            logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
+            return {
+                "technical_score": 0,
+                "communication_score": 0,
+                "feedback": "답변이 제공되지 않았습니다."
+            }
+        
         # LangChain Parser 설정
         parser = JsonOutputParser(pydantic_object=AnswerEvalSchema)
         
@@ -136,8 +162,12 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             update_question_avg_score(question_id, answer_quality)
 
         duration = time.time() - start_ts
-        logger.info(f"답변 평가 완료 ({duration:.2f}초)")
+        logger.info(f"답변 평가 완료 ({duration:.2f}초, Stage: {stage_name})")
         return result
+
+    except Exception as e:
+        logger.error(f"Evaluation Failed: {e}")
+        return {"error": str(e)}
 
     except Exception as e:
         logger.error(f"Evaluation Failed: {e}")
@@ -191,26 +221,37 @@ def generate_final_report(interview_id: int):
             # LangChain Parser 설정
             parser = JsonOutputParser(pydantic_object=FinalReportSchema)
             
+            # [핵심] 전체 평가 루브릭 가져오기
+            full_rubric = {}
+            try:
+                full_rubric = create_evaluation_rubric()
+                logger.info("📋 Full Rubric loaded for Final Report")
+            except Exception as re_err:
+                logger.error(f"Failed to load full rubric: {re_err}")
+
             logger.info(f"🤖 Starting [FINAL REPORT] LLM analysis for Interview {interview_id}...")
             exaone = get_exaone_llm()
             system_msg = f"""당신은 대한민국 최고의 기술 기업에서 수천 명의 지원자를 검증해온 '{position}' 분야 시니어 면접관 위원회의 위원장입니다. 
-당신의 임무는 제공된 면접 로그를 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
+당신의 임무는 제공된 면접 로그와 [표준 평가 루브릭]을 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
 
-[평가 방법론: STAR & Consistency]
-1. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
-2. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
-3. 태도 일관성: 면접 전체 과정에서 용어 사용의 적절성과 가치관의 일관성을 확인하십시오.
-4. 유연한 평가: 만약 면접이 중간에 종료되어 데이터가 부족하더라도, 제공된 답변 범위 내에서 최선의 분석을 제공하고 부족한 부분은 '추후 확인 필요' 등으로 명시하십시오."""
+[표준 평가 루브릭]
+{json.dumps(full_rubric, ensure_ascii=False, indent=2)}
 
-            user_msg = f"""다음 면접 대화 내용을 기반으로 최종 평가를 내리십시오.
+[평가 지침]
+1. 위 루브릭의 '평가 기준(Criteria)'과 '등급별 지표(Indicators)'를 엄격히 준수하여 점수를 산출하십시오.
+2. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
+3. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
+4. 피드백 전문성: 단순 칭찬보다는 루브릭의 지표를 근거로 보완할 점을 구체적으로 제시하여 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오."""
+
+            user_msg = f"""다음 면접 대화 내용을 기반으로 루브릭 기준에 따라 최종 평가를 내리십시오.
             
 [면접 대화]
 {conversation}
 
 [제약 사항]
 - 결과는 반드시 시스템 연동을 위해 지정된 JSON 포맷으로만 출력하십시오.
-- 각 피드백은 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오.
-- strengths와 improvements는 반드시 문자열 배열([])로 작성하십시오.
+- 각 점수는 0점에서 100점 사이로 산출하십시오.
+- strengths와 improvements는 루브릭의 지표를 참고하여 각각 2-3가지 문자열 배열([])로 작성하십시오.
 
 {parser.get_format_instructions()}"""
             
@@ -251,39 +292,53 @@ def generate_final_report(interview_id: int):
                 "strengths": ["성실한 답변 참여"], "improvements": ["상세 피드백 기술 지원 필요"]
             }
 
-        # DB 저장을 위해 점수 추출
-        tech = result.get("technical_score", 0)
-        comm = result.get("communication_score", 0)
-        # cultural_fit은 responsibility와 growth의 평균으로 임시 계산 (DB 컬럼 호환성)
-        cult = (result.get("responsibility_score", 0) + result.get("growth_score", 0)) / 2
-        overall = result.get("overall_score", (tech + comm + cult) / 3)
+        try:
+            def ensure_int(val, default=0):
+                try:
+                    if val is None: return default
+                    return int(float(str(val)))
+                except:
+                    return default
 
-        # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
-        details = {
-            "experience_score": result.get("experience_score", 0),
-            "problem_solving_score": result.get("problem_solving_score", 0),
-            "responsibility_score": result.get("responsibility_score", 0),
-            "growth_score": result.get("growth_score", 0),
-            "technical_feedback": result.get("technical_feedback", ""),
-            "experience_feedback": result.get("experience_feedback", ""),
-            "problem_solving_feedback": result.get("problem_solving_feedback", ""),
-            "communication_feedback": result.get("communication_feedback", ""),
-            "responsibility_feedback": result.get("responsibility_feedback", ""),
-            "growth_feedback": result.get("growth_feedback", ""),
-            "strengths": result.get("strengths", []),
-            "improvements": result.get("improvements", [])
-        }
+            # DB 저장을 위해 점수 추출 (안전한 변환)
+            tech = ensure_int(result.get("technical_score"), 0)
+            comm = ensure_int(result.get("communication_score"), 0)
+            # cultural_fit은 responsibility와 growth의 평균으로 임시 계산 (DB 컬럼 호환성)
+            resp = ensure_int(result.get("responsibility_score"), 0)
+            grow = ensure_int(result.get("growth_score"), 0)
+            cult = int((resp + grow) / 2)
+            overall = ensure_int(result.get("overall_score"), int((tech + comm + cult) / 3))
 
-        create_or_update_evaluation_report(
-            interview_id,
-            technical_score=tech,
-            communication_score=comm,
-            cultural_fit_score=cult,
-            summary_text=result.get("summary_text", ""),
-            details_json=details
-        )
-        update_interview_overall_score(interview_id, score=overall)
-        logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
+            # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
+            details = {
+                "experience_score": ensure_int(result.get("experience_score"), 0),
+                "problem_solving_score": ensure_int(result.get("problem_solving_score"), 0),
+                "responsibility_score": resp,
+                "growth_score": grow,
+                "technical_feedback": result.get("technical_feedback", ""),
+                "experience_feedback": result.get("experience_feedback", ""),
+                "problem_solving_feedback": result.get("problem_solving_feedback", ""),
+                "communication_feedback": result.get("communication_feedback", ""),
+                "responsibility_feedback": result.get("responsibility_feedback", ""),
+                "growth_feedback": result.get("growth_feedback", ""),
+                "strengths": result.get("strengths", []),
+                "improvements": result.get("improvements", [])
+            }
+
+            create_or_update_evaluation_report(
+                interview_id,
+                technical_score=tech,
+                communication_score=comm,
+                cultural_fit_score=cult,
+                summary_text=result.get("summary_text", ""),
+                details_json=details
+            )
+            update_interview_overall_score(interview_id, score=overall)
+            logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
+
+        except Exception as save_err:
+            logger.error(f"Failed to process/save report results: {save_err}")
+            raise save_err
 
     except Exception as e:
         logger.error(f"❌ Error in generate_final_report: {e}")

@@ -230,6 +230,11 @@ class Transcript(SQLModel, table=True):
     # 메타데이터
     question_id: Optional[int] = Field(default=None, foreign_key="questions.id")
     order: Optional[int] = None  # 대화 순서
+    total_score: Optional[float] = None
+    rubric_score: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSONB)
+    )
 
     # Relationship
     interview: Interview = Relationship(back_populates="transcripts")
