@@ -292,39 +292,53 @@ def generate_final_report(interview_id: int):
                 "strengths": ["성실한 답변 참여"], "improvements": ["상세 피드백 기술 지원 필요"]
             }
 
-        # DB 저장을 위해 점수 추출
-        tech = result.get("technical_score", 0)
-        comm = result.get("communication_score", 0)
-        # cultural_fit은 responsibility와 growth의 평균으로 임시 계산 (DB 컬럼 호환성)
-        cult = (result.get("responsibility_score", 0) + result.get("growth_score", 0)) / 2
-        overall = result.get("overall_score", (tech + comm + cult) / 3)
+        try:
+            def ensure_int(val, default=0):
+                try:
+                    if val is None: return default
+                    return int(float(str(val)))
+                except:
+                    return default
 
-        # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
-        details = {
-            "experience_score": result.get("experience_score", 0),
-            "problem_solving_score": result.get("problem_solving_score", 0),
-            "responsibility_score": result.get("responsibility_score", 0),
-            "growth_score": result.get("growth_score", 0),
-            "technical_feedback": result.get("technical_feedback", ""),
-            "experience_feedback": result.get("experience_feedback", ""),
-            "problem_solving_feedback": result.get("problem_solving_feedback", ""),
-            "communication_feedback": result.get("communication_feedback", ""),
-            "responsibility_feedback": result.get("responsibility_feedback", ""),
-            "growth_feedback": result.get("growth_feedback", ""),
-            "strengths": result.get("strengths", []),
-            "improvements": result.get("improvements", [])
-        }
+            # DB 저장을 위해 점수 추출 (안전한 변환)
+            tech = ensure_int(result.get("technical_score"), 0)
+            comm = ensure_int(result.get("communication_score"), 0)
+            # cultural_fit은 responsibility와 growth의 평균으로 임시 계산 (DB 컬럼 호환성)
+            resp = ensure_int(result.get("responsibility_score"), 0)
+            grow = ensure_int(result.get("growth_score"), 0)
+            cult = int((resp + grow) / 2)
+            overall = ensure_int(result.get("overall_score"), int((tech + comm + cult) / 3))
 
-        create_or_update_evaluation_report(
-            interview_id,
-            technical_score=tech,
-            communication_score=comm,
-            cultural_fit_score=cult,
-            summary_text=result.get("summary_text", ""),
-            details_json=details
-        )
-        update_interview_overall_score(interview_id, score=overall)
-        logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
+            # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
+            details = {
+                "experience_score": ensure_int(result.get("experience_score"), 0),
+                "problem_solving_score": ensure_int(result.get("problem_solving_score"), 0),
+                "responsibility_score": resp,
+                "growth_score": grow,
+                "technical_feedback": result.get("technical_feedback", ""),
+                "experience_feedback": result.get("experience_feedback", ""),
+                "problem_solving_feedback": result.get("problem_solving_feedback", ""),
+                "communication_feedback": result.get("communication_feedback", ""),
+                "responsibility_feedback": result.get("responsibility_feedback", ""),
+                "growth_feedback": result.get("growth_feedback", ""),
+                "strengths": result.get("strengths", []),
+                "improvements": result.get("improvements", [])
+            }
+
+            create_or_update_evaluation_report(
+                interview_id,
+                technical_score=tech,
+                communication_score=comm,
+                cultural_fit_score=cult,
+                summary_text=result.get("summary_text", ""),
+                details_json=details
+            )
+            update_interview_overall_score(interview_id, score=overall)
+            logger.info(f"✅ 인터뷰 {interview_id}에 대한 최종 리포트 생성 완료")
+
+        except Exception as save_err:
+            logger.error(f"Failed to process/save report results: {save_err}")
+            raise save_err
 
     except Exception as e:
         logger.error(f"❌ Error in generate_final_report: {e}")
