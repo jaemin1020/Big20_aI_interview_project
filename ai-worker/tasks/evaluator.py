@@ -31,14 +31,14 @@ backend_core_path = os.path.abspath(os.path.join(ai_worker_root, "..", "backend-
 if backend_core_path not in sys.path:
     sys.path.insert(0, backend_core_path)
 
+logger = logging.getLogger("AI-Worker-Evaluator")
+
 # utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 try:
     from utils.exaone_llm import get_exaone_llm
     from utils.rubric_generator import create_evaluation_rubric
 except ImportError:
     logger.warning("Could not import from backend-core utils. Falling back to basics.")
-
-logger = logging.getLogger("AI-Worker-Evaluator")
 
 def get_rubric_for_stage(stage_name: str) -> dict:
     """스테이지 이름에 맞는 루브릭 영역 반환"""
