@@ -35,7 +35,7 @@ def create_area_a_rubric() -> Dict:
         "code": "A",
         "name": "자기 표현 & 기본 커뮤니케이션",
         "weight": 0.15,
-        "target_stages": ["자기소개", "최종 자유 발언"],
+        "target_stages": ["자기소개", "최종 자유 발언", "intro", "closing"],
         "purpose": "지원자의 배경과 강점을 빠르고 명확하게 전달하는 능력 평가",
         "criteria": [
             "본인 배경과 강점이 명확히 전달되는가",
@@ -94,7 +94,7 @@ def create_area_b_rubric() -> Dict:
         "code": "B",
         "name": "지원 동기 & 회사 적합성",
         "weight": 0.15,
-        "target_stages": ["지원 동기"],
+        "target_stages": ["지원 동기", "resume_intro"],
         "purpose": "회사와 직무를 이해한 상태에서 지원했는지 판단",
         "criteria": [
             "지원 직무를 정확히 이해하고 있는가",
@@ -153,7 +153,7 @@ def create_area_c_rubric() -> Dict:
         "code": "C",
         "name": "직무 지식 이해도",
         "weight": 0.20,
-        "target_stages": ["직무 관련 지식 질문", "직무 관련 지식 추가 질문 (1-1)"],
+        "target_stages": ["직무 관련 지식 질문", "직무 관련 지식 추가 질문 (1-1)", "skill", "skill_followup"],
         "purpose": "직무 수행에 필요한 기본 지식 수준 검증",
         "criteria": [
             "기본 개념을 정확히 설명했는가",
@@ -220,7 +220,11 @@ def create_area_d_rubric() -> Dict:
         "target_stages": [
             "직무 관련 경험 질문",
             "직무 관련 문제 해결 질문",
-            "추가 질문 (2-1, 3-1)"
+            "추가 질문 (2-1, 3-1)",
+            "experience",
+            "experience_followup",
+            "problem_solving",
+            "problem_solving_followup"
         ],
         "purpose": "실제로 문제를 해결해 본 경험과 사고 흐름 평가",
         "criteria": [
@@ -290,7 +294,13 @@ def create_area_e_rubric() -> Dict:
         "target_stages": [
             "협업 평가 질문 (+1-1)",
             "책임감·가치관 질문 (+2-1)",
-            "변화 수용·성장 질문 (+3-1)"
+            "변화 수용·성장 질문 (+3-1)",
+            "communication",
+            "communication_followup",
+            "responsibility",
+            "responsibility_followup",
+            "growth",
+            "growth_followup"
         ],
         "purpose": "조직 적합성과 장기 성장 가능성 판단",
         "criteria": [
