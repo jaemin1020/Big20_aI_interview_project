@@ -36,7 +36,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
     # 2. 중복 확인 - 활성(비탈퇴) 계정만 대상으로 검사
     stmt = select(User).where(
         ((User.username == user_data.username) | (User.email == user_data.email))
-        & (User.is_withdrawn == False)  # noqa: E712
+        & (User.is_withdrawn.is_(False))
     )
     existing_user = db.exec(stmt).first()
     if existing_user:
@@ -71,7 +71,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     """
     # 활성 계정 중에서만 조회
     stmt = select(User).where(
-        (User.username == form_data.username) & (User.is_withdrawn == False)  # noqa: E712
+        (User.username == form_data.username) & (User.is_withdrawn.is_(False))
     )
     user = db.exec(stmt).first()
 

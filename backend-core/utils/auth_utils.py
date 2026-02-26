@@ -47,8 +47,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    statement = select(User).where(User.username == username)
+
+    statement = select(User).where(
+        (User.username == username) & (User.is_withdrawn.is_(False))
+    )
     user = db.exec(statement).first()
     if user is None:
         raise credentials_exception
