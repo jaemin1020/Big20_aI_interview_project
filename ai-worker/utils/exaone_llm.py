@@ -56,8 +56,8 @@ class ExaoneLLM(LLM):
         else:
             target_path = MODEL_PATH
 
-        # Context window 설정 (기본 8192로 상향)
-        n_ctx = int(os.getenv("N_CTX", "8192"))
+        # Context window 설정 (기본 16384로 상향 - 대규모 면접 리포트 대응)
+        n_ctx = int(os.getenv("N_CTX", "16384"))
         
         try:
             # 🚨 CPU 환경에서 CUDA 빌드된 llama-cpp 로딩 시 발생하는 크래시 방지를 위해 지연 임포트
@@ -96,7 +96,7 @@ class ExaoneLLM(LLM):
             
             output = ExaoneLLM.llm(
                 prompt,
-                max_tokens=kwargs.get("max_tokens", 512),
+                max_tokens=kwargs.get("max_tokens", 2048),
                 stop=stop_sequences,
                 temperature=kwargs.get("temperature", 0.7),
                 echo=False
@@ -123,7 +123,7 @@ class ExaoneLLM(LLM):
             # stream=True 옵션으로 llama-cpp 호출
             responses = ExaoneLLM.llm(
                 prompt,
-                max_tokens=kwargs.get("max_tokens", 512),
+                max_tokens=kwargs.get("max_tokens", 2048),
                 stop=stop_sequences,
                 temperature=kwargs.get("temperature", 0.7),
                 stream=True

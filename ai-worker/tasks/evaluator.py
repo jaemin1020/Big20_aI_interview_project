@@ -40,19 +40,25 @@ current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
 tasks_dir = os.path.dirname(current_file_path) # tasks/
 ai_worker_root = os.path.dirname(tasks_dir)    # ai-worker/
 
-# backend-core 경로 추가 (rubric_generator 임포트를 위함)
+# backend-core 및 하위 utils 경로 추가 (패키지 충돌 방지)
 backend_core_path = os.path.abspath(os.path.join(ai_worker_root, "..", "backend-core"))
-if backend_core_path not in sys.path:
-    sys.path.insert(0, backend_core_path)
+backend_core_utils = os.path.join(backend_core_path, "utils")
+for p in [backend_core_path, backend_core_utils]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 logger = logging.getLogger("AI-Worker-Evaluator")
 
 # utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 try:
     from utils.exaone_llm import get_exaone_llm
-    from utils.rubric_generator import create_evaluation_rubric
-except ImportError:
-    logger.warning("Could not import from backend-core utils. Falling back to basics.")
+    # rubric_generator는 backend-core/utils에 있음. 
+    # ai-worker/utils와 패키지명(utils)이 중복되므로 직접 모듈 임포트 시도
+    import rubric_generator
+    create_evaluation_rubric = rubric_generator.create_evaluation_rubric
+    logger.info("✅ Successfully linked rubric_generator from backend-core")
+except ImportError as e:
+    logger.warning(f"Could not import from backend-core utils: {e}. Falling back to basics.")
 
 def get_rubric_for_stage(stage_name: str) -> dict:
     """스테이지 이름에 맞는 루브릭 영역 반환"""
@@ -338,7 +344,8 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
             
             # 생성 및 파싱 (EXAONE 전용 포맷 사용)
             prompt = f"{system_msg}\n{user_msg}\n[|assistant|]"
-            raw_output = exaone.invoke(prompt, temperature=0.3)
+            # 리포트는 내용이 길므로 max_tokens를 넉넉하게 설정
+            raw_output = exaone.invoke(prompt, temperature=0.3, max_tokens=3000)
             
             if not raw_output:
                 raise ValueError("LLM generated empty output (possibly context limit reached)")
