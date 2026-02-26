@@ -180,9 +180,19 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             except Exception as ideal_err:
                 logger.warning(f"⚠️ 인재상 조회 실패 (평가는 계속 진행): {ideal_err}")
 
-        # 프롬프트 구성
-        system_msg = "귀하는 전문 면접관이며, 지원자의 답변을 기술력과 의사소통 관점에서 평가합니다."
-        user_msg = f"""다음 질문에 대한 지원자의 답변을 루브릭 기준에 맞춰 평가하십시오.
+        # 프롬프트 구성 (EXAONE 3.5 최적화)
+        system_msg = """[|system|]귀하는 기술력, 소통 능력, 조직 적합성을 정밀 검증하는 'AI 채용 평가 위원회'의 전문 심사관입니다.
+LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 기준으로 삼아 지원자의 답변을 냉철하게 분석하고 수치화된 점수와 건설적인 피드백을 산출하십시오.
+
+[평가 가이드라인]
+1. **기술적 엄밀성**: 답변에 포함된 기술 개념의 정확성과 선택 근거의 타당성을 최우선으로 검토하십시오.
+2. **증거 중심 피드백**: 단순히 느낌을 서술하지 말고, 지원자의 답변 중 어떤 표현이나 사례가 루브릭 지표에 부합했는지 구체적으로 인용하십시오.
+3. **수치화**: 루브릭의 점수 배점을 엄격히 준수하여 점수를 산출하되, 논리가 부족하거나 답변이 모호한 경우 보수적으로 평가하십시오.
+4. **인재상 반영**: 인재상 정보가 제공된 경우, 지원자의 태도나 가치관이 기업의 지향점과 얼마나 일치하는지 분석 결과에 반드시 포함하십시오.
+5. **텍스트 정제 (No Markdown)**: 피드백 작성 시 볼트(**), 이탤릭(*) 등의 마크다운 문법을 절대 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 작성하십시오.
+6. **중복 표현 및 말더듬 방지**: 문장 끝에서 유사한 어미를 반복하거나, 동일한 단어를 나열하는 등의 환각/말더듬 현상을 철저히 배제하십시오.[|endofturn|]"""
+
+        user_msg = f"""[|user|]다음 질문에 대한 지원자의 답변을 루브릭 기준에 맞춰 정밀 평가하십시오.
         
 [질문]
 {question_text}
@@ -193,10 +203,10 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
 [평가 루브릭]
 {json.dumps(rubric, ensure_ascii=False) if rubric else "표준 면접 평가 기준"}{company_ideal_section}
 
-{parser.get_format_instructions()}"""
+{parser.get_format_instructions()}[|endofturn|]"""
         
-        # 생성 및 파싱
-        prompt = llm_engine._create_prompt(system_msg, user_msg)
+        # 생성 및 파싱 (EXAONE 전용 포맷 사용)
+        prompt = f"{system_msg}\n{user_msg}\n[|assistant|]"
         raw_output = llm_engine.invoke(prompt, temperature=0.2)
         
         try:
@@ -235,10 +245,6 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         duration = time.time() - start_ts
         logger.info(f"답변 평가 완료 ({duration:.2f}초, Stage: {stage_name})")
         return result
-
-    except Exception as e:
-        logger.error(f"Evaluation Failed: {e}")
-        return {"error": str(e)}
 
     except Exception as e:
         logger.error(f"Evaluation Failed: {e}")
@@ -304,32 +310,34 @@ def generate_final_report(interview_id: int):
 
             logger.info(f"🤖 Starting [FINAL REPORT] LLM analysis for Interview {interview_id}...")
             exaone = get_exaone_llm()
-            system_msg = f"""당신은 대한민국 최고의 기술 기업에서 수천 명의 지원자를 검증해온 '{position}' 분야 시니어 면접관 위원회의 위원장입니다. 
-당신의 임무는 제공된 면접 로그와 [표준 평가 루브릭]을 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
+            system_msg = f"""[|system|]당신은 대한민국 최고의 기술 기업에서 수만 명의 인재를 발굴해온 '{position}' 분야 전문 채용 위원장입니다.
+LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가 루브릭]을 종합 분석하여 지원자의 최종 합격 여부를 판단할 수 있는 심층 기술 리포트를 작성하십시오.
+
+[핵심 평가 프로토콜]
+1. **역량별 매칭 분석**: 루브릭의 평가 지표와 지원자의 답변을 대조하여, 단순히 잘했다는 표현이 아닌 '근거 중심'의 성적표를 작성하십시오.
+2. **논리적 일관성 검증**: 인터뷰 전반에 걸쳐 지원자의 답변이 일관된 실무 철학과 기술적 원칙을 유지하고 있는지 체크하십시오.
+3. **STAR 기법 기반 검증**: 지원자가 성과를 설명할 때 상황(S)-과업(T)-행동(A)-결과(R) 구조를 갖추어 실질적인 기여도를 증명했는지 평가하십시오.
+4. **시니어의 제언**: 강점은 극대화하고 약점은 실천 가능한 성장의 기회로 전환할 수 있도록 시니어 전문가의 깊이 있는 조언(Summary)을 제공하십시오.
+5. **텍스트 정제 (No Markdown)**: 전 영역 피드백 및 강점/보완점 작성 시 볼트(**), 이탤릭(*), 리스트(-) 등의 마크다운 문법을 일절 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 서술하십시오.
+6. **언어 일관성 및 중복 방지**: 전문적이고 정제된 어조를 유지하되, 동일한 문구나 수식어가 반복되어 가독성을 해치는 현상을 방지하십시오.[|endofturn|]"""
+
+            user_msg = f"""[|user|]다음 면접 대화 전문을 바탕으로 루브릭 기준에 따라 최종 기술 역량 평가 리포트를 생성하십시오.
+            
+[면접 대화 전문]
+{conversation}
 
 [표준 평가 루브릭]
 {json.dumps(full_rubric, ensure_ascii=False, indent=2)}
 
-[평가 지침]
-1. 위 루브릭의 '평가 기준(Criteria)'과 '등급별 지표(Indicators)'를 엄격히 준수하여 점수를 산출하십시오.
-2. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
-3. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
-4. 피드백 전문성: 단순 칭찬보다는 루브릭의 지표를 근거로 보완할 점을 구체적으로 제시하여 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오."""
+[출력 제약 사항]
+- 모든 분석은 반드시 루브릭의 세부 목표와 연동되어야 합니다.
+- strengths와 improvements 항목은 면접 중 특정 발화를 근거로 인용하여 2문장 이상의 서술형으로 작성하십시오.
+- 결과물은 반드시 지정된 JSON 포맷만 출력하며, 사족을 붙이지 마십시오.
 
-            user_msg = f"""다음 면접 대화 내용을 기반으로 루브릭 기준에 따라 최종 평가를 내리십시오.
+{parser.get_format_instructions()}[|endofturn|]"""
             
-[면접 대화]
-{conversation}
-
-[제약 사항]
-- 결과는 반드시 시스템 연동을 위해 지정된 JSON 포맷으로만 출력하십시오.
-- 각 점수는 0점에서 100점 사이로 산출하십시오.
-- strengths와 improvements는 루브릭의 지표를 참고하여 각각 2-3가지 문자열 배열([])로 작성하십시오.
-
-{parser.get_format_instructions()}"""
-            
-            # 생성 및 파싱
-            prompt = exaone._create_prompt(system_msg, user_msg)
+            # 생성 및 파싱 (EXAONE 전용 포맷 사용)
+            prompt = f"{system_msg}\n{user_msg}\n[|assistant|]"
             raw_output = exaone.invoke(prompt, temperature=0.3)
             
             if not raw_output:
