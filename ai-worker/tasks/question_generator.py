@@ -144,12 +144,35 @@ def generate_next_question_task(self, interview_id: int):
                         "question": last_ai_transcript.text,
                         "question_id": last_ai_transcript.question_id
                     }
+            # [수정] 공통 정보 추출 (템플릿/AI/꼬리질문 모두 사용)
+            candidate_name = "지원자"
+            target_role = interview.position or "해당 직무"
+            company_name = "저희 회사"
+            company_ideal = "누구나 사용할 수 있는 기술을 통해 사용자의 세계를 확장하고, 새로운 관점과 아이디어로 세상을 풍요롭게 하는 인재" # 기본값
+
+            if interview.resume and interview.resume.structured_data:
+                sd = interview.resume.structured_data
+                if isinstance(sd, str): sd = json.loads(sd)
+                header = sd.get("header", {})
+                candidate_name = header.get("name") or header.get("candidate_name") or candidate_name
+                target_role = header.get("target_role") or target_role
+                company_name = header.get("target_company") or header.get("company") or company_name
+
+            # DB에서 회사의 인재상(ideal) 조회
+            db_company = None
+            if interview.company_id:
+                db_company = session.get(Company, interview.company_id)
+            if not db_company and company_name != "저희 회사":
+                stmt_co = select(Company).where(Company.company_name == company_name)
+                db_company = session.exec(stmt_co).first()
+            
+            if db_company and db_company.ideal:
+                company_ideal = db_company.ideal
+                logger.info(f"🏢 Dynamic Talent Image Loaded: {company_ideal[:30]}...")
+
             # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
             if next_stage.get("type") == "template":
-                candidate_name = "지원자"
-                target_role = interview.position or "해당 직무"
                 cert_list = ""
-                
                 act_org, act_role = "관련 기관", "담당 업무"
                 proj_org, proj_name = "해당 기관", "수행한 프로젝트"
                 
@@ -157,35 +180,13 @@ def generate_next_question_task(self, interview_id: int):
                     sd = interview.resume.structured_data
                     if isinstance(sd, str): sd = json.loads(sd)
                     
-                    header = sd.get("header", {})
-                    candidate_name = header.get("name") or header.get("candidate_name") or candidate_name
-                    target_role = header.get("target_role") or target_role
-                    company_name = header.get("target_company") or header.get("company") or "저희 회사"
-
-                    # [추가] DB에서 회사의 인재상(ideal) 가져오기
-                    company_ideal = "누구나 사용할 수 있는 기술을 통해 사용자의 세계를 확장하고, 누구나 크리에이터가 될 수 있는 기술을 제공하며, 새로운 관점과 아이디어로 세상을 풍요롭게 하는 인재" # 기본값
-                    
-                    # 1. Interview에 저장된 company_id가 있는 경우 우선 조회
-                    db_company = None
-                    if interview.company_id:
-                        db_company = session.get(Company, interview.company_id)
-                    
-                    # 2. company_id가 없거나 조회가 안된 경우, 회사명으로 검색
-                    if not db_company and company_name and company_name != "저희 회사":
-                        stmt_co = select(Company).where(Company.company_name == company_name)
-                        db_company = session.exec(stmt_co).first()
-                    
-                    if db_company and db_company.ideal:
-                        company_ideal = db_company.ideal
-                        logger.info(f"🏢 Dynamic Talent Image Loaded for {company_name}: {company_ideal[:30]}...")
-
-                    # 1. 자격증 리스트업 (모두 추출)
+                    # 1. 자격증 리스트업
                     certs = sd.get("certifications", [])
                     if certs:
                         cert_names = [c.get("title") or c.get("name") for c in certs if (c.get("title") or c.get("name"))]
                         cert_list = ", ".join(cert_names)
                     
-                    # 4-1. 경력 (activities) - 헤더 제외 로직
+                    # 4-1. 경력 (activities)
                     acts = sd.get("activities", [])
                     act_header_kws = ["기간", "역할", "기관", "소속", "장소", "제목", "내용"]
                     for act in acts:
@@ -196,7 +197,7 @@ def generate_next_question_task(self, interview_id: int):
                             act_role = tmp_role or act_role
                             break
                     
-                    # 4-2. 프로젝트 (projects) - 헤더 제외 로직
+                    # 4-2. 프로젝트 (projects)
                     projs = sd.get("projects", [])
                     proj_header_kws = ["기간", "제목", "과정명", "기관", "설명", "내용"]
                     for proj in projs:
@@ -212,8 +213,8 @@ def generate_next_question_task(self, interview_id: int):
                 template_vars = {
                     "candidate_name": candidate_name, 
                     "target_role": target_role, 
-                    "company_name": company_name if 'company_name' in locals() else "저희 회사",
-                    "company_ideal": company_ideal if 'company_ideal' in locals() else "회사의 인재상",
+                    "company_name": company_name,
+                    "company_ideal": company_ideal,
                     "major": major or "해당 전공",
                     "cert_list": cert_list,
                     "act_org": act_org,
@@ -227,7 +228,6 @@ def generate_next_question_task(self, interview_id: int):
                     formatted = tpl.format(**template_vars)
                 except Exception as e:
                     logger.warning(f"Template formatting error: {e}")
-                    # 폴백: 직접 문자열 치환
                     for k, v in template_vars.items():
                         tpl = tpl.replace("{" + k + "}", str(v))
                     formatted = tpl
@@ -235,49 +235,46 @@ def generate_next_question_task(self, interview_id: int):
                 intro_msg = next_stage.get("intro_sentence", "")
                 display_name = next_stage.get("display_name", "면접질문")
                 final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
-                logger.info(f"Template stage '{next_stage['stage']}' (v2) → 즉시 포맷 완료 (Direct Extraction)")
+                logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료")
 
             else:
-                # [로직 단순환] 꼬리질문과 일반 질문의 컨텍스트 분리
+                category_raw = next_stage.get("category")
+                
+                # [핵심 수정] narrative 카테고리(9-14번)는 이력서 RAG를 건너뛰고 인재상에만 집중
                 if next_stage.get("type") == "followup":
-                    # 꼬리질문: RAG/질문은행 모두 스킵하고 오직 '질문-답변' 맥락만 사용 (환각 0%)
-                    logger.info("🎯 Follow-up mode: RAG & Question Bank disabled. Focusing purely on conversation context.")
+                    logger.info("🎯 Follow-up mode: Focusing purely on conversation context.")
                     context_text = f"이전 질문: {last_ai_transcript.text if last_ai_transcript else '없음'}\n"
                     if last_user_transcript:
                         context_text += f"[지원자의 최근 답변]: {last_user_transcript.text}"
                     rag_results = []
+                elif category_raw == "narrative":
+                    if next_stage.get("stage") == "responsibility":
+                        # [특생활용] 11번 책임감/가치관 질문은 이력서(자기소개서) 기반으로 생성
+                        logger.info("✨ Responsibility Stage (11): Using Resume context to extract candidate values.")
+                        rag_results = retrieve_context("지원자의 가치관 및 책임감 관련 내용", resume_id=interview.resume_id, top_k=3)
+                        context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                    else:
+                        # 나머지 인재상 기반 질문 단계: 이력서 컨텍스트 비활성화
+                        logger.info(f"✨ Narrative mode ({next_stage.get('stage')}): Skipping Resume RAG, focusing strictly on Company Ideal.")
+                        context_text = f"회사의 인재상 중심 질문 단계입니다. 지원자의 개별 프로젝트보다는 회사의 가치관 부합 여부를 확인하십시오."
+                        rag_results = []
                 else:
-                    # 일반 AI 질문 (경험/문제해결 등): 이력서 RAG 검색 수행
+                    # 일반 기술/경험 질문: 이력서 RAG 수행
                     query_template = next_stage.get("query_template", interview.position)
                     try:
-                        query = query_template.format(
-                            target_role=interview.position or "해당 직무",
-                            major=major or ""
-                        )
-                    except (KeyError, ValueError):
+                        query = query_template.format(target_role=target_role, major=major or "")
+                    except:
                         query = query_template
 
-                    category_raw = next_stage.get("category")
                     rag_results = []
                     context_text = ""
 
                     if category_raw == "certification" and interview.resume and interview.resume.structured_data:
-                        sd = interview.resume.structured_data
-                        if isinstance(sd, str): sd = json.loads(sd)
-                        certs = sd.get("certifications", [])
-                        important_certs = [c for c in certs if any(kw in c.get('title', '') for kw in ["데이터", "분석", "RAG", "AI", "클라우드", "SQL", "ADSP", "정보처리"])]
-                        final_certs = important_certs if important_certs else certs
-                        if final_certs:
-                            logger.info(f"✅ RAG 건너뜀 (구조화 데이터 활용)")
-                            context_text = "지원자가 보유한 자격증 목록:\n" + "\n".join([f"- {c.get('title')}" for c in final_certs])
-                            rag_results = [{'text': f"자격명: {final_certs[0].get('title')}"}]
-                        else:
-                            rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
-                            context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
+                        # 구조화된 데이터에서 자격증 추출 로직 (생략 방지를 위한 유지)
+                        context_text = "지원자가 보유한 자격증 목록:\n" + cert_list
+                        rag_results = [{'text': f"보유 자격: {cert_list}"}]
                     else:
-                        filter_type = None
-                        if category_raw == "certification": filter_type = "certifications"
-                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3, filter_type=filter_type)
+                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
                         context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
                         
                     if last_user_transcript:
@@ -287,43 +284,31 @@ def generate_next_question_task(self, interview_id: int):
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
                 chain = prompt | llm | StrOutputParser()
 
-                # 가이드 내 변수 치환 ({company_ideal} 등)
+                # 가이드 내 변수 치환
                 guide_raw = next_stage.get('guide', '')
                 try:
-                    guide_formatted = guide_raw.format(company_ideal=company_ideal if 'company_ideal' in locals() else "회사의 우수한 인재상")
+                    guide_formatted = guide_raw.format(company_ideal=company_ideal)
                 except:
                     guide_formatted = guide_raw
 
                 final_content = chain.invoke({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
-                    "company_ideal": company_ideal if 'company_ideal' in locals() else "공개되지 않음",
+                    "company_ideal": company_ideal,
                     "guide": guide_formatted,
-                    "target_role": interview.position or "지원 직무"
+                    "target_role": target_role
                 })
 
-                # [추가] AI 응답 정제: 따옴표, 숫자, '질문:' 등 불필요한 장식 제거
+                # [정제]
                 final_content = final_content.strip()
-                # 1. 앞뒤 따옴표 제거
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
-                # 2. 앞줄 번호나 '질문:' 등의 태그 제거 (예: '1.', '질문:', "'1.")
                 final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
-                # 3. 중복 공백 제거 및 다시 한번 다듬기
                 final_content = final_content.strip()
-
-                # 인트로 메시지 조합 (3번 질문 전용 로직 포함)
-                candidate_name = "지원자"
-                if interview.resume and interview.resume.structured_data:
-                    sd = interview.resume.structured_data
-                    if isinstance(sd, str): sd = json.loads(sd)
-                    candidate_name = sd.get("header", {}).get("name", "지원자")
 
                 intro_tpl = next_stage.get("intro_sentence", "")
                 if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
-                    # RAG 결과에서 첫 번째 자격증 이름 추출 시도
                     cert_name = "자료에 명시된"
                     if rag_results:
-                        # "[자격증] 자격명: XXX" 형태에서 이름 추출
                         match = re.search(r'자격명:\s*([^,\(]+)', rag_results[0]['text'])
                         if match: cert_name = match.group(1).strip()
                     intro_msg = intro_tpl.format(candidate_name=candidate_name, cert_name=cert_name)
@@ -336,7 +321,7 @@ def generate_next_question_task(self, interview_id: int):
                     intro_msg = ""
 
                 if next_stage.get("type") == "followup":
-                    intro_msg = "" # 프롬프트에서 이미 생성하므로 중복 방지를 위해 비움
+                    intro_msg = "" 
                 
                 display_name = next_stage.get("display_name", "심층 면접")
                 final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
