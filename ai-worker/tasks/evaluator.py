@@ -221,26 +221,37 @@ def generate_final_report(interview_id: int):
             # LangChain Parser 설정
             parser = JsonOutputParser(pydantic_object=FinalReportSchema)
             
+            # [핵심] 전체 평가 루브릭 가져오기
+            full_rubric = {}
+            try:
+                full_rubric = create_evaluation_rubric()
+                logger.info("📋 Full Rubric loaded for Final Report")
+            except Exception as re_err:
+                logger.error(f"Failed to load full rubric: {re_err}")
+
             logger.info(f"🤖 Starting [FINAL REPORT] LLM analysis for Interview {interview_id}...")
             exaone = get_exaone_llm()
             system_msg = f"""당신은 대한민국 최고의 기술 기업에서 수천 명의 지원자를 검증해온 '{position}' 분야 시니어 면접관 위원회의 위원장입니다. 
-당신의 임무는 제공된 면접 로그를 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
+당신의 임무는 제공된 면접 로그와 [표준 평가 루브릭]을 바탕으로 지원자의 역량을 6개 핵심 지표로 정밀 평가하는 것입니다.
 
-[평가 방법론: STAR & Consistency]
-1. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
-2. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
-3. 태도 일관성: 면접 전체 과정에서 용어 사용의 적절성과 가치관의 일관성을 확인하십시오.
-4. 유연한 평가: 만약 면접이 중간에 종료되어 데이터가 부족하더라도, 제공된 답변 범위 내에서 최선의 분석을 제공하고 부족한 부분은 '추후 확인 필요' 등으로 명시하십시오."""
+[표준 평가 루브릭]
+{json.dumps(full_rubric, ensure_ascii=False, indent=2)}
 
-            user_msg = f"""다음 면접 대화 내용을 기반으로 최종 평가를 내리십시오.
+[평가 지침]
+1. 위 루브릭의 '평가 기준(Criteria)'과 '등급별 지표(Indicators)'를 엄격히 준수하여 점수를 산출하십시오.
+2. STAR 분석: 지원자가 답변에서 구체적인 상황(S), 과업(T), 행동(A), 결과(R)를 논리적으로 설명했는지 분석하십시오.
+3. 기술적 정합성: {position} 직무에 필요한 핵심 기술 원리와 선택 근거를 명확히 알고 있는지 체크하십시오.
+4. 피드백 전문성: 단순 칭찬보다는 루브릭의 지표를 근거로 보완할 점을 구체적으로 제시하여 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오."""
+
+            user_msg = f"""다음 면접 대화 내용을 기반으로 루브릭 기준에 따라 최종 평가를 내리십시오.
             
 [면접 대화]
 {conversation}
 
 [제약 사항]
 - 결과는 반드시 시스템 연동을 위해 지정된 JSON 포맷으로만 출력하십시오.
-- 각 피드백은 지원자의 성장을 돕는 '시니어의 조언' 톤을 유지하십시오.
-- strengths와 improvements는 반드시 문자열 배열([])로 작성하십시오.
+- 각 점수는 0점에서 100점 사이로 산출하십시오.
+- strengths와 improvements는 루브릭의 지표를 참고하여 각각 2-3가지 문자열 배열([])로 작성하십시오.
 
 {parser.get_format_instructions()}"""
             
