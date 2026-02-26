@@ -26,18 +26,31 @@ current_file_path = os.path.abspath(__file__) # tasks/evaluator.py
 tasks_dir = os.path.dirname(current_file_path) # tasks/
 ai_worker_root = os.path.dirname(tasks_dir)    # ai-worker/
 
-if ai_worker_root not in sys.path:
-    sys.path.insert(0, ai_worker_root)
+# backend-core 경로 추가 (rubric_generator 임포트를 위함)
+backend_core_path = os.path.abspath(os.path.join(ai_worker_root, "..", "backend-core"))
+if backend_core_path not in sys.path:
+    sys.path.insert(0, backend_core_path)
 
 # utils.exaone_llm은 실제 사용 시점에 임포트 (워커 시작 시 크래시 방지)
 try:
     from utils.exaone_llm import get_exaone_llm
+    from utils.rubric_generator import create_evaluation_rubric
 except ImportError:
-    def get_exaone_llm():
-        from ai_worker.utils.exaone_llm import get_exaone_llm
-        return get_exaone_llm()
+    logger.warning("Could not import from backend-core utils. Falling back to basics.")
 
 logger = logging.getLogger("AI-Worker-Evaluator")
+
+def get_rubric_for_stage(stage_name: str) -> dict:
+    """스테이지 이름에 맞는 루브릭 영역 반환"""
+    try:
+        full_rubric = create_evaluation_rubric()
+        for area in full_rubric["evaluation_areas"]:
+            if stage_name in area["target_stages"]:
+                logger.info(f"✅ Found matching Rubric Area: {area['name']} for stage: {stage_name}")
+                return area
+    except Exception as e:
+        logger.error(f"Error mapping rubric for stage {stage_name}: {e}")
+    return None
 
 # -----------------------------------------------------------
 # [Schema] 평가 데이터 구조 정의 (Pydantic)
@@ -71,19 +84,32 @@ class FinalReportSchema(BaseModel):
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None):
     """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
     
-    logger.info(f"질문 {question_id}에 대한 대화 내역 {transcript_id} 분석 중")
-    
-    if not answer_text or not answer_text.strip():
-        logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
-        return {
-            "technical_score": 0,
-            "communication_score": 0,
-            "feedback": "답변이 제공되지 않았습니다."
-        }
-    
     start_ts = time.time()
     
     try:
+        # 질문 정보 조회 (Stage 확인용)
+        stage_name = "unknown"
+        if question_id:
+            with Session(engine) as session:
+                question = session.get(Question, question_id)
+                if question:
+                    stage_name = question.question_type or "unknown"
+
+        # [핵심] 기존의 잘못된 'guide' 루브릭 대신, rubric_generator의 진짜 루브릭 사용
+        if not rubric or "guide" in rubric:
+            real_rubric = get_rubric_for_stage(stage_name)
+            if real_rubric:
+                rubric = real_rubric
+                logger.info(f"📊 Using REAL Rubric for {stage_name}")
+
+        if not answer_text or not answer_text.strip():
+            logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
+            return {
+                "technical_score": 0,
+                "communication_score": 0,
+                "feedback": "답변이 제공되지 않았습니다."
+            }
+        
         # LangChain Parser 설정
         parser = JsonOutputParser(pydantic_object=AnswerEvalSchema)
         
@@ -136,8 +162,12 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
             update_question_avg_score(question_id, answer_quality)
 
         duration = time.time() - start_ts
-        logger.info(f"답변 평가 완료 ({duration:.2f}초)")
+        logger.info(f"답변 평가 완료 ({duration:.2f}초, Stage: {stage_name})")
         return result
+
+    except Exception as e:
+        logger.error(f"Evaluation Failed: {e}")
+        return {"error": str(e)}
 
     except Exception as e:
         logger.error(f"Evaluation Failed: {e}")
