@@ -348,7 +348,10 @@ def generate_next_question_task(self, interview_id: int):
                 # [정제]
                 final_content = final_content.strip()
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
+                # 레이블 제거 강화: 핵심 요약, 꼬리질문, 요약, 질문 등 및 마크다운 볼트(**) 제거
+                final_content = re.sub(r'^\**핵심\s*요약:\**\s*|^\**꼬리질문:\**\s*|^\**요약:\**\s*|^\**질문:\**\s*', '', final_content, flags=re.IGNORECASE)
                 final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
+                final_content = final_content.replace("**", "") # 볼트 제거
                 
                 # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
                 if final_content.count('?') > 1:

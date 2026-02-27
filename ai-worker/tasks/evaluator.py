@@ -250,8 +250,8 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
             transcript_id,
             sentiment_score=sentiment,
             emotion="neutral",
-            total_score=float(answer_quality),
-            rubric_score=rubric_score_data
+            total_score=float(tech_score),
+            rubric_score=db_rubric_data
         )
         
         # 2. [핵심] 상세 루브릭 점수 및 총점 칼럼 업데이트 (한글)
