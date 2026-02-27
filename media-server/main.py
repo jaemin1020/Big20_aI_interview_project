@@ -500,7 +500,7 @@ async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
     
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
-    CHUNK_DURATION_MS = 3000 
+    CHUNK_DURATION_MS = 3000
     accumulated_frames = []
     try:
         while True:
