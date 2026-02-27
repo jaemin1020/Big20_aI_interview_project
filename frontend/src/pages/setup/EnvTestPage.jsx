@@ -173,6 +173,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
       }, 2000);
     } catch (err) {
       console.error("Camera access failed:", err);
+      sessionStorage.setItem('env_video_ok', 'false'); // 카메라 접근 실패 시 명시적 실패 저장
     }
   };
 
@@ -304,6 +305,31 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             >
               다음 진행
             </PremiumButton>
+          </div>
+
+          {/* 개발용 빠른 통과 버튼 */}
+          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            <button
+              onClick={() => {
+                sessionStorage.setItem('env_audio_ok', 'true');
+                sessionStorage.setItem('env_video_ok', 'true');
+                if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+                onNext();
+              }}
+              style={{
+                background: 'rgba(251, 191, 36, 0.1)',
+                border: '1px dashed rgba(251, 191, 36, 0.6)',
+                borderRadius: '8px',
+                color: 'rgba(251, 191, 36, 0.9)',
+                padding: '8px 20px',
+                fontSize: '0.82rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                letterSpacing: '0.03em'
+              }}
+            >
+              🚀 개발 테스트: 음성+영상 즉시 통과
+            </button>
           </div>
         </GlassCard>
       </div>
