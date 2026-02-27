@@ -244,25 +244,34 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
         tech_score = safe_int(result.get("total_score"), 70)
         rubric_scores = result.get("rubric_scores", {})
         
-        # 1. 감성 점수 업데이트 (기존 로직 유지용)
-        sentiment = (tech_score / 100.0) - 0.5 
-        update_transcript_sentiment(
-            transcript_id, 
-            sentiment_score=sentiment, 
-            emotion="neutral"
-        )
-        
-        # 2. [핵심] 상세 루브릭 점수 및 총점 칼럼 업데이트 (한글)
+        # 2. [핵심] 상세 루브릭 점수 및 총점 칼럼 업데이트 데이터 구성 (한글)
         db_rubric_data = {
             "평가영역": rubric.get("name", "일반 평가") if rubric else "일반 평가",
             "세부항목점수": rubric_scores,
             "항목별배점": rubric.get("detailed_scoring", {}) if rubric else {}
         }
-        update_transcript_scores(
-            transcript_id,
-            total_score=float(tech_score),
-            rubric_score=db_rubric_data
-        )
+
+        # 1. 감성 점수 및 상세 점수 업데이트
+        sentiment = (tech_score / 100.0) - 0.5 
+        logger.info(f"💾 Saving scores to DB for Transcript {transcript_id}: total={tech_score}, area={db_rubric_data['평가영역']}")
+
+        try:
+            update_transcript_sentiment(
+                transcript_id,
+                sentiment_score=sentiment,
+                emotion="neutral",
+                total_score=float(tech_score),
+                rubric_score=db_rubric_data
+            )
+            
+            update_transcript_scores(
+                transcript_id,
+                total_score=float(tech_score),
+                rubric_score=db_rubric_data
+            )
+            logger.info(f"✅ Successfully saved scores to DB for Transcript {transcript_id}")
+        except Exception as db_err:
+            logger.error(f"❌ Failed to save scores to DB for Transcript {transcript_id}: {db_err}")
         
         # 3. 질문 평균 점수 업데이트
         if question_id:

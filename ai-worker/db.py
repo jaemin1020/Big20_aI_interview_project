@@ -3,7 +3,14 @@ from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# KST (Korea Standard Time) 설정
+KST = timezone(timedelta(hours=9))
+
+def get_kst_now():
+    return datetime.now(KST).replace(tzinfo=None)
+
 from enum import Enum
 import os
 import logging
@@ -14,7 +21,7 @@ logger = logging.getLogger("AI-Worker-DB")
 
 # Database Connection
 # ==========================================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
 # db ➔ localhost
 # 5432 ➔ 1543 (Main branch uses 15432, but keeping local default 5432)
 
@@ -108,15 +115,38 @@ def update_question_avg_score(question_id: int, new_score: float):
             session.add(question)
             session.commit()
 
-def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emotion: str):
+def update_transcript_sentiment(
+    transcript_id: int,
+    sentiment_score: float,
+    emotion: str,
+    total_score: Optional[float] = None,
+    rubric_score: Optional[Dict[str, Any]] = None
+):
     """
     면접 스크립트 감성 분석 업데이트
+    
+    Args:
+        transcript_id: 면접 스크립트 ID
+        sentiment_score: 감성 점수
+        emotion: 감정
+        total_score: 총 평가 점수 (0-100, optional)
+        rubric_score: 루브릭별 상세 점수 JSON (optional)
+        
+    Returns:
+        None
+        
+    생성자: ejm
+    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
             transcript.sentiment_score = sentiment_score
             transcript.emotion = emotion
+            if total_score is not None:
+                transcript.total_score = total_score
+            if rubric_score is not None:
+                transcript.rubric_score = rubric_score
             session.add(transcript)
             session.commit()
 
@@ -291,7 +321,7 @@ def update_company_embedding(company_id: str, embedding: List[float]):
         company = session.get(Company, company_id)
         if company:
             company.embedding = embedding
-            company.updated_at = datetime.now()
+            company.updated_at = get_kst_now()
             session.add(company)
             session.commit()
 
@@ -342,7 +372,7 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
                 current_summary["history"] = []
             
             # 타임스탬프 추가
-            emotion_data["timestamp"] = datetime.now().isoformat()
+            emotion_data["timestamp"] = get_kst_now().isoformat()
             current_summary["history"].append(emotion_data)
             
             # 최신 상태 업데이트
@@ -379,8 +409,9 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         category=category,
         difficulty=QuestionDifficulty.MEDIUM,
         question_type=stage,
-        rubric_json={}, # 질문 생성 guide가 아닌 실제 평가용 rubric을 쓰도록 비워둠
-        is_active=True
+        rubric_json={"guide": guide},
+        is_active=True,
+        created_at=get_kst_now()
     )
     session.add(question)
     session.flush() # ID 생성을 위해 즉시 플러시
@@ -400,7 +431,7 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         text=content,
         question_id=question.id,
         order=next_order,
-        timestamp=datetime.now()
+        timestamp=get_kst_now()
     )
     session.add(new_transcript)
     session.commit() # 전체 확정

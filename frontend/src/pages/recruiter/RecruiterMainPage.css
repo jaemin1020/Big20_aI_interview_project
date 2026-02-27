@@ -123,6 +123,20 @@
     margin: 1rem 0;
 }
 
+/* 권한관리 메뉴 버튼 강조 */
+.nav-item-role {
+    color: #a5b4fc !important;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    background: rgba(99, 102, 241, 0.06) !important;
+}
+
+.nav-item-role:hover {
+    background: rgba(99, 102, 241, 0.15) !important;
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    transform: translateX(4px);
+}
+
 /* ==================== 메인 콘텐츠 ==================== */
 .recruiter-main-content {
     flex: 1;
