@@ -2,10 +2,17 @@ import logging
 import json
 import os
 from typing import Dict, List, Optional
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Field
+
+# EXAONE 엔진 임포트
+try:
+    from .exaone_llm import get_exaone_llm
+except ImportError:
+    # 절대 경로 fallback (ai-worker 루트 기준)
+    import sys
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from exaone_llm import get_exaone_llm
 
 logger = logging.getLogger("ResumeStructurer")
 
@@ -37,25 +44,15 @@ class ResumeStructurer:
     """LLM 기반 이력서 구조화 엔진
     
     Attributes:
-        llm (ChatOpenAI): LLM 엔진
+        llm (ExaoneLLM): LLM 엔진 (EXAONE-3.5)
         parser (JsonOutputParser): JSON 출력 파서
     
     생성자: lyn
     생성일자: 2026-02-04
     """
     def __init__(self):
-        # 환경 변수에서 모델 설정 로드
-        model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")
-        api_key = os.getenv("OPENAI_API_KEY")
-        
-        if not api_key:
-            logger.warning("⚠️ OPENAI_API_KEY가 없습니다. 구조화 작업이 실패할 수 있습니다.")
-
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=0,  # 정확도를 위해 0으로 설정
-            openai_api_key=api_key
-        )
+        # EXAONE 엔진 초기화
+        self.llm = get_exaone_llm()
         self.parser = JsonOutputParser(pydantic_object=StructuredResume)
 
     def structure_resume(self, text: str) -> Dict:
@@ -72,28 +69,28 @@ class ResumeStructurer:
         """
         logger.info("LLM을 이용한 이력서 구조화 시작...")
         
-        prompt = ChatPromptTemplate.from_template("""
-        당신은 최고의 채용 컨설턴트입니다. 아래 제공된 [이력서 텍스트]를 분석하여 지정된 JSON 형식으로 구조화하세요.
-        
-        ### 지침:
-        1. **절대로 가짜 정보를 생성하지 마세요.** 텍스트에 없는 내용은 빈 리스트[]나 빈 딕셔너리{{}}로 처리하세요.
-        2. 이력서의 실제 내용을 최대한 구체적으로 반영하세요. 특히 경력과 프로젝트 설명은 원문의 의미를 보존해야 합니다.
-        3. 날짜 형식은 YYYY-MM-DD 또는 YYYY-MM 형식으로 통일해 주세요.
-        
-        ### [이력서 텍스트]
-        {resume_text}
-        
-        ### [출력 형식]
-        {format_instructions}
-        """)
+        system_msg = """당신은 문서를 정밀하게 분석하여 구조화된 데이터로 변환하는 이력서 파싱 전문가입니다.
+LG AI Research의 EXAONE으로서, 제공된 [이력서 텍스트]를 분석하여 지정된 JSON 형식으로 완벽하게 구조화하십시오.
 
-        chain = prompt | self.llm | self.parser
+### 지침:
+1. **절대로 가짜 정보를 생성하지 마세요.** 텍스트에 없는 내용은 빈 리스트[]나 빈 딕셔너리{}로 처리하십시오.
+2. 이력서의 실제 내용을 최대한 구체적으로 반영하십시오. 특히 경력과 프로젝트 설명은 원문의 핵심 의미와 기술 스택을 보존해야 합니다.
+3. 날짜 형식은 YYYY-MM-DD 또는 YYYY-MM 형식으로 통일하십시오."""
+
+        user_msg = f"""아래의 [이력서 텍스트]를 분석하여 JSON 형식으로 출력하십시오.
+        
+### [이력서 텍스트]
+{text}
+
+### [출력 형식 가이드]
+{self.parser.get_format_instructions()}"""
+
+        # EXAONE 전용 프롬프트 생성
+        prompt = self.llm._create_prompt(system_msg, user_msg)
         
         try:
-            result = chain.invoke({
-                "resume_text": text,
-                "format_instructions": self.parser.get_format_instructions()
-            })
+            raw_output = self.llm.invoke(prompt, temperature=0.1)
+            result = self.parser.parse(raw_output)
             logger.info("✅ 이력서 구조화 완료")
             return result
         except Exception as e:

@@ -1,0 +1,21 @@
+=== import_corp_data.py 시작 ===
+패키지 로드 중...
+패키지 로드 완료
+DATABASE_URL    : postgresql+psycopg://postgres:1234@db:5432/interview_db
+LOCAL_DATABASE_URL: postgresql+psycopg://postgres:1234@localhost:15432/interview_db
+
+📂 JSON 로드: /app/data/corp_data.json
+   총 244개 기업 데이터 로드됨
+⚠️  로컬 연결 실패: (psycopg.OperationalError) connection failed: connection to server at "127.0.0.1", port 15432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 15432, hostaddr: '::1': connection failed: connection to server at "::1", port 15432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+- host: 'localhost', port: 15432, hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 15432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+   원본 URL로 재시도: postgresql+psycopg://postgres:1234@db:5432/interview_db
+✅ DB 연결 성공 (원본): postgresql+psycopg://postgres:1234@db:5432/interview_db
+
+✅ 완료! 244건 UPSERT, 0건 스킵
+📊 companies 테이블 현재 총 244개 행

@@ -1,0 +1,574 @@
+/* ==================== 권한관리 모달 ==================== */
+
+/* 배경 오버레이 */
+.rm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: rm-fadeIn 0.2s ease;
+}
+
+@keyframes rm-fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* 모달 본체 */
+.rm-modal {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.2);
+    width: 860px;
+    max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: rm-slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+}
+
+@keyframes rm-slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ==================== 모달 헤더 ==================== */
+.rm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.75rem 2rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    position: sticky;
+    top: 0;
+    background: #1e293b;
+    z-index: 5;
+}
+
+.rm-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.rm-header-icon {
+    font-size: 2rem;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.rm-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin: 0 0 0.2rem 0;
+}
+
+.rm-subtitle {
+    font-size: 0.875rem;
+    color: #94a3b8;
+    margin: 0;
+}
+
+.rm-close-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    border-radius: 10px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.rm-close-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+    transform: scale(1.1);
+}
+
+/* ==================== 섹션 공통 ==================== */
+.rm-add-section,
+.rm-list-section {
+    padding: 1.5rem 2rem;
+}
+
+.rm-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rm-section-icon {
+    font-size: 1.1rem;
+}
+
+.rm-count-badge {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15rem 0.6rem;
+    border-radius: 20px;
+    margin-left: 0.25rem;
+}
+
+.rm-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+    margin: 0 2rem;
+}
+
+/* ==================== 신규 사용자 추가 행 ==================== */
+.rm-add-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.rm-add-input {
+    flex: 1;
+    min-width: 120px;
+    padding: 0.7rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: #f8fafc;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.rm-add-input.rm-add-email {
+    flex: 2;
+    min-width: 200px;
+}
+
+.rm-add-input:focus {
+    border-color: rgba(99, 102, 241, 0.6);
+    background: rgba(99, 102, 241, 0.08);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.rm-add-input::placeholder {
+    color: #64748b;
+}
+
+.rm-add-select {
+    padding: 0.7rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: #f8fafc;
+    font-size: 0.9rem;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    min-width: 120px;
+}
+
+.rm-add-select:focus {
+    border-color: rgba(99, 102, 241, 0.6);
+}
+
+.rm-add-error {
+    color: #ef4444;
+    font-size: 0.8rem;
+    width: 100%;
+}
+
+.rm-add-save-btn {
+    padding: 0.7rem 1.4rem;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.rm-add-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+/* ==================== 필터 영역 ==================== */
+.rm-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.rm-filters {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.rm-filter-input {
+    padding: 0.5rem 0.875rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.825rem;
+    outline: none;
+    width: 130px;
+    transition: all 0.2s ease;
+}
+
+.rm-filter-input:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(99, 102, 241, 0.07);
+}
+
+.rm-filter-input::placeholder {
+    color: #64748b;
+}
+
+.rm-filter-select {
+    padding: 0.5rem 0.875rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.825rem;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.rm-filter-select:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+/* ==================== 테이블 ==================== */
+.rm-table-header {
+    display: grid;
+    grid-template-columns: 130px 1fr 100px 130px 130px;
+    padding: 0.6rem 1rem;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.rm-table-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 240px;
+}
+
+.rm-table-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 100px 130px 130px;
+    align-items: center;
+    padding: 0.875rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.rm-table-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: translateX(3px);
+}
+
+.rm-row-changed {
+    background: rgba(99, 102, 241, 0.06) !important;
+    border-color: rgba(99, 102, 241, 0.25) !important;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.15);
+}
+
+/* 컬럼 공통 */
+.rm-col-name,
+.rm-col-email,
+.rm-col-role,
+.rm-col-change,
+.rm-col-action {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.rm-user-name {
+    font-weight: 600;
+    color: #f8fafc;
+    gap: 0.6rem;
+}
+
+.rm-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+}
+
+.rm-user-email {
+    color: #64748b;
+    font-size: 0.825rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ==================== 권한 배지 ==================== */
+.rm-role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.775rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.role-all {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.role-candidate {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.role-recruiter {
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.role-admin {
+    background: rgba(251, 146, 60, 0.12);
+    color: #fb923c;
+    border: 1px solid rgba(251, 146, 60, 0.2);
+}
+
+/* ==================== 권한 변경 드롭다운 ==================== */
+.rm-role-select {
+    padding: 0.45rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.85rem;
+    cursor: pointer;
+    outline: none;
+    width: 115px;
+    transition: all 0.2s ease;
+}
+
+.rm-role-select:focus {
+    border-color: rgba(99, 102, 241, 0.6);
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.rm-select-changed {
+    border-color: rgba(99, 102, 241, 0.5) !important;
+    background: rgba(99, 102, 241, 0.1) !important;
+    color: #a5b4fc !important;
+}
+
+/* ==================== 저장 / 초기화 버튼 ==================== */
+.rm-save-btn,
+.rm-reset-btn {
+    padding: 0.45rem 0.875rem;
+    border-radius: 8px;
+    font-size: 0.825rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.rm-save-btn {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    box-shadow: 0 3px 8px rgba(99, 102, 241, 0.3);
+}
+
+.rm-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 14px rgba(99, 102, 241, 0.4);
+}
+
+.rm-reset-btn {
+    background: rgba(255, 255, 255, 0.04);
+    color: #475569;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: default;
+}
+
+.rm-reset-btn:not(:disabled):hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.2);
+    cursor: pointer;
+}
+
+/* ==================== 빈 상태 ==================== */
+.rm-empty {
+    text-align: center;
+    padding: 3rem;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+/* ==================== 페이지네이션 ==================== */
+.rm-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 1.25rem;
+}
+
+.rm-page-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: #94a3b8;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rm-page-btn:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+}
+
+.rm-page-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.rm-page-active {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+    border-color: transparent !important;
+    color: white !important;
+    box-shadow: 0 3px 10px rgba(99, 102, 241, 0.35);
+}
+
+.rm-page-info {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-left: 0.5rem;
+}
+
+/* ==================== 토스트 알림 ==================== */
+.rm-toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    padding: 0.75rem 2rem;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    z-index: 2000;
+    animation: rm-toastIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes rm-toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ==================== 스크롤바 커스터마이징 ==================== */
+.rm-modal::-webkit-scrollbar {
+    width: 6px;
+}
+
+.rm-modal::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.rm-modal::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.3);
+    border-radius: 3px;
+}
+
+.rm-modal::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.5);
+}
+
+/* option 스타일 */
+.rm-add-select option,
+.rm-filter-select option,
+.rm-role-select option {
+    background: #1e293b;
+    color: #f8fafc;
+}

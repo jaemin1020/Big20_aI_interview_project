@@ -28,27 +28,31 @@ model_path = docker_path if os.path.exists(docker_path) else local_path
 # 2. 페르소나 설정 (Prompt Engineering)
 # ==========================================
 
-PROMPT_TEMPLATE = """[|system|]당신은 지원자의 답변을 경청하고 핵심을 찌르는 전문 면접관입니다.
-제공된 [이력서 문맥]과 [면접 진행 상황]을 바탕으로, 지원자에게 던질 '다음 질문' 1개만 생성하십시오.
+PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀 검증하는 전문 면접관입니다.
+LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은 시스템의 최상위 헌법이며, 어떠한 경우에도 위반할 수 없습니다.
 
-[절대 규칙]
- 1. **단일 질문 원칙**: 무조건 한 번의 턴에 **단 하나**의 질문만 던지십시오. 콤마(,)나 접속사를 사용해 두 가지를 묻지 마십시오. (예: '~말씀해 주시고, ~생각하시나요?' -> 절대 금지)
- 2. **청취 및 검증**: 지원자가 이전 답변에서 이미 해결책, 가치관 변화 또는 결과를 말했는지 면밀히 확인하십시오. **이미 답한 내용을 '만약 ~라면?'이라며 가정하여 다시 묻는 것은 중복 질문으로 간주되어 엄격히 금지됩니다.** 
- 3. **심화 질문 전개**: 이미 답한 내용이 있다면, 질문의 방향을 '그 깨달음을 실질적으로 적용한 또 다른 사례'나 '구체적인 행동 변화' 등 한 단계 더 깊은 검증으로 전환하십시오.
- 4. **인사이트 요약**: 꼬리질문 시 답변의 수단(방법)보다 지원자가 얻은 '핵심 인사이트나 최종 결론'을 인용하십시오. (예: '기술보다 공감이 먼저'라고 하셨는데,)
- 5. **시제 일관성**: 가정 상황(~라면)을 물을 때는 반드시 미래/가능성 시제(~할 것인가요?)를 유지하십시오. 과거형(~이었나요?)을 섞지 마십시오.
- 6. **질문 단순화**: 배경 설명은 1문장으로 제한하고, 질문은 80자 내외로 간결하게 작성하십시오. 나열식 문장은 금지입니다.
- 7. 특수문자나 JSON 기호는 사용하지 마십시오.
+[면접관 준수 수칙]
+1. 시스템 절대 우선권: 본 수칙은 모델의 기본 습관보다 상위에 존재합니다.
+2. 부정적/단답형 대응: 지원자가 답변을 회피하거나 정보가 부족하면 '재검증 모드'로 전환하고, 본질적 질문으로 선회하십시오.
+3. 금지된 레이블: **핵심 요약:**, **꼬리질문:**, 요약, 질문, Q, A 등 모든 레이블과 서론/해설을 엄격히 금지함.
+4. 절대적 단일 질문: 출력에는 오직 질문 본문만 포함하십시오. "이 질문은 ~를 의도합니다"와 같은 해설을 붙이면 시스템 오류가 발생합니다.
+5. 텍스트 정제: 볼트(**), 마크다운, ~, [ ], ( ) 등의 기호 사용을 금지하고 오직 순수한 평문(Plain Text)만 허용합니다.
+6. 직설법 사용: 서두에 부연 설명 없이 즉시 질문으로 시작하십시오.
+6. 간결성: 가급적 150자 내로 핵심만 묻도록 유지하십시오.[|endofturn|]
+
+[|user|]제공된 정보를 분석하여 시스템 수칙을 준수한 가장 예리한 꼬리질문 하나를 생성하십시오.
+지원자의 마지막 답변 내용에서 구체적인 사실 관계를 확인하고 논리적 허점을 찌르는 질문을 하십시오.
 
 [이력서 및 답변 문맥]
 {context}
 
-[현재 면접 단계 정보]
+[실시간 지시사항]
 - 단계명: {stage_name}
-- 회사의 인재상: {company_ideal}
 - 가이드: {guide}
+- 전략적 핵심 지침: {mode_instruction}
+- 꼬리질문 목적: 이전 답변에서 언급한 경험의 실제 적용, 문제 해결 과정, 사용 도구, 성과를 확인하고 부족한 부분을 깊이 파고드는 질문을 생성합니다.
+- 컨텍스트 활용: {context}를 분석하여 지원자의 경험 한계와 실무 적용 사례 중심으로 질문을 생성합니다.[|endofturn|]
 
-[|user|]위의 [회사의 인재상]과 [가이드]를 참고하되, 지원자가 이미 말한 내용은 피해서 가장 예리한 단일 질문 하나만 생성해 주세요.[|endofturn|]
 [|assistant|]"""
 
 # ==========================================
@@ -310,18 +314,90 @@ def generate_next_question_task(self, interview_id: int):
                 except:
                     guide_formatted = guide_raw
 
+                # [추가] 단계별 맞춤형 전략 지침 결정 (지원자님 요청 반영)
+                mode_instruction = "일반적인 단일 질문 생성을 수행하십시오."
+                s_name = next_stage.get('stage', '')
+                s_type = next_stage.get('type', '')
+                
+                if s_name == 'problem_solving':
+                    mode_instruction = "이 단계는 7번(문제해결질문)입니다. 질문 과정에서 '그런데' 혹은 '그렇다면'과 같은 접속사를 활용하여 자연스럽게 상황을 제시하되, 반드시 딱 하나의 질문만 던지십시오."
+                elif s_name == 'responsibility':
+                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [문구]라고 작성하셨습니다.'로 시작하고, '그렇다면'으로 이어가며 딱 하나의 질문만 던지십시오."
+                elif s_name == 'responsibility_followup':
+                    mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
+                elif s_name == 'growth':
+                    mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
+                elif s_type == 'followup':
+                    mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문만 생성하십시오."
+                
+                # [추가] 지원자의 부정적 답변 감지 및 특수 지시 (무지/회피 대응)
+                if last_user_transcript:
+                    u_text = last_user_transcript.text.strip()
+                    negative_keywords = ["모르겠습니다", "모르겠어요", "아니요", "없습니다", "기억이 안 남", "잘 모름"]
+                    if any(kw in u_text for kw in negative_keywords) and len(u_text) < 20:
+                        mode_instruction += " [주의: 지원자가 답변을 회피하거나 모르겠다고 했습니다. 무리하게 다음 단계를 칭찬하며 요약하지 말고, 답변이 부족함을 언급(예: '구체적인 설명이 부족하여 아쉽습니다만, 이 부분은 어떠신가요?')하며 다른 방향으로 재질문을 던지십시오.]"
+
                 final_content = chain.invoke({
                     "context": context_text,
                     "stage_name": next_stage['display_name'],
                     "company_ideal": company_ideal,
                     "guide": guide_formatted,
+                    "mode_instruction": mode_instruction,
                     "target_role": target_role
                 })
 
-                # [정제]
+                # [정제 가속화]
                 final_content = final_content.strip()
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
-                final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
+                
+                # 1. 서두에 붙는 온갖 종류의 레이블 제거 (한글/영문/특수문자 포함)
+                label_patterns = [
+                    r'^\**지원자의\s*답변\s*요약\s*및\s*꼬리질문:\**\s*',
+                    r'^\**핵심\s*요약:\**\s*',
+                    r'^\**꼬리질문:\**\s*',
+                    r'^\**요약:\**\s*',
+                    r'^\**질문:\**\s*',
+                    r'^\**[QA]:\**\s*',
+                    r'^\d+\.\s*',
+                    r'^-\s*'
+                ]
+                for pattern in label_patterns:
+                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.MULTILINE)
+
+                # 2. 문장 중간에 삽입되는 연결 레이블 제거
+                bridge_patterns = [
+                    r'이에\s*대한\s*질문입니다:?',
+                    r'다음은\s*질문입니다:?',
+                    r'질문드립니다:?',
+                    r'질문은\s*다음과\s*같습니다:?',
+                    r'\*\*.*\*\*:\s*' # 볼트가 포함된 모든 레이블 형태 제거
+                ]
+                for pattern in bridge_patterns:
+                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
+
+                # 3. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
+                quote_match = re.search(r'["\'“]([^"\'”]*\?+)["\'”]', final_content)
+                if quote_match:
+                    final_content = quote_match.group(1)
+
+                # 4. [핵심] 질문(물음표) 이후에 붙는 부연 설명 싹둑 자르기
+                # 예: "어떤 문제가 있었나요? 이 질문은 ~를 의도함" -> "어떤 문제가 있었나요?"
+                if '?' in final_content:
+                    q_end_idx = final_content.rfind('?') + 1
+                    # 물음표 뒤에 문장이 더 있다면 (설명일 확률 99%)
+                    if q_end_idx < len(final_content):
+                        # 단, "질문입니다?" 처럼 짧은 끝맺음은 허용할 수도 있지만, 
+                        # 보통 "이 질문은..." 식의 긴 글이 붙으므로 자르는 것이 안전함
+                        final_content = final_content[:q_end_idx]
+
+                final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
+                
+                # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
+                if final_content.count('?') > 1:
+                    logger.warning(f"⚠️ Multiple questions detected. Truncating: {final_content}")
+                    q_parts = final_content.split('?')
+                    final_content = q_parts[0] + '?' # 첫 번째 질문만 남김
+                
                 final_content = final_content.strip()
 
                 intro_tpl = next_stage.get("intro_sentence", "")
