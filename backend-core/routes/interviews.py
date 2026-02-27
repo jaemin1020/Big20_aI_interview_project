@@ -351,7 +351,7 @@ async def get_interview_questions(
     interview = db.get(Interview, interview_id)
 
     def get_audio_url(question_id: int, question_text: str) -> str | None:
-        """TTS 파일 존재 시 URL 반환, 없으면 TTS 트리거 후 None 반환"""
+        """TTS 파일 존재 시 URL 반환, 없으면 None 반환 (자동 트리거 삭제)"""
         if question_id is None:
             return None
         filepath = TTS_UPLOAD_DIR / f"q_{question_id}.wav"
@@ -362,13 +362,7 @@ async def get_interview_questions(
             logger.info(f"🔊 [TTS Found] ID: {question_id}, URL: {url}")
             return url
         logger.warning(f"⏳ [TTS Missing] ID: {question_id}, Path: {filepath}")
-        # 파일 없으면 비동기로 TTS 생성 트리거 (fire-and-forget)
-        import threading
-        threading.Thread(
-            target=_fire_tts_for_question,
-            args=(question_id, question_text),
-            daemon=True
-        ).start()
+        # [수정] 프론트엔드 폴링 시 중복 트리거를 방지하기 위해 여기서 TTS를 자동으로 다시 불씨 당기지 않습니다.
         return None
 
     valid_questions = []

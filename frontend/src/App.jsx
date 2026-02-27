@@ -316,6 +316,23 @@ function App() {
       setStep('auth');
       return;
     }
+    // [핵심] 이전 이력서 및 질문 세션(찌꺼기 데이터) 완벽 제거
+    sessionStorage.removeItem('app_interview');
+    sessionStorage.removeItem('app_questions');
+    sessionStorage.removeItem('app_currentIdx');
+    sessionStorage.removeItem('app_report');
+    sessionStorage.removeItem('app_position');
+    sessionStorage.removeItem('app_parsedResume');
+
+    // 상태 초기화
+    setInterview(null);
+    setQuestions([]);
+    setCurrentIdx(0);
+    setReport(null);
+    setPosition('');
+    setParsedResumeData(null);
+    liveTranscriptRef.current = '';
+
     setStep('resume');
   };
 
@@ -730,11 +747,12 @@ function App() {
           const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
           const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
 
-          if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
+          // [핵심 로직 변경] 단순히 질문 갯수만 늘어났다고 통과시키지 않고, 
+          // 새로 추가된 마지막 질문에 고유한 audio_url(TTS)이 완성되어 들어있을 때만 통과!
+          if ((updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) && updatedQs[updatedQs.length - 1].audio_url) {
             const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
 
-            // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
-            console.log("✅ [Next Question] New question ready. Showing immediately.");
+            console.log("✅ [다음 질문] 대본 및 TTS 오디오 생성 완벽히 완료! 화면에 즉시 노출합니다.");
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
             setTranscript('');
@@ -745,6 +763,8 @@ function App() {
               wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
             }
             break;
+          } else if (updatedQs.length > questions.length) {
+            console.log("⏳ [대기 중] 질문의 텍스트는 완성되었으나 TTS 오디오가 굽히고 있습니다... 대기합니다.");
           }
         } // end for loop
 
