@@ -51,6 +51,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 def on_startup():
     init_db()
     logger.info("✅ Database initialized with new schema")
+    
+    # [추가] 서버 시작 시 이전 면접의 TTS 파일(찌꺼기) 일괄 삭제
+    tts_dir = Path("./uploads/tts")
+    if tts_dir.exists():
+        for item in tts_dir.glob("*.wav"):
+            try:
+                item.unlink()
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to delete old TTS file {item.name}: {e}")
+        logger.info("🗑️ Cleared old TTS audio files on startup")
 
 # CORS 설정
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")

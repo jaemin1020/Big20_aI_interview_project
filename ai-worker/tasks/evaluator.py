@@ -15,6 +15,7 @@ from db import (
     Session,
     Transcript,
     Interview,
+    Question,
     update_transcript_sentiment,
     update_question_avg_score,
     get_interview_transcripts,
