@@ -34,9 +34,10 @@ LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은
 [면접관 준수 수칙]
 1. 시스템 절대 우선권: 본 수칙은 모델의 기본 습관보다 상위에 존재합니다.
 2. 부정적/단답형 대응: 지원자가 답변을 회피하거나 정보가 부족하면 '재검증 모드'로 전환하고, 본질적 질문으로 선회하십시오.
-3. 금지된 레이블: **꼬리질문:** ,요약, 질문, Q, A 등 레이블 사용 금지.
-4. 절대적 단일 질문: 출력에는 핵심 한 가지 질문만 포함하십시오.
-5. 텍스트 정제: 볼트(**) 금지,마크다운 금지,~금지 평문만 허용.
+3. 금지된 레이블: **핵심 요약:**, **꼬리질문:**, 요약, 질문, Q, A 등 모든 레이블과 서론/해설을 엄격히 금지함.
+4. 절대적 단일 질문: 출력에는 오직 질문 본문만 포함하십시오. "이 질문은 ~를 의도합니다"와 같은 해설을 붙이면 시스템 오류가 발생합니다.
+5. 텍스트 정제: 볼트(**), 마크다운, ~, [ ], ( ) 등의 기호 사용을 금지하고 오직 순수한 평문(Plain Text)만 허용합니다.
+6. 직설법 사용: 서두에 부연 설명 없이 즉시 질문으로 시작하십시오.
 6. 간결성: 가급적 150자 내로 핵심만 묻도록 유지하십시오.[|endofturn|]
 
 [|user|]제공된 정보를 분석하여 시스템 수칙을 준수한 가장 예리한 꼬리질문 하나를 생성하십시오.
@@ -345,13 +346,51 @@ def generate_next_question_task(self, interview_id: int):
                     "target_role": target_role
                 })
 
-                # [정제]
+                # [정제 가속화]
                 final_content = final_content.strip()
                 final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
-                # 레이블 제거 강화: 핵심 요약, 꼬리질문, 요약, 질문 등 및 마크다운 볼트(**) 제거
-                final_content = re.sub(r'^\**핵심\s*요약:\**\s*|^\**꼬리질문:\**\s*|^\**요약:\**\s*|^\**질문:\**\s*', '', final_content, flags=re.IGNORECASE)
-                final_content = re.sub(r'^(\'?\d+\.|\'?질문:|\'?Q:|\'?-\s*)\s*', '', final_content)
-                final_content = final_content.replace("**", "") # 볼트 제거
+                
+                # 1. 서두에 붙는 온갖 종류의 레이블 제거 (한글/영문/특수문자 포함)
+                label_patterns = [
+                    r'^\**지원자의\s*답변\s*요약\s*및\s*꼬리질문:\**\s*',
+                    r'^\**핵심\s*요약:\**\s*',
+                    r'^\**꼬리질문:\**\s*',
+                    r'^\**요약:\**\s*',
+                    r'^\**질문:\**\s*',
+                    r'^\**[QA]:\**\s*',
+                    r'^\d+\.\s*',
+                    r'^-\s*'
+                ]
+                for pattern in label_patterns:
+                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.MULTILINE)
+
+                # 2. 문장 중간에 삽입되는 연결 레이블 제거
+                bridge_patterns = [
+                    r'이에\s*대한\s*질문입니다:?',
+                    r'다음은\s*질문입니다:?',
+                    r'질문드립니다:?',
+                    r'질문은\s*다음과\s*같습니다:?',
+                    r'\*\*.*\*\*:\s*' # 볼트가 포함된 모든 레이블 형태 제거
+                ]
+                for pattern in bridge_patterns:
+                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
+
+                # 3. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
+                quote_match = re.search(r'["\'“]([^"\'”]*\?+)["\'”]', final_content)
+                if quote_match:
+                    final_content = quote_match.group(1)
+
+                # 4. [핵심] 질문(물음표) 이후에 붙는 부연 설명 싹둑 자르기
+                # 예: "어떤 문제가 있었나요? 이 질문은 ~를 의도함" -> "어떤 문제가 있었나요?"
+                if '?' in final_content:
+                    q_end_idx = final_content.rfind('?') + 1
+                    # 물음표 뒤에 문장이 더 있다면 (설명일 확률 99%)
+                    if q_end_idx < len(final_content):
+                        # 단, "질문입니다?" 처럼 짧은 끝맺음은 허용할 수도 있지만, 
+                        # 보통 "이 질문은..." 식의 긴 글이 붙으므로 자르는 것이 안전함
+                        final_content = final_content[:q_end_idx]
+
+                final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
                 
                 # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
                 if final_content.count('?') > 1:

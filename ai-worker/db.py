@@ -21,7 +21,7 @@ logger = logging.getLogger("AI-Worker-DB")
 
 # Database Connection
 # ==========================================
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
 # db ➔ localhost
 # 5432 ➔ 1543 (Main branch uses 15432, but keeping local default 5432)
 
