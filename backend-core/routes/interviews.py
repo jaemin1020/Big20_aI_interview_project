@@ -104,6 +104,15 @@ async def create_interview(
 
     logger.info(f"🆕 Creating interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
 
+    # [추가] 면접 시작 전 기존에 생성되어 있던 TTS 파일(찌꺼기) 일괄 삭제
+    logger.info("🗑️ Cleaning up old TTS files before starting a new interview...")
+    if TTS_UPLOAD_DIR.exists():
+        for item in TTS_UPLOAD_DIR.glob("*.wav"):
+            try:
+                item.unlink()
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to delete old TTS file {item.name}: {e}")
+
     # 이력서에서 지원 직무(target_role) 및 회사명 가져오기
     from db_models import Resume, Company
     import json
@@ -362,18 +371,24 @@ async def get_interview_questions(
         ).start()
         return None
 
-    return {
-        "status": interview.status if interview else "UNKNOWN",
-        "questions": [
-            {
+    valid_questions = []
+    for t in results:
+        url = get_audio_url(t.question_id, t.text)
+        if url:
+            valid_questions.append({
                 "id": t.question_id,
                 "content": t.text,
                 "order": t.order,
                 "timestamp": t.timestamp,
-                "audio_url": get_audio_url(t.question_id, t.text)
-            }
-            for t in results
-        ]
+                "audio_url": url
+            })
+        else:
+            # [핵심 로직] TTS 파일이 아직 안 만들어졌으면 이 질문부터는 노출 금지 (대기 유발)
+            break
+
+    return {
+        "status": interview.status if interview else "UNKNOWN",
+        "questions": valid_questions
     }
 
 
