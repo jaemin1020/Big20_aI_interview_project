@@ -150,6 +150,19 @@ def update_transcript_sentiment(
             session.add(transcript)
             session.commit()
 
+def update_transcript_scores(transcript_id: int, total_score: float, rubric_score: Dict[str, Any]):
+    """
+    면접 답변의 상세 루브릭 점수 및 총점 업데이트
+    """
+    with Session(engine) as session:
+        transcript = session.get(Transcript, transcript_id)
+        if transcript:
+            transcript.total_score = total_score
+            transcript.rubric_score = rubric_score
+            session.add(transcript)
+            session.commit()
+            logger.info(f"✅ [DB_UPDATE] Transcript(id={transcript_id}) scores updated: total={total_score}")
+
 def create_or_update_evaluation_report(interview_id: int, **kwargs):
     """
     면접 평가 보고서 생성 또는 업데이트
@@ -196,7 +209,9 @@ def get_interview_transcripts(interview_id: int):
     생성일자: 2026-02-04
     """
     with Session(engine) as session:
-        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.order)
+        # [버그3 수정] User transcript는 order=NULL로 저장되어 order 정렬 시 순서 뒤섞임
+        # timestamp 기준으로 정렬해 AI/User 발화가 실제 시간 순서대로 LLM에 전달되도록 수정
+        stmt = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.timestamp)
         return session.exec(stmt).all()
 
 def get_user_answers(interview_id: int):
@@ -369,16 +384,26 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             session.add(interview)
             session.commit()
 
-def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, session: Session = None):
+def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None, session: Session = None):
     """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
     if session is None:
         with Session(engine) as new_session:
-            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide)
+            return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide, rubric_json)
     else:
-        return _save_generated_question_logic(session, interview_id, content, category, stage, guide)
+        return _save_generated_question_logic(session, interview_id, content, category, stage, guide, rubric_json)
 
-def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None):
+def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None):
     # 1. Question 테이블 저장
+    # [수정] guide는 질문 생성용 가이드이며 평가 기준(rubric)이 아님
+    # rubric_json이 없는 경우 표준 평가 기준을 사용 (guide를 rubric으로 오용 방지)
+    final_rubric = rubric_json if rubric_json else {
+        "criteria": ["기술적 정확성", "논리적 전달력", "직무 연관성"],
+        "focus": "지원자의 답변이 질문 의도에 맞게 구체적이고 논리적으로 전달되었는지 평가",
+        "scoring": {
+            "technical_score": "기술적 지식의 정확성과 깊이 (0-100)",
+            "communication_score": "답변의 논리성과 전달력 (0-100)"
+        }
+    }
     question = Question(
         content=content,
         category=category,
