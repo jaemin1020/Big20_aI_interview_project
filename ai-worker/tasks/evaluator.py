@@ -91,12 +91,12 @@ class FinalReportSchema(BaseModel):
     responsibility_score: int = Field(description="책임감 (0-100)")
     growth_score: int = Field(description="성장 의지 (0-100)")
     
-    technical_feedback: str = Field(description="기술 원리 및 선택 근거에 대한 분석")
-    experience_feedback: str = Field(description="직무 경험의 구체성과 실무 연계성에 대한 평가")
-    problem_solving_feedback: str = Field(description="STAR 기법에 기반한 논리적 전개 능력 분석")
-    communication_feedback: str = Field(description="전문어 사용의 적절성 및 메시지 전달력 평가")
-    responsibility_feedback: str = Field(description="답변의 일관성 및 업무에 임하는 책임감 분석")
-    growth_feedback: str = Field(description="자기계발 의지 및 향후 발전 가능성에 대한 제언")
+    technical_feedback: str = Field(description="기술 원리 수준, 선택 근거의 타당성, 실무 적용 가능성에 대한 구체적 분석 (3문장 이상)")
+    experience_feedback: str = Field(description="프로젝트 경험의 구체성, 본인의 기여도, 실무 연계성에 대한 상세 평가 (3문장 이상)")
+    problem_solving_feedback: str = Field(description="STAR 기법 기반의 문제 정의, 접근 방식, 해결 결과 및 교훈에 대한 분석 (3문장 이상)")
+    communication_feedback: str = Field(description="전문 용어 사용의 적절성, 메시지 전달력, 경청 및 답변 태도 평가 (3문장 이상)")
+    responsibility_feedback: str = Field(description="지원자의 직업 윤리, 책임감, 가치관의 일관성 및 기업 인재상 부합 여부 분석 (3문장 이상)")
+    growth_feedback: str = Field(description="자기계발 의지, 신기술 습동 속도, 향후 발전 가능성 및 시니어의 제언 (3문장 이상)")
 
     strengths: List[str] = Field(
         description="지원자의 주요 강점 2-3가지. 각 항목은 면접 답변에서 구체적인 근거를 인용하여 2문장 이상의 완결된 서술형 문장으로 작성하십시오. 예: '프로젝트에서 RAG 도입의 타당성을 실험 데이터로 직접 검증한 점은 기술력과 분석 능력을 동시에 보여줍니다. 특히 키워드 검색 대비 벡터 검색의 hit rate를 수치로 비교한 접근 방식은 실무 역량을 증명합니다.'"
@@ -309,10 +309,36 @@ def generate_final_report(interview_id: int):
             torch.cuda.empty_cache()
         gc.collect()
         
-        # 인터뷰 포지션 정보 가져오기
+        # 인터뷰 정보 및 회사 인재상 가져오기
         with Session(engine) as session:
             interview = session.get(Interview, interview_id)
             position = interview.position if interview else "지원 직무"
+            company_name = "해당 기업"
+            company_ideal = "기본 인재상: 성실, 협업, 도전"
+
+            # 1. 인재상(ideal) 정보 로드
+            if interview:
+                from db import Company, Resume
+                # ① Interview에 직접 연결된 회사 확인
+                company_obj = None
+                if interview.company_id:
+                    company_obj = session.get(Company, interview.company_id)
+                
+                # ② 이력서의 target_company를 통한 검색 (fallback)
+                if not company_obj and interview.resume_id:
+                    resume_obj = session.get(Resume, interview.resume_id)
+                    if resume_obj and resume_obj.structured_data:
+                        target_co = resume_obj.structured_data.get("header", {}).get("target_company", "")
+                        if target_co:
+                            from sqlmodel import select as sql_select
+                            norm_name = target_co.replace(" ", "").lower()
+                            all_cos = session.exec(sql_select(Company)).all()
+                            company_obj = next((c for c in all_cos if c.company_name and c.company_name.replace(" ", "").lower() == norm_name), None)
+
+                if company_obj:
+                    company_name = company_obj.company_name
+                    company_ideal = company_obj.ideal or company_ideal
+                    logger.info(f"✅ 리포트 생성용 인재상 로드 완료: {company_name}")
 
         if not transcripts:
             logger.warning("이 인터뷰에 대한 대화 내역을 찾을 수 없습니다.")
@@ -346,17 +372,18 @@ def generate_final_report(interview_id: int):
             logger.info(f"🤖 Starting [FINAL REPORT] LLM analysis for Interview {interview_id}...")
             exaone = get_exaone_llm()
             system_msg = f"""[|system|]당신은 대한민국 최고의 기술 기업에서 수만 명의 인재를 발굴해온 '{position}' 분야 전문 채용 위원장입니다.
-LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가 루브릭]을 종합 분석하여 지원자의 최종 합격 여부를 판단할 수 있는 심층 기술 리포트를 작성하십시오.
+LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가 루브릭], 그리고 [기업 인재상]을 종합 분석하여 지원자의 최종 합격 여부를 판단할 수 있는 심층 기술 리포트를 작성하십시오.
 
 [핵심 평가 프로토콜]
 1. **역량별 매칭 분석**: 루브릭의 평가 지표와 지원자의 답변을 대조하여, 단순히 잘했다는 표현이 아닌 '근거 중심'의 성적표를 작성하십시오.
 2. **논리적 일관성 검증**: 인터뷰 전반에 걸쳐 지원자의 답변이 일관된 실무 철학과 기술적 원칙을 유지하고 있는지 체크하십시오.
-3. **STAR 기법 기반 검증**: 지원자가 성과를 설명할 때 상황(S)-과업(T)-행동(A)-결과(R) 구조를 갖추어 실질적인 기여도를 증명했는지 평가하십시오.
-4. **시니어의 제언**: 강점은 극대화하고 약점은 실천 가능한 성장의 기회로 전환할 수 있도록 시니어 전문가의 깊이 있는 조언(Summary)을 제공하십시오.
-5. **텍스트 정제 (No Markdown)**: 전 영역 피드백 및 강점/보완점 작성 시 볼트(**), 이탤릭(*), 리스트(-) 등의 마크다운 문법을 일절 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 서술하십시오.
-6. **언어 일관성 및 중복 방지**: 전문적이고 정제된 어조를 유지하되, 동일한 문구나 수식어가 반복되어 가독성을 해치는 현상을 방지하십시오.[|endofturn|]"""
+3. **인재상 정밀 검증**: 제공된 [기업 인재상] 키워드와 지원자의 가치관/책임감 답변(stage 11~14)을 비교 분석하여 {company_name}에 적합한 인재인지 'responsibility_feedback'과 'growth_feedback'에 상세히 서술하십시오.
+4. **STAR 기법 기반 검증**: 지원자가 성과를 설명할 때 상황(S)-과업(T)-행동(A)-결과(R) 구조를 갖추어 실질적인 기여도를 증명했는지 평가하십시오.
+5. **시니어의 제언**: 강점은 극대화하고 약점은 실천 가능한 성장의 기회로 전환할 수 있도록 시니어 전문가의 깊이 있는 조언(Summary)을 제공하십시오.
+6. **텍스트 정제 (No Markdown)**: 전 영역 피드백 및 강점/보완점 작성 시 볼트(**), 이탤릭(*), 리스트(-) 등의 마크다운 문법을 일절 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 서술하십시오.
+7. **언어 일관성 및 중복 방지**: 전문적이고 정제된 어조를 유지하되, 동일한 문구나 수식어가 반복되어 가독성을 해치는 현상을 방지하십시오.[|endofturn|]"""
 
-            user_msg = f"""[|user|]다음 면접 대화 전문을 바탕으로 루브릭 기준에 따라 최종 기술 역량 평가 리포트를 생성하십시오.
+            user_msg = f"""[|user|]다음 면접 대화 전문을 바탕으로 리포트를 생성하십시오.
             
 [면접 대화 전문]
 {conversation}
@@ -364,8 +391,14 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
 [표준 평가 루브릭]
 {json.dumps(full_rubric, ensure_ascii=False, indent=2)}
 
+[기업 인재상]
+회사명: {company_name}
+인재상: {company_ideal}
+
 [출력 제약 사항]
 - 모든 분석은 반드시 루브릭의 세부 목표와 연동되어야 합니다.
+- 특히 'responsibility_feedback'은 지원자의 직업 윤리와 책임감을, 'growth_feedback'은 발전 가능성을 분리하여 상세히 작성하십시오.
+- **필수 사항**: 만약 가치관/책임감/성장 관련 특정 스테이지(11~14) 발화가 부족하거나 면접이 중도 종료되었다 하더라도, 면접 전체 발화에서 드러난 태도와 인재상의 정렬도를 바탕으로 추론하여 반드시 구체적인 분석 내용을 작성하십시오. 결코 공란이나 디폴트 문구로 남기지 마십시오.
 - strengths와 improvements 항목은 면접 중 특정 발화를 근거로 인용하여 2문장 이상의 서술형으로 작성하십시오.
 - 결과물은 반드시 지정된 JSON 포맷만 출력하며, 사족을 붙이지 마십시오.
 
