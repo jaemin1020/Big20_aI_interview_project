@@ -64,16 +64,21 @@ from langchain_community.vectorstores import PGVector
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (LangChain PGVector 활용)
 # -----------------------------------------------------------
+import logging
+
+# 로거 설정
+logger = logging.getLogger(__name__)
+
 def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
     """
     LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
     """
-    print(f"\n🔍 [RAG 검색] 키워드: '{query}' (지원자 ID: {resume_id}, 필터: {filter_type})")
+    logger.info(f"🔍 [RAG 검색 시작] Query: '{query}' | ResumeID: {resume_id} | Filter: {filter_type}")
     
     # 1. 임베딩 모델 및 연결 설정
     embedder = get_embedder()
     if not embedder:
-        print("❌ 임베딩 모델을 사용할 수 없습니다.")
+        logger.error("❌ 임베딩 모델 로드 실패로 검색을 중단합니다.")
         return []
     
     connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
@@ -92,31 +97,37 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
             search_filter["chunk_type"] = filter_type
 
         # 4. 유사도 검색 수행
+        logger.debug(f"📐 쿼리 임베딩 및 유사도 계산 중...")
         docs_with_scores = vector_store.similarity_search_with_score(
             query, 
             k=top_k,
             filter=search_filter
         )
 
-        # 5. 결과 가공
+        # 5. 결과 가공 및 로깅
         results = []
-        for doc, score in docs_with_scores:
-            results.append({
+        if not docs_with_scores:
+            logger.warning(f"⚠️ 검색 결과가 없습니다. (Filter: {search_filter})")
+            return []
+
+        logger.info(f"✅ 검색 완료: {len(docs_with_scores)}개의 문맥을 발견했습니다.")
+        for i, (doc, score) in enumerate(docs_with_scores):
+            res = {
                 'text': doc.page_content,
                 'meta': doc.metadata,
-                'score': float(score)  # 거리 점수 추가
-            })
-
-        print(f"   👉 {len(results)}개의 관련 내용을 찾았습니다.")
-        for i, res in enumerate(results):
-            preview = res['text'].replace('\n', ' ')[:80]
-            chunk_type = res['meta'].get('chunk_type', 'N/A')
-            print(f"      [{i+1}] (Dist: {res['score']:.4f}, Type: {chunk_type}): {preview}...")
+                'score': float(score)
+            }
+            results.append(res)
+            
+            # 검색 결과 상세 로그 출력
+            preview = res['text'].replace('\n', ' ')[:100]
+            c_type = res['meta'].get('chunk_type', 'N/A')
+            logger.info(f"   👉 [{i+1}] [Dist: {res['score']:.4f} | Type: {c_type}] {preview}...")
 
         return results
 
     except Exception as e:
-        print(f"❌ LangChain PGVector 검색 실패: {e}")
+        logger.error(f"❌ LangChain PGVector 검색 중 예외 발생: {str(e)}", exc_info=True)
         return []
 
 # -----------------------------------------------------------
@@ -140,7 +151,7 @@ def get_retriever(resume_id=1, top_k=10, filter_type=None):
     if filter_type:
         search_filter["chunk_type"] = filter_type
 
-    # 검색 결과를 필터링하여 반환하도록 설정
+    logger.info(f"📡 Retriever 생성 완료 (ResumeID: {resume_id}, Filter: {filter_type})")
     return vector_store.as_retriever(
         search_kwargs={
             "k": top_k,
@@ -149,39 +160,54 @@ def get_retriever(resume_id=1, top_k=10, filter_type=None):
     )
 
 # -----------------------------------------------------------
-# [신규] 질문 은행(questions 테이블) 검색 함수
+# [변경 완료] 질문 은행(questions 테이블) 검색 함수 (All LangChain 방식)
 # -----------------------------------------------------------
 def retrieve_similar_questions(query, top_k=5):
     """
-    질문 은행(questions 테이블)에서 쿼리와 유사한 질문들을 검색합니다.
+    LangChain PGVector를 사용하여 질문 은행에서 쿼리와 유사한 질문들을 검색합니다.
     """
-    print(f"\n🔍 [질문 은행 검색] 쿼리: '{query[:50]}...' (Top {top_k})")
+    logger.info(f"🔍 [질문 은행 검색 시작] Query: '{query[:50]}...' (Framework: LangChain)")
     
     embedder = get_embedder()
     if not embedder:
+        logger.error("❌ 임베딩 모델 로드 실패로 질문 은행 검색을 중단합니다.")
         return []
     
     connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
     
     try:
-        from sqlalchemy import text
-        query_vector = embedder.embed_query(query)
-        sql = text("""
-            SELECT content, category, position, (embedding <=> :emb) as distance
-            FROM questions
-            WHERE embedding IS NOT NULL
-            ORDER BY distance ASC
-            LIMIT :limit
-        """)
-        with engine.connect() as conn:
-            rows = conn.execute(sql, {"emb": str(query_vector), "limit": top_k}).fetchall()
-            results = [{"text": r[0], "meta": {"category": r[1], "position": r[2]}, "score": float(r[3])} for r in rows]
+        # 질문 은행은 별도의 컬렉션/테이블(questions)을 사용하므로 collection_name을 맞춰줍니다.
+        # 주의: 랭체인 PGVector는 기본적으로 langchain_pg_embedding 테이블을 보려 하지만, 
+        # 기존 questions 테이블 포맷과 맞추기 위해 collection_name 인자를 활용합니다.
+        vector_store = PGVector(
+            connection_string=connection_string,
+            embedding_function=embedder,
+            collection_name="questions_collection" # 질문 데이터용 컬렉션
+        )
+        
+        # 유사도 검색 수행
+        docs_with_scores = vector_store.similarity_search_with_score(query, k=top_k)
+        
+        results = []
+        if not docs_with_scores:
+            logger.warning("⚠️ 질문 은행에서 검색된 내용이 없습니다.")
+            return []
+
+        logger.info(f"✅ 검색 완료: 랭체인 엔진을 통해 {len(docs_with_scores)}개의 유사 질문을 추출했습니다.")
+        for i, (doc, score) in enumerate(docs_with_scores):
+            res = {
+                "text": doc.page_content, 
+                "meta": doc.metadata, 
+                "score": float(score)
+            }
+            results.append(res)
+            # 상세 데이터 로그 출력
+            logger.info(f"   👉 [{i+1}] [Dist: {res['score']:.4f}] {res['text'][:100]}...")
             
-            print(f"   👉 질문 은행에서 {len(results)}개의 유사 질문을 찾았습니다.")
-            return results
+        return results
             
     except Exception as e:
-        print(f"❌ 질문 은행 검색 실패: {e}")
+        logger.error(f"❌ 랭체인 기반 질문 은행 검색 중 예외 발생: {str(e)}", exc_info=True)
         return []
 
 # -----------------------------------------------------------

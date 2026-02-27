@@ -66,12 +66,12 @@ def embed_chunks(chunks):
     
     # 4. 벡터 변환 수행 (AI 연산)
     try:
-        # [해석] embed_documents: 텍스트 리스트를 모델에 던져줍니다.
-        # 결과값 vectors는 [[0.12, -0.5, ...], [0.8, 0.2, ...]] 같은 거대한 숫자 배열이 됩니다.
+        # [해석] KURE-v1 모델은 접두어 없이도 뛰어난 성능을 보이므로, 
+        # 복잡한 전처리 없이 원문 그대로 임베딩을 수행하여 데이터의 순수성을 유지합니다.
         vectors = embedder.embed_documents(texts)
     except Exception as e:
         # AI 모델 실행 중 에러(메모리 부족 등)가 나면 프로그램이 멈추지 않게 예외 처리를 합니다.
-        print(f"❌ 임베딩 모델 실행 중 에러: {e}")
+        logger.error(f"❌ 임베딩 모델 실행 중 에러: {e}")
         return []
 
     # 5. 데이터와 벡터의 결합
