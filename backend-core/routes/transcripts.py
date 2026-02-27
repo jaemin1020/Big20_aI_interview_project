@@ -71,7 +71,7 @@ async def create_transcript(
                         question.question_type  # 9~14번 스테이지(협업/가치관/성장) 판별용
                     ],
                     queue="gpu_queue",
-                    countdown=120
+                    countdown=10
                 )
                 logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
     except Exception as e:

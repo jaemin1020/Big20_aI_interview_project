@@ -5,7 +5,7 @@ import json
 import sys
 import os
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Dict, Any
 from langchain_core.output_parsers import JsonOutputParser
 from celery import shared_task
 
@@ -17,7 +17,9 @@ from db import (
     Interview,
     Company,
     Resume,
+    Question,
     update_transcript_sentiment,
+    update_transcript_scores,
     update_question_avg_score,
     get_interview_transcripts,
     get_user_answers
@@ -76,9 +78,9 @@ def get_rubric_for_stage(stage_name: str) -> dict:
 # [Schema] 평가 데이터 구조 정의 (Pydantic)
 # -----------------------------------------------------------
 class AnswerEvalSchema(BaseModel):
-    technical_score: int = Field(description="기술적 지식 및 숙련도 점수 (0-5)")
-    communication_score: int = Field(description="의사소통 및 전달 능력 점수 (0-5)")
-    feedback: str = Field(description="답변에 대한 구체적이고 건설적인 피드백")
+    total_score: int = Field(description="루브릭 세부 항목 점수들의 합계 (0-100)")
+    rubric_scores: Dict[str, int] = Field(description="루브릭 세부 항목별 점수 (예: {'논리적 구조': 35, '핵심 전달력': 30, ...})")
+    feedback: str = Field(description="답변에 대한 구체적이고 건설적인 피드백 (마크다운 없이 평문으로 작성)")
 
 class FinalReportSchema(BaseModel):
     overall_score: int = Field(description="전체 평균 점수 (0-100)")
@@ -118,21 +120,27 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
                 question = session.get(Question, question_id)
                 if question:
                     stage_name = question.question_type or "unknown"
+        
+        # question_type이 직접 넘어온 경우 우선 순위 부여
+        if question_type and question_type != "unknown":
+            stage_name = question_type
 
-        # [핵심] 기존의 잘못된 'guide' 루브릭 대신, rubric_generator의 진짜 루브릭 사용
-        if not rubric or "guide" in rubric:
-            real_rubric = get_rubric_for_stage(stage_name)
-            if real_rubric:
-                rubric = real_rubric
-                logger.info(f"📊 Using REAL Rubric for {stage_name}")
+        logger.info(f"🔍 Analyzing Answer: Stage={stage_name}, QuestionID={question_id}")
 
-        if not answer_text or not answer_text.strip():
-            logger.warning(f"대화 내역 {transcript_id}의 답변이 비어 있습니다. LLM 평가를 건너뜁니다.")
-            return {
-                "technical_score": 0,
-                "communication_score": 0,
-                "feedback": "답변이 제공되지 않았습니다."
-            }
+        # [핵심] 100점 만점 상세 루브릭 우선 적용
+        # 기존 (0-5) 척도 루브릭이 넘어오더라도, rubric_generator의 상세 항목이 있다면 그것을 사용합니다.
+        real_rubric = get_rubric_for_stage(stage_name)
+        if real_rubric:
+            rubric = real_rubric
+            logger.info(f"📊 Using REAL Detailed Rubric for {stage_name}")
+        elif not rubric or "guide" in rubric:
+            logger.warning(f"⚠️ No matching detailed rubric found for stage: {stage_name}. Using fallback.")
+            if not rubric:
+                rubric = {
+                    "name": "일반 평가",
+                    "detailed_scoring": {"전반적 답변 품질": 100},
+                    "scoring_guide": {"excellent": {"range": [85, 100]}}
+                }
         
         # LangChain Parser 설정
         parser = JsonOutputParser(pydantic_object=AnswerEvalSchema)
@@ -233,23 +241,35 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
             except (ValueError, TypeError):
                 return default
 
-        tech_score = safe_int(result.get("technical_score"), 3)
-        comm_score = safe_int(result.get("communication_score"), 3)
-        sentiment = ((tech_score + comm_score) / 10.0) - 0.5 
+        tech_score = safe_int(result.get("total_score"), 70)
+        rubric_scores = result.get("rubric_scores", {})
         
+        # 1. 감성 점수 업데이트 (기존 로직 유지용)
+        sentiment = (tech_score / 100.0) - 0.5 
         update_transcript_sentiment(
             transcript_id, 
             sentiment_score=sentiment, 
             emotion="neutral"
         )
         
-        answer_quality = (tech_score + comm_score) * 10 
+        # 2. [핵심] 상세 루브릭 점수 및 총점 칼럼 업데이트 (한글)
+        db_rubric_data = {
+            "평가영역": rubric.get("name", "일반 평가") if rubric else "일반 평가",
+            "세부항목점수": rubric_scores,
+            "항목별배점": rubric.get("detailed_scoring", {}) if rubric else {}
+        }
+        update_transcript_scores(
+            transcript_id,
+            total_score=float(tech_score),
+            rubric_score=db_rubric_data
+        )
         
+        # 3. 질문 평균 점수 업데이트
         if question_id:
-            update_question_avg_score(question_id, answer_quality)
+            update_question_avg_score(question_id, tech_score)
 
         duration = time.time() - start_ts
-        logger.info(f"답변 평가 완료 ({duration:.2f}초, Stage: {stage_name})")
+        logger.info(f"답변 상세 평가 완료 ({duration:.2f}초, 점수: {tech_score})")
         return result
 
     except Exception as e:

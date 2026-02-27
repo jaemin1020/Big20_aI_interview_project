@@ -111,17 +111,6 @@ def update_question_avg_score(question_id: int, new_score: float):
 def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emotion: str):
     """
     면접 스크립트 감성 분석 업데이트
-    
-    Args:
-        transcript_id: 면접 스크립트 ID
-        sentiment_score: 감성 점수
-        emotion: 감정
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
     """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
@@ -130,6 +119,19 @@ def update_transcript_sentiment(transcript_id: int, sentiment_score: float, emot
             transcript.emotion = emotion
             session.add(transcript)
             session.commit()
+
+def update_transcript_scores(transcript_id: int, total_score: float, rubric_score: Dict[str, Any]):
+    """
+    면접 답변의 상세 루브릭 점수 및 총점 업데이트
+    """
+    with Session(engine) as session:
+        transcript = session.get(Transcript, transcript_id)
+        if transcript:
+            transcript.total_score = total_score
+            transcript.rubric_score = rubric_score
+            session.add(transcript)
+            session.commit()
+            logger.info(f"✅ [DB_UPDATE] Transcript(id={transcript_id}) scores updated: total={total_score}")
 
 def create_or_update_evaluation_report(interview_id: int, **kwargs):
     """
@@ -368,8 +370,8 @@ def _save_generated_question_logic(session: Session, interview_id: int, content:
         "criteria": ["기술적 정확성", "논리적 전달력", "직무 연관성"],
         "focus": "지원자의 답변이 질문 의도에 맞게 구체적이고 논리적으로 전달되었는지 평가",
         "scoring": {
-            "technical_score": "기술적 지식의 정확성과 깊이 (0-5)",
-            "communication_score": "답변의 논리성과 전달력 (0-5)"
+            "technical_score": "기술적 지식의 정확성과 깊이 (0-100)",
+            "communication_score": "답변의 논리성과 전달력 (0-100)"
         }
     }
     question = Question(

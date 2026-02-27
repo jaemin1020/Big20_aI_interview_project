@@ -35,7 +35,7 @@ def create_area_a_rubric() -> Dict:
         "code": "A",
         "name": "자기 표현 & 기본 커뮤니케이션",
         "weight": 0.15,
-        "target_stages": ["자기소개", "최종 자유 발언", "intro", "closing"],
+        "target_stages": ["자기소개", "최종 자유 발언", "intro", "final_statement", "closing"],
         "purpose": "지원자의 배경과 강점을 빠르고 명확하게 전달하는 능력 평가",
         "criteria": [
             "본인 배경과 강점이 명확히 전달되는가",
@@ -84,6 +84,11 @@ def create_area_a_rubric() -> Dict:
                     "핵심 없이 장황함"
                 ]
             }
+        },
+        "detailed_scoring": {
+            "논리적 구조": 40,
+            "핵심 전달력": 40,
+            "질문 의도 파악": 20
         }
     }
 
@@ -94,7 +99,7 @@ def create_area_b_rubric() -> Dict:
         "code": "B",
         "name": "지원 동기 & 회사 적합성",
         "weight": 0.15,
-        "target_stages": ["지원 동기", "resume_intro"],
+        "target_stages": ["지원 동기", "resume_intro", "motivation"],
         "purpose": "회사와 직무를 이해한 상태에서 지원했는지 판단",
         "criteria": [
             "지원 직무를 정확히 이해하고 있는가",
@@ -143,6 +148,11 @@ def create_area_b_rubric() -> Dict:
                     "직무 이해 부족"
                 ]
             }
+        },
+        "detailed_scoring": {
+            "직무 이해도": 40,
+            "내용의 구체성": 30,
+            "진정성": 30
         }
     }
 
@@ -207,6 +217,11 @@ def create_area_c_rubric() -> Dict:
                     "용어 나열만 함"
                 ]
             }
+        },
+        "detailed_scoring": {
+            "개념의 정확성": 50,
+            "논리성": 30,
+            "용어 활용력": 20
         }
     }
 
@@ -281,6 +296,11 @@ def create_area_d_rubric() -> Dict:
                     "본인 역할 불명확"
                 ]
             }
+        },
+        "detailed_scoring": {
+            "STAR 구조 적합성": 30,
+            "문제 해결력": 40,
+            "성과 구체성": 30
         }
     }
 
@@ -358,6 +378,11 @@ def create_area_e_rubric() -> Dict:
                     "학습 의지 부족"
                 ]
             }
+        },
+        "detailed_scoring": {
+            "책임감/주도성": 40,
+            "협업 및 소통": 30,
+            "학습 의지": 30
         }
     }
 
