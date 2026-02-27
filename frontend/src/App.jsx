@@ -100,6 +100,8 @@ function App() {
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const wsRef = useRef(null);
+  const aiStreamWsRef = useRef(null); // AI 질문 스트리밍용 WS
+  const currentIdxRef = useRef(0); // stale closure 방지용 : currentIdx 최신값 동기화
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const isInitialized = useRef(false);
@@ -192,6 +194,11 @@ function App() {
   useEffect(() => {
     liveTranscriptRef.current = transcript;
   }, [transcript]);
+
+  // currentIdx 상태 → ref 동기화 (AI 스트리밍 클로저 stale 방지)
+  useEffect(() => {
+    currentIdxRef.current = currentIdx;
+  }, [currentIdx]);
 
   // 상태 변화 시마다 sessionStorage에 저장
   useEffect(() => {
@@ -432,6 +439,47 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
+  const setupAiStreamWebSocket = (interviewId) => {
+    // 백엔드 코어(8000)의 스트리밍 채널에 연결
+    const ws = new WebSocket(`ws://localhost:8000/interviews/ws/${interviewId}`);
+    aiStreamWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ai_token' && data.token) {
+          const token = data.token;
+
+          setQuestions(prev => {
+            // currentIdxRef.current 로 항상 최신 인덱스 참조 (stale closure 방지)
+            // 생성되는 건 '다음 질문'이므로 현재 인덱스 + 1 자리에 스트리밍
+            const nextSlot = currentIdxRef.current + 1;
+            const newQs = [...prev];
+
+            // 다음 질문 슬롯이 아직 없으면 스트리밍용 빈 객체 생성
+            if (!newQs[nextSlot]) {
+              newQs[nextSlot] = { id: `streaming_${Date.now()}`, content: '', isStreaming: true };
+            }
+
+            // 토큰 이어붙이기
+            const existing = newQs[nextSlot].content || '';
+            newQs[nextSlot] = {
+              ...newQs[nextSlot],
+              content: existing + token,
+              isStreaming: true
+            };
+            return newQs;
+          });
+        }
+      } catch (err) {
+        console.error('[AI Stream WS] Parse error:', err);
+      }
+    };
+
+    ws.onerror = (err) => console.error('[AI Stream WS] Error:', err);
+    ws.onclose = () => console.log('[AI Stream WS] Closed');
+  };
+
   const setupWebRTC = async (interviewId) => {
     console.log('[WebRTC] Starting setup for interview:', interviewId);
     const pc = new RTCPeerConnection();
@@ -618,26 +666,32 @@ function App() {
 
   const pollReport = async (interviewId) => {
     setIsReportLoading(true);
-    const maxRetries = 20; // 약 1분간 시도 (3초 * 20)
+    // [버그1 수정] maxRetries 40번(120초)으로 연장. LLM 최종 리포트는 최대 2분 소요 가능
+    const maxRetries = 40;
     let retries = 0;
 
     const interval = setInterval(async () => {
       try {
         const finalReport = await getEvaluationReport(interviewId);
-        if (finalReport && finalReport.id) {
+        // [버그1 수정] id=0은 백엔드가 "아직 생성 중"일 때 반환하는 임시 응답.
+        // id가 1 이상인 경우에만 실제 DB에 저장된 리포트로 인식
+        if (finalReport && finalReport.id > 0) {
           setReport(finalReport);
           setIsReportLoading(false);
           clearInterval(interval);
+          console.log('✅ [pollReport] 리포트 생성 완료 (id:', finalReport.id, ')');
+        } else {
+          console.log(`🔄 [pollReport] 아직 생성 중... (retry: ${retries + 1}/${maxRetries})`);
         }
       } catch (err) {
-        console.log("Report still generating...");
+        console.warn("[pollReport] API 오류, 재시도 중...", err?.response?.status);
       }
 
       retries++;
       if (retries >= maxRetries) {
         setIsReportLoading(false);
         clearInterval(interval);
-        // alert('리포트 생성 시간이 너무 오래 걸립니다. 나중에 다시 확인해주세요.');
+        console.warn('[pollReport] 최대 재시도 횟수 초과. 폴링 종료.');
       }
     }, 3000);
   };
@@ -801,6 +855,7 @@ function App() {
         try {
           await setupWebRTC(interview.id);
           setupWebSocket(interview.id);
+          setupAiStreamWebSocket(interview.id); // [NEW] AI 스트리밍 연결
         } catch (err) {
           console.error("Media init error:", err);
         }
@@ -827,6 +882,7 @@ function App() {
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
+      if (aiStreamWsRef.current) aiStreamWsRef.current.close(); // [NEW]
       if (pcRef.current) pcRef.current.close();
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
     };
@@ -1028,7 +1084,8 @@ function App() {
             onFinish={finishInterview}
             videoRef={videoRef}
             isLoading={isLoading}
-            visionData={visionData} // [NEW] Pass vision data
+            visionData={visionData}
+            streamingQuestion={questions[currentIdx + 1]?.isStreaming ? questions[currentIdx + 1]?.content : null}
           />
         )}
 
@@ -1038,9 +1095,11 @@ function App() {
           <InterviewCompletePage
             isReportLoading={isReportLoading}
             onCheckResult={() => {
-              // 면접 완료 후 바로 결과 확인: 이력에서 온 것이 아님 -> flag 제거
+              // [버그2 수정] 리포트가 아직 null이어도 result 페이지로 이동 허용
+              // ResultPage 자체에서 report=null 시 "분석 중" 메시지를 보여줌
               sessionStorage.removeItem('from_history');
               setStep('result');
+              console.log('[onCheckResult] report 상태:', report ? `id=${report.id}` : 'null (분석 중)');
             }}
             onExit={() => {
               setStep('main');

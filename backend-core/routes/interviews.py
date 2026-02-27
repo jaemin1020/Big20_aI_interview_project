@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select, text
 from celery import Celery
 from datetime import datetime, timezone, timedelta
@@ -12,7 +12,10 @@ from typing import List
 import logging
 import os
 import base64
+import json
+import asyncio
 from pathlib import Path
+import redis.asyncio as redis
 
 from database import get_session
 from db_models import (
@@ -26,6 +29,50 @@ from utils.auth_utils import get_current_user
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 logger = logging.getLogger("Interview-Router")
 logger.setLevel(logging.INFO)
+
+# Redis Client for Pub/Sub
+REDIS_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+
+# WebSocket for AI Question Streaming
+@router.websocket("/ws/{interview_id}")
+async def interview_stream_ws(websocket: WebSocket, interview_id: int):
+    """
+    AI 워커에서 생성되는 질문을 실시간으로 프론트엔드에 전달하는 WebSocket 브릿지
+    """
+    await websocket.accept()
+    logger.info(f"🔌 Streaming WebSocket connected for Interview {interview_id}")
+    
+    r = redis.from_url(REDIS_URL)
+    pubsub = r.pubsub()
+    
+    channel = f"interview_{interview_id}_stream"
+    await pubsub.subscribe(channel)
+    
+    try:
+        while True:
+            # 타임아웃을 짧게 주어 루프가 돌 수 있게 함
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message:
+                data = message['data']
+                if isinstance(data, bytes):
+                    data = data.decode('utf-8')
+                
+                # 프론트엔드로 토큰 전송
+                await websocket.send_json({
+                    "type": "ai_token",
+                    "token": data
+                })
+            
+            # 클라이언트 연결 확인 (Keep-alive 또는 끊김 감지)
+            await asyncio.sleep(0.01)
+            
+    except WebSocketDisconnect:
+        logger.info(f"🔌 Streaming WebSocket disconnected for Interview {interview_id}")
+    except Exception as e:
+        logger.error(f"❌ WebSocket Streaming Error: {e}")
+    finally:
+        await pubsub.unsubscribe(channel)
+        await r.close()
 
 # Celery
 from celery_app import celery_app
@@ -242,6 +289,18 @@ async def create_interview(
         db.commit() # 여기서 실제 DB 저장 실행
 
         logger.info(f"✅ Interview setup SUCCESS for ID={interview_id}")
+
+        # [최적화] 면접 세션 생성 직후, LLM 모델을 백그라운드에서 미리 로딩
+        # 사용자가 1~2번 Template 질문에 답변하는 동안 EXAONE 모델이 메모리에 올라와
+        # AI 질문(3번~)이 필요한 시점에 딜레이 없이 바로 사용 가능
+        try:
+            celery_app.send_task(
+                "tasks.question_generation.preload_model",
+                queue="gpu_queue"
+            )
+            logger.info("🔥 [Preload] EXAONE 모델 사전 로딩 태스크 발사 완료 (비동기)")
+        except Exception as e:
+            logger.warning(f"[Preload] 모델 사전 로딩 태스크 전송 실패 (무시): {e}")
 
     except Exception as e:
         logger.error(f"❌ Interview setup CRITICAL FAILURE: {e}")
@@ -598,7 +657,12 @@ async def get_evaluation_report(
         }
 
     # 🔄 데이터 매핑 (EvaluationReportResponse 형식에 맞춤)
-    report_dict = report.dict()
+    # [버그4 수정] .dict()는 최신 SQLModel/Pydantic에서 deprecated → .model_dump() 사용
+    # 구버전 호환을 위해 fallback 처리
+    try:
+        report_dict = report.model_dump()
+    except AttributeError:
+        report_dict = report.dict()
     report_dict["position"] = actual_position
     report_dict["company_name"] = actual_company
     report_dict["candidate_name"] = cand_name
