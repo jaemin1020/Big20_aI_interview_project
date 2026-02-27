@@ -494,7 +494,16 @@ const InterviewPage = ({
           </PremiumButton>
           <PremiumButton
             onClick={nextQuestion}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            disabled={isRecording || isLoading || transcript.trim().length === 0}
+            style={{ 
+              flex: 1, 
+              minWidth: '140px', 
+              padding: '1rem', 
+              fontSize: '1rem', 
+              fontWeight: '700',
+              opacity: (isRecording || isLoading || transcript.trim().length === 0) ? 0.6 : 1,
+              cursor: (isRecording || isLoading || transcript.trim().length === 0) ? 'not-allowed' : 'pointer'
+            }}
           >
             {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
           </PremiumButton>
