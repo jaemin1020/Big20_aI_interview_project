@@ -7,12 +7,14 @@ import InterviewManagementPage from './InterviewManagementPage';
 import ResultManagementPage from './ResultManagementPage';
 import ResultAnalysisPage from './ResultAnalysisPage';
 import RubricsPage from './RubricsPage';
+import RoleManagementModal from './RoleManagementModal';
 
 function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMenu }) {
     const [jobPostingMenuOpen, setJobPostingMenuOpen] = useState(false);
     const [interviewStatusMenuOpen, setInterviewStatusMenuOpen] = useState(false);
     const [interviewResultsMenuOpen, setInterviewResultsMenuOpen] = useState(false);
     const [currentCandidatePage, setCurrentCandidatePage] = useState(0);
+    const [showRoleModal, setShowRoleModal] = useState(false);
 
     // Mock Data - 실제로는 API에서 가져옴
     const dashboardStats = {
@@ -160,6 +162,18 @@ function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMe
                         <span className="nav-label">Rubrics</span>
                     </button>
 
+                    {/* 구분선 */}
+                    <div className="nav-divider" />
+
+                    {/* 권한관리 메뉴 */}
+                    <button
+                        className="nav-item nav-item-role"
+                        onClick={() => setShowRoleModal(true)}
+                        id="sidebar-role-management"
+                    >
+                        <span className="nav-icon">🔐</span>
+                        <span className="nav-label">권한 관리</span>
+                    </button>
 
                 </nav>
             </aside>
@@ -367,6 +381,11 @@ function RecruiterMainPage({ user, onLogout, onNavigate, activeMenu, setActiveMe
                     </div>
                 )}
             </main>
+
+            {/* 권한관리 모달 */}
+            {showRoleModal && (
+                <RoleManagementModal onClose={() => setShowRoleModal(false)} />
+            )}
         </div>
     );
 }
