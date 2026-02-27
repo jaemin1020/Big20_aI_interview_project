@@ -383,7 +383,30 @@ def generate_next_question_task(self, interview_id: int):
 
             return {"status": "success", "stage": next_stage['stage'], "question": final_content}
     except Exception as e:
-        logger.error(f"❌ 실시간 질문 생성 실패 (Retry 시도): {e}")
-        raise self.retry(exc=e, countdown=3)
+        logger.error(f"❌ 실시간 질문 생성 실패 (Retry: {self.request.retries}/3): {e}")
+        if self.request.retries >= 3:
+            logger.warning("⚠️ 질문 생성 최대 재시도 횟수 초과. 폴백(Fallback) 질문을 생성합니다.")
+            try:
+                from db import save_generated_question
+                from tasks.tts import synthesize_task
+                with Session(engine) as session:
+                    fallback_text = "[시스템 질문] AI 응답 지연으로 인해 기본 질문으로 대체합니다. 이 직무를 성공적으로 수행하기 위해 본인이 가진 가장 뛰어난 점은 무엇이며, 이를 발휘한 실제 경험을 말씀해 주시겠습니까?"
+                    q_id = save_generated_question(
+                        interview_id=interview_id,
+                        content=fallback_text,
+                        category="behavioral",
+                        stage="fallback",
+                        guide="에러 및 타임아웃 발생으로 인한 폴백 질문",
+                        session=session
+                    )
+                    if q_id:
+                        clean_text = fallback_text.split(']', 1)[-1].strip() if ']' in fallback_text else fallback_text
+                        synthesize_task.delay(clean_text, language="ko", question_id=q_id)
+                    return {"status": "success", "stage": "fallback", "question": fallback_text}
+            except Exception as fallback_e:
+                logger.error(f"❌ 폴백 질문 생성 실패: {fallback_e}")
+                return {"status": "error", "message": "Fallback question failed"}
+        else:
+            raise self.retry(exc=e, countdown=3)
     finally:
         gc.collect()
