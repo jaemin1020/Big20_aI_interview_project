@@ -6,6 +6,13 @@ import logging
 from database import get_session
 from db_models import User, Transcript, TranscriptCreate, Speaker, Question
 from utils.auth_utils import get_current_user
+from datetime import datetime, timezone, timedelta
+
+# KST (Korea Standard Time) 설정
+KST = timezone(timedelta(hours=9))
+
+def get_kst_now():
+    return datetime.now(KST).replace(tzinfo=None)
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 logger = logging.getLogger("Transcript-Router")
@@ -35,11 +42,22 @@ async def create_transcript(
     생성일자: 2026-02-06
     """
     try:
+        from sqlmodel import select as sqlmodel_select
+        # User 답변의 order: 이전 User 발화 기준으로 다음 순서 계산
+        stmt_last = sqlmodel_select(Transcript).where(
+            Transcript.interview_id == transcript_data.interview_id,
+            Transcript.speaker == transcript_data.speaker
+        ).order_by(Transcript.id.desc())
+        last_same_speaker = db.exec(stmt_last).first()
+        next_order = (last_same_speaker.order + 1) if (last_same_speaker and last_same_speaker.order is not None) else None
+
         transcript = Transcript(
             interview_id=transcript_data.interview_id,
             speaker=transcript_data.speaker,
             text=transcript_data.text,
-            question_id=transcript_data.question_id
+            question_id=transcript_data.question_id,
+            order=next_order,
+            timestamp=get_kst_now()
         )
         db.add(transcript)
         db.commit()
@@ -59,6 +77,7 @@ async def create_transcript(
                 )
 
                 # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
+                # [성능 최적화] 다음 질문 생성을 방해하지 않도록 120초 지연 후 시작 (GPU Solo Pool 블로킹 방지)
                 celery_app.send_task(
                     "tasks.evaluator.analyze_answer",
                     args=[
@@ -66,9 +85,11 @@ async def create_transcript(
                         question.content,
                         transcript.text,
                         question.rubric_json,
-                        question.id
+                        question.id,
+                        question.question_type  # 9~14번 스테이지(협업/가치관/성장) 판별용
                     ],
-                    queue="gpu_queue"
+                    queue="gpu_queue",
+                    countdown=10
                 )
                 logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
     except Exception as e:

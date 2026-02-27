@@ -16,7 +16,8 @@ const InterviewPage = ({
   videoRef,
   isLoading,
   isMediaReady,
-  visionData // [NEW] Receive vision data
+  visionData,
+  streamingQuestion  // [신규] AI가 실시간으로 생성 중인 다음 질문 텍스트
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   // isTimerActive는 ttsFinished state로 대체됨 (아래 54행)
@@ -157,7 +158,7 @@ const InterviewPage = ({
   return (
     <div className="interview-container animate-fade-in" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', paddingTop: '5rem', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', position: 'relative' }}>
 
-      {/* Loading Overlay */}
+      {/* Loading Overlay: 실시간 스트리밍 중이면 타이핑 효과, 생성 전이면 스피너 */}
       {
         isLoading && (
           <div style={{
@@ -166,7 +167,7 @@ const InterviewPage = ({
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.7)',
+            background: 'rgba(0,0,0,0.75)',
             backdropFilter: 'blur(8px)',
             zIndex: 1000,
             display: 'flex',
@@ -174,14 +175,71 @@ const InterviewPage = ({
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '20px',
-            color: 'white'
+            color: 'white',
+            padding: '2rem'
           }}>
-            <div className="spinner" style={{ marginBottom: '1.5rem', width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: '700' }}>AI 면접관이 다음 질문을 생각 중입니다...</h3>
-            <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>이력서 내용을 바탕으로 질문을 생성하고 있습니다. 잠시만 기다려주세요.</p>
-            <style>{`
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          `}</style>
+            {streamingQuestion ? (
+              /* 스트리밍 진행 중: 타이핑 애니메이션 표시 */
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.2rem' }}>
+                  <div style={{
+                    width: '10px', height: '10px', borderRadius: '50%',
+                    background: '#6366f1',
+                    boxShadow: '0 0 12px #6366f1',
+                    animation: 'pulseDot 1s ease-in-out infinite'
+                  }} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    AI 면접관이 질문을 생성하고 있습니다
+                  </span>
+                </div>
+                <div style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '16px',
+                  padding: '1.5rem 2rem',
+                  maxWidth: '700px',
+                  width: '100%',
+                  minHeight: '80px',
+                  fontSize: '1.2rem',
+                  lineHeight: '1.7',
+                  color: 'rgba(255,255,255,0.95)',
+                  fontWeight: '500',
+                  wordBreak: 'keep-all',
+                  textAlign: 'left',
+                  position: 'relative'
+                }}>
+                  {streamingQuestion}
+                  {/* 뺜링 커서 */}
+                  <span style={{
+                    display: 'inline-block',
+                    width: '2px',
+                    height: '1.2em',
+                    background: '#6366f1',
+                    marginLeft: '2px',
+                    verticalAlign: 'text-bottom',
+                    animation: 'blinkCursor 0.7s step-end infinite'
+                  }} />
+                </div>
+                <style>{`
+                  @keyframes pulseDot {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.4; transform: scale(1.4); }
+                  }
+                  @keyframes blinkCursor {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0; }
+                  }
+                `}</style>
+              </>
+            ) : (
+              /* 스트리밍 시작 전: 기존 스피너 */
+              <>
+                <div className="spinner" style={{ marginBottom: '1.5rem', width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                <h3 style={{ fontSize: '1.5rem', fontWeight: '700' }}>AI 면접관이 다음 질문을 생각 중입니다...</h3>
+                <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>이력서 내용을 바탕으로 질문을 생성하고 있습니다. 잠시만 기다려주세요.</p>
+                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+              </>
+            )}
           </div>
         )
       }
@@ -494,7 +552,16 @@ const InterviewPage = ({
           </PremiumButton>
           <PremiumButton
             onClick={nextQuestion}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            disabled={isRecording || isLoading || transcript.trim().length === 0}
+            style={{ 
+              flex: 1, 
+              minWidth: '140px', 
+              padding: '1rem', 
+              fontSize: '1rem', 
+              fontWeight: '700',
+              opacity: (isRecording || isLoading || transcript.trim().length === 0) ? 0.6 : 1,
+              cursor: (isRecording || isLoading || transcript.trim().length === 0) ? 'not-allowed' : 'pointer'
+            }}
           >
             {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
           </PremiumButton>

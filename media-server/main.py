@@ -109,6 +109,15 @@ async def background_init_analyzer():
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 celery_app = Celery("ai_worker", broker=redis_url, backend=redis_url)
 
+# [심리적 안전장치] Redis 직접 클라이언트 (anxiety 실시간 저장용)
+import redis as _redis_mod
+try:
+    redis_sync_client = _redis_mod.Redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
+    print("✅ [미디어 서버] Redis 심리적 안전장치 클라이언트 초기화 완료", flush=True)
+except Exception as _re:
+    redis_sync_client = None
+    print(f"⚠️ [미디어 서버] Redis 클라이언트 초기화 실패 (심리적 안전장치 비활성화): {_re}", flush=True)
+
 # 3. 연결 관리 (세션별 WebSocket 및 PeerConnection 저장)
 active_websockets: Dict[str, WebSocket] = {}
 active_pcs: Dict[str, RTCPeerConnection] = {}
@@ -409,6 +418,21 @@ class VideoAnalysisTrack(MediaStreamTrack):
                     labels = result["labels"]
                     # [사용자 컨펌용 포맷]
                     print(f"[{self.session_id}] {self.current_q_index}번 질문 | [실시간 종합점수: {s['overall_score']:5.1f}점] | 👀 시선: {labels['gaze']:8} | 👤 자세: {labels['posture']:12} | 😊 미소: {int(result['scores']['smile']*100):3}%", flush=True)
+
+                    # [심리적 안전장치] 최근 30프레임 anxiety 평균 → Redis 저장
+                    _recent_anxiety = q["anxiety_scores"][-30:] if len(q["anxiety_scores"]) >= 30 else q["anxiety_scores"]
+                    if _recent_anxiety and redis_sync_client:
+                        _avg_anxiety = sum(_recent_anxiety) / len(_recent_anxiety)
+                        try:
+                            redis_sync_client.setex(
+                                f"interview_{self.session_id}_anxiety",
+                                60,  # TTL: 60초 (질문 넘어가면 자동 만료)
+                                str(round(_avg_anxiety, 4))
+                            )
+                            if _avg_anxiety >= 0.6:
+                                print(f"⚠️ [{self.session_id}] 긴장도 높음: {_avg_anxiety*100:.0f}% (심리적 안전장치 대기 중)", flush=True)
+                        except Exception:
+                            pass
             else:
                 # 얼굴 미감지 시에도 5초마다 로그 출력
                 current_time = time.time()
@@ -500,7 +524,7 @@ async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
     
     # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
-    CHUNK_DURATION_MS = 3000 
+    CHUNK_DURATION_MS = 3000
     accumulated_frames = []
     try:
         while True:
