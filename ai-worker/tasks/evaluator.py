@@ -106,9 +106,8 @@ class FinalReportSchema(BaseModel):
     )
     summary_text: str = Field(description="성장을 위한 시니어 위원장의 최종 한마디 (3문장 내외)")
 
-@shared_task(name="tasks.evaluator.analyze_answer")
-def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
-    """개별 답변 평가 및 실시간 다음 질문 생성 트리거"""
+def _analyze_answer_logic(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
+    """개별 답변 평가 핵심 로직 (DB 업데이트 포함)"""
     
     start_ts = time.time()
     
@@ -125,16 +124,15 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         if question_type and question_type != "unknown":
             stage_name = question_type
 
-        logger.info(f"🔍 Analyzing Answer: Stage={stage_name}, QuestionID={question_id}")
+        # logger.info(f"🔍 Analyzing Answer: Stage={stage_name}, QuestionID={question_id}")
 
         # [핵심] 100점 만점 상세 루브릭 우선 적용
-        # 기존 (0-5) 척도 루브릭이 넘어오더라도, rubric_generator의 상세 항목이 있다면 그것을 사용합니다.
         real_rubric = get_rubric_for_stage(stage_name)
         if real_rubric:
             rubric = real_rubric
-            logger.info(f"📊 Using REAL Detailed Rubric for {stage_name}")
+            # logger.info(f"📊 Using REAL Detailed Rubric for {stage_name}")
         elif not rubric or "guide" in rubric:
-            logger.warning(f"⚠️ No matching detailed rubric found for stage: {stage_name}. Using fallback.")
+            # logger.warning(f"⚠️ No matching detailed rubric found for stage: {stage_name}. Using fallback.")
             if not rubric:
                 rubric = {
                     "name": "일반 평가",
@@ -148,7 +146,7 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
         # 엔진 가져오기
         llm_engine = get_exaone_llm()
         
-        # ── 인재상(ideal) 조회 (9~14번 스테이지만) ────────────────────────
+        # 인재상(ideal) 조회
         company_ideal_section = ""
         if question_type in COMPANY_IDEAL_STAGES:
             try:
@@ -158,53 +156,25 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
                         interview_obj = session.get(Interview, transcript_obj.interview_id)
                         if interview_obj:
                             company_obj = None
-
-                            # ① company_id가 있으면 직접 조회
                             if interview_obj.company_id:
                                 company_obj = session.get(Company, interview_obj.company_id)
-
-                            # ② company_id 없으면 이력서의 target_company 이름으로 검색 (fallback)
-                            if not company_obj and interview_obj.resume_id:
-                                resume_obj = session.get(Resume, interview_obj.resume_id)
-                                if resume_obj and resume_obj.structured_data:
-                                    target_company = resume_obj.structured_data.get("header", {}).get("target_company", "")
-                                    if target_company:
-                                        # 공백 제거 후 완전 일치 매칭
-                                        # 예) "삼성전자 DS부문" == "삼성전자DS부문" (공백만 무시, 글자는 정확히 일치)
-                                        from sqlmodel import select as sql_select
-                                        normalized_target = target_company.replace(" ", "").lower()
-                                        all_companies = session.exec(sql_select(Company)).all()
-                                        company_obj = next(
-                                            (c for c in all_companies
-                                             if c.company_name and
-                                             c.company_name.replace(" ", "").lower() == normalized_target),
-                                            None
-                                        )
-                                        if company_obj:
-                                            logger.info(f"📄 '{target_company}' → '{company_obj.company_name}' 매칭 성공")
-
+                            
                             if company_obj and company_obj.ideal:
-                                company_ideal_section = f"""
-
-[회사 인재상 참고]
-지원 회사: {company_obj.company_name}
-인재상: {company_obj.ideal}
-※ 위 인재상과의 부합 여부를 평가 시 반드시 반영하십시오."""
-                                logger.info(f"✅ [{question_type}] 인재상 로드 - {company_obj.company_name}")
+                                company_ideal_section = f"\n\n[회사 인재상 참고]\n지원 회사: {company_obj.company_name}\n인재상: {company_obj.ideal}\n※ 위 인재상과의 부합 여부를 평가 시 반드시 반영하십시오."
+                                # logger.info(f"✅ [{question_type}] 인재상 로드 - {company_obj.company_name}")
             except Exception as ideal_err:
-                logger.warning(f"⚠️ 인재상 조회 실패 (평가는 계속 진행): {ideal_err}")
+                logger.warning(f"⚠️ 인재상 조회 실패: {ideal_err}")
 
-        # 프롬프트 구성 (EXAONE 3.5 최적화)
+        # 프롬프트 구성
         system_msg = """[|system|]귀하는 기술력, 소통 능력, 조직 적합성을 정밀 검증하는 'AI 채용 평가 위원회'의 전문 심사관입니다.
 LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 기준으로 삼아 지원자의 답변을 냉철하게 분석하고 수치화된 점수와 건설적인 피드백을 산출하십시오.
 
 [평가 가이드라인]
 1. **기술적 엄밀성**: 답변에 포함된 기술 개념의 정확성과 선택 근거의 타당성을 최우선으로 검토하십시오.
-2. **증거 중심 피드백**: 단순히 느낌을 서술하지 말고, 지원자의 답변 중 어떤 표현이나 사례가 루브릭 지표에 부합했는지 구체적으로 인용하십시오.
-3. **수치화**: 루브릭의 점수 배점을 엄격히 준수하여 점수를 산출하되, 논리가 부족하거나 답변이 모호한 경우 보수적으로 평가하십시오.
-4. **인재상 반영**: 인재상 정보가 제공된 경우, 지원자의 태도나 가치관이 기업의 지향점과 얼마나 일치하는지 분석 결과에 반드시 포함하십시오.
-5. **텍스트 정제 (No Markdown)**: 피드백 작성 시 볼트(**), 이탤릭(*) 등의 마크다운 문법을 절대 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 작성하십시오.
-6. **중복 표현 및 말더듬 방지**: 문장 끝에서 유사한 어미를 반복하거나, 동일한 단어를 나열하는 등의 환각/말더듬 현상을 철저히 배제하십시오.[|endofturn|]"""
+2. **증거 중심 피드백**: 지원자의 답변 중 어떤 표현이나 사례가 루브릭 지표에 부합했는지 구체적으로 인용하십시오.
+3. **수치화**: 루브릭 점수를 엄격히 준수하되, 답변이 모호한 경우 보수적으로 평가하십시오.
+4. **인재상 반영**: 인재상 정보가 제공된 경우 분석 결과에 반드시 포함하십시오.
+5. **텍스트 정제 (No Markdown)**: 마크다운 문법을 절대 사용하지 마십시오. 오직 순수한 평문(Plain Text)으로만 작성하십시오.[|endofturn|]"""
 
         user_msg = f"""[|user|]다음 질문에 대한 지원자의 답변을 루브릭 기준에 맞춰 정밀 평가하십시오.
         
@@ -219,71 +189,46 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
 
 {parser.get_format_instructions()}[|endofturn|]"""
         
-        # 생성 및 파싱 (EXAONE 전용 포맷 사용)
         prompt = f"{system_msg}\n{user_msg}\n[|assistant|]"
         raw_output = llm_engine.invoke(prompt, temperature=0.2)
         
         try:
             result = parser.parse(raw_output)
-        except Exception as parse_err:
-            logger.error(f"Failed to parse LLM output: {parse_err}")
-            # 폴백: 정규표현식 시도 또는 기본값
+        except:
             json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group())
             else:
-                result = {"technical_score": 3, "communication_score": 3, "feedback": "평가 데이터를 파싱할 수 없습니다."}
+                result = {"total_score": 70, "rubric_scores": {}, "feedback": "평가 데이터를 파싱할 수 없습니다."}
         
-        def safe_int(v, default=3):
-            try:
-                if v is None: return default
-                return int(float(v))
-            except (ValueError, TypeError):
-                return default
-
-        tech_score = safe_int(result.get("total_score"), 70)
+        tech_score = int(result.get("total_score", 70))
         rubric_scores = result.get("rubric_scores", {})
         
-        # 2. [핵심] 상세 루브릭 점수 및 총점 칼럼 업데이트 데이터 구성 (한글)
         db_rubric_data = {
             "평가영역": rubric.get("name", "일반 평가") if rubric else "일반 평가",
             "세부항목점수": rubric_scores,
             "항목별배점": rubric.get("detailed_scoring", {}) if rubric else {}
         }
 
-        # 1. 감성 점수 및 상세 점수 업데이트
         sentiment = (tech_score / 100.0) - 0.5 
-        logger.info(f"💾 Saving scores to DB for Transcript {transcript_id}: total={tech_score}, area={db_rubric_data['평가영역']}")
-
         try:
-            update_transcript_sentiment(
-                transcript_id,
-                sentiment_score=sentiment,
-                emotion="neutral",
-                total_score=float(tech_score),
-                rubric_score=db_rubric_data
-            )
-            
-            update_transcript_scores(
-                transcript_id,
-                total_score=float(tech_score),
-                rubric_score=db_rubric_data
-            )
-            logger.info(f"✅ Successfully saved scores to DB for Transcript {transcript_id}")
+            update_transcript_sentiment(transcript_id, sentiment_score=sentiment, emotion="neutral", total_score=float(tech_score), rubric_score=db_rubric_data)
+            update_transcript_scores(transcript_id, total_score=float(tech_score), rubric_score=db_rubric_data)
         except Exception as db_err:
-            logger.error(f"❌ Failed to save scores to DB for Transcript {transcript_id}: {db_err}")
+            logger.error(f"❌ DB 저장 오류 (Transcript {transcript_id}): {db_err}")
         
-        # 3. 질문 평균 점수 업데이트
         if question_id:
             update_question_avg_score(question_id, tech_score)
 
-        duration = time.time() - start_ts
-        logger.info(f"답변 상세 평가 완료 ({duration:.2f}초, 점수: {tech_score})")
         return result
-
     except Exception as e:
-        logger.error(f"Evaluation Failed: {e}")
+        logger.error(f"Evaluation Logic Failed: {e}")
         return {"error": str(e)}
+
+@shared_task(name="tasks.evaluator.analyze_answer")
+def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
+    """개별 답변 평가 (상위 호환성 유지)"""
+    return _analyze_answer_logic(transcript_id, question_text, answer_text, rubric, question_id, question_type)
 
 @shared_task(name="tasks.evaluator.generate_final_report")
 def generate_final_report(interview_id: int):
@@ -299,8 +244,38 @@ def generate_final_report(interview_id: int):
     )
     
     try:
+        # [추가] 1. 개별 답변 선제적 평가 (평가 데이터가 없는 경우 한꺼번에 처리)
         transcripts = get_interview_transcripts(interview_id)
-        logger.info(f"📊 Found {len(transcripts)} transcripts for Interview {interview_id}")
+        user_transcripts = [t for t in transcripts if t.speaker == 'User']
+        logger.info(f"🧐 Evaluating {len(user_transcripts)} individual answers before final report...")
+        
+        for t in user_transcripts:
+            # 이미 점수가 있는 경우는 스킵 (혹시나 중복 처리 방지용)
+            if t.sentiment_score is not None and t.sentiment_score != 0.0:
+                continue
+            
+            try:
+                # 질문 정보를 가져와서 루브릭과 함께 평가
+                with Session(engine) as session:
+                    q = session.get(Question, t.question_id) if t.question_id else None
+                    q_content = q.content if q else "관련 질문을 찾을 수 없습니다."
+                    q_rubric = q.rubric_json if q else None
+                    q_type = q.question_type if q else "unknown"
+                
+                logger.info(f"   - Evaluating Transcript {t.id} (Stage: {q_type})")
+                _analyze_answer_logic(
+                    transcript_id=t.id,
+                    question_text=q_content,
+                    answer_text=t.text,
+                    rubric=q_rubric,
+                    question_id=t.question_id,
+                    question_type=q_type
+                )
+            except Exception as e:
+                logger.error(f"   - Failed to evaluate transcript {t.id}: {e}")
+
+        # 개별 평가 후 데이터 최신화를 위해 transcripts 다시 조회
+        transcripts = get_interview_transcripts(interview_id)
         
         # 🧹 메모리 청소 (리포트 분석 전 공간 확보)
         import gc
