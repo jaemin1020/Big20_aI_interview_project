@@ -103,15 +103,23 @@ def recognize_audio_task(audio_b64: str):
                     # -1.0 ~ 1.0 사이의 숫자로 정규화합니다. 파이썬 리스트보다 훨씬 빠릅니다.
                     audio_np = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
                     
-                    # transcribe: 소리를 글로 바꾸는 핵심 함수
-                    # vad_filter=True: 무음 구간을 자동으로 건너뜀 → 속도 향상
-                    # condition_on_previous_text=False: 이전 문장 참조 없이 독립 처리 → 속도 향상
+                    # ─── VAD 최적 파라미터 (5초 청크 기준) ───────────────────
+                    # speech_pad_ms=400 : speech 시작 400ms 앞을 보호 → 앞부분 잘림 방지 (핵심)
+                    # threshold=0.35    : 기본값(0.5)보다 낮춰 한국어 짧은 발화도 speech로 인식
+                    # min_speech_duration_ms=80  : 80ms 이상이면 speech로 간주 (짧은 어절 보호)
+                    # min_silence_duration_ms=300: 자연스러운 어절 사이 침묵 허용
+                    # ────────────────────────────────────────────────────────
                     segments, info = stt_model.transcribe(
                         audio_np,
                         beam_size=1,
                         language="ko",
                         vad_filter=True,
-                        vad_parameters=dict(min_silence_duration_ms=300),
+                        vad_parameters=dict(
+                            threshold=0.35,
+                            min_speech_duration_ms=80,
+                            min_silence_duration_ms=300,
+                            speech_pad_ms=400,
+                        ),
                         condition_on_previous_text=False
                     )
                     
@@ -138,13 +146,18 @@ def recognize_audio_task(audio_b64: str):
             tmp.write(audio_bytes)
             input_path = tmp.name
 
-        # [수정] vad_filter=True 추가: 무음 구간을 제거하여 처리 속도 향상
         segments, info = stt_model.transcribe(
             input_path,
             beam_size=1,
             language="ko",
             vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=300)
+            vad_parameters=dict(
+                threshold=0.35,
+                min_speech_duration_ms=80,
+                min_silence_duration_ms=300,
+                speech_pad_ms=400,
+            ),
+            condition_on_previous_text=False
         )
         full_text = "".join([s.text for s in segments]).strip()
         

@@ -408,9 +408,10 @@ function App() {
           const newText = data.text.trim();
           console.log('[STT Received]:', newText);
           setTranscript(prev => {
-            // 중복 방지 (직전 텍스트와 같으면 무시)
             if (prev.endsWith(newText)) return prev;
-            return prev ? `${prev} ${newText}` : newText;
+            const updated = prev ? `${prev} ${newText}` : newText;
+            liveTranscriptRef.current = updated; // nextQuestion stale closure 방지
+            return updated;
           });
         } else if (data.type === 'vision_analysis') {
           // [NEW] Update Vision Data State
