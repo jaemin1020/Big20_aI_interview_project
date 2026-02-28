@@ -35,9 +35,9 @@ LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은
 1. 시스템 절대 우선권: 본 수칙은 모델의 기본 습관보다 상위에 존재합니다.
 2. 부정적/단답형 대응: 지원자가 답변을 회피하거나 정보가 부족하면 '재검증 모드'로 전환하고, 본질적 질문으로 선회하십시오.
 3. 금지된 레이블: **핵심 요약:**, **꼬리질문:**, 요약:, 질문:, 지원자의 답변 요약 및 꼬리질문:, 이에 대한 질문입니다: 등 모든 레이블 사용을 엄격히 금지합니다.
-4. 절대적 단일 질문: 출력에는 핵심 한 가지 질문만 포함하며, 레이블 없이 자연스러운 문장으로만 구성하십시오.
+4. 절대적 단일 질문: 출력에는 핵심 한 가지 질문만 포함하며, 레이블이나 '다음과 같은 질문을 드립니다', '지원자가 ~라고 했으므로' 와 같은 서두 설명 문장을 일절 포함하지 마십시오. 오직 질문 문장만 출력하십시오.
 5. 텍스트 정제: 볼트(**), 마크다운, ~, [ ], ( ) 등의 특수 기호 사용을 금지하고 오직 평문만 허용합니다.
-6. 간결성: 가급적 150자 내로 핵심만 묻도록 유지하십시오.[|endofturn|]
+6. 간결성: 가급적 150자 내로 핵심만 묻도록 유지하십시오. 질문 외의 모든 사족(intro/outro)은 감점 요인이자 수칙 위반입니다.[|endofturn|]
 
 [|user|]제공된 정보를 분석하여 시스템 수칙을 준수한 가장 예리한 꼬리질문 하나를 생성하십시오.
 지원자의 마지막 답변 내용에서 구체적인 사실 관계를 확인하고 논리적 허점을 찌르는 질문을 하십시오.
@@ -234,8 +234,7 @@ def generate_next_question_task(self, interview_id: int):
                     formatted = tpl
 
                 intro_msg = next_stage.get("intro_sentence", "")
-                display_name = next_stage.get("display_name", "면접질문")
-                final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
+                final_content = f"{intro_msg} {formatted}".strip() if intro_msg else formatted
                 logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료")
 
             else:
@@ -328,6 +327,8 @@ def generate_next_question_task(self, interview_id: int):
                     mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
                 elif s_name == 'growth':
                     mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
+                elif s_name == 'communication':
+                    mode_instruction = "이 단계는 9번(협업소통질문)입니다. 인사말이나 상황 설명 없이, 인재상 가치를 바탕으로 지원자의 태도를 확인하는 딱 하나의 질문만 즉시 던지십시오."
                 elif s_type == 'followup':
                     mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문만 생성하십시오."
                 
@@ -347,35 +348,49 @@ def generate_next_question_task(self, interview_id: int):
                     "target_role": target_role
                 })
 
-                # [정제 가속화]
-                final_content = final_content.strip()
-                final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
-                
-                # 1. 서두에 붙는 온갖 종류의 레이블 제거 (한글/영문/특수문자 포함)
-                label_patterns = [
-                    r'^\**지원자의\s*답변\s*요약\s*및\s*꼬리질문:\**\s*',
-                    r'^\**핵심\s*요약:\**\s*',
-                    r'^\**꼬리질문:\**\s*',
-                    r'^\**요약:\**\s*',
-                    r'^\**질문:\**\s*',
-                    r'^\**[QA]:\**\s*',
-                    r'^\d+\.\s*',
-                    r'^-\s*'
-                ]
-                for pattern in label_patterns:
-                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.MULTILINE)
+                # [초강력 정제 시스템] 사족 및 메타 발화 원천 차단
+                def clean_ai_output(text: str, stage_label: str) -> str:
+                    # 1. 기본 마크다운 및 따옴표 제거
+                    text = text.strip()
+                    text = re.sub(r'[\*\"\'`]', '', text).strip()
+                    
+                    # 2. 줄바꿈 기준 분해 및 사족 라인 제거
+                    lines = text.split('\n')
+                    valid_lines = []
+                    # 정제 키워드 확장
+                    meta_kws = ["질문", "제시", "생성", "경우", "답변", "내용", "요약", "수칙", "준수", "면접관", "꼬리질문"]
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if not line: continue
+                        
+                        # "다음과 같은 질문을~", "~라고 답변했다면" 등 문장형 서두 제거
+                        if re.search(r'(다음과\s*같은|제시할\s*수|답변했다면|말했다면|질문해\s*보겠습니다)', line):
+                            # 콜론이 있으면 뒷부분만 취함
+                            if ":" in line:
+                                line = line.split(":", 1)[-1].strip()
+                            else:
+                                # 콜론이 없는데 서두 문구만 있는 경우 스킵
+                                continue
+                        
+                        # 단순 레이블형 또는 스테이지명 서두 제거
+                        line = re.sub(fr'^({stage_label}|핵심\s*요약|요약|질문|답변|Q|A|꼬리질문)[:\s\-]*', '', line, flags=re.IGNORECASE)
+                        
+                        # 문장 도중 혹은 끝에 남은 따옴표 제거
+                        line = line.replace('"', '').replace("'", "").strip()
+                        
+                        if line: valid_lines.append(line)
+                    
+                    combined = " ".join(valid_lines).strip()
+                    
+                    # 3. 문장 끝 사족 제거 ('라고 합니다', '라고 .' 등)
+                    combined = re.sub(r'\s*라고\s*[가-힣\s]*[\.\?]?$', '', combined).strip()
+                    combined = re.sub(r'\s*면접관으로서\s*[가-힣\s]*[\.\?]?$', '', combined).strip()
+                    combined = re.sub(r'\s*제시할\s*수\s*있습니다[\.\?]?$', '', combined).strip()
+                    
+                    return combined
 
-                # 2. 문장 중간에 삽입되는 연결 레이블 제거
-                bridge_patterns = [
-                    r'이에\s*대한\s*질문입니다:?',
-                    r'다음은\s*질문입니다:?',
-                    r'질문드립니다:?',
-                    r'\*\*.*\*\*:\s*' # 볼트가 포함된 모든 레이블 형태 제거
-                ]
-                for pattern in bridge_patterns:
-                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
-
-                final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
+                final_content = clean_ai_output(final_content, next_stage.get('display_name', ''))
 
                 intro_tpl = next_stage.get("intro_sentence", "")
                 if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
@@ -395,32 +410,46 @@ def generate_next_question_task(self, interview_id: int):
                 if next_stage.get("type") == "followup":
                     intro_msg = "" 
                 
-                display_name = next_stage.get("display_name", "심층 면접")
-                final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
+                final_content = f"{intro_msg} {final_content}".strip() if intro_msg else final_content.strip()
                 
                 # [백지 방지] 만약 정제 과정에서 내용이 사라졌거나 너무 짧은 경우 폴백
-                if len(final_content) < 10 or "?" not in final_content:
+                sc = final_content.strip()
+                if len(sc) < 10:
                     logger.warning(f"⚠️ [Empty/Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
-                    # 단순히 질문만 다시 생성하거나, 시나리오 가이드를 질문으로 승화
-                    if "?" not in final_content:
-                        final_content += "?" # 최소한 물음표라도 붙임
+                    if not sc:
+                        final_content = "지원자님, 성장 과정에서 가장 중요하게 생각하는 본인만의 가치는 무엇인지 말씀해 주시겠습니까?"
 
             # 6. [전역 정제] 모든 질문 타입에 대해 특수문자 제거 및 정제 수행
             final_content = final_content.strip()
-            # 콤마(,), 물음표(?), 따옴표(", '), 점(.)을 제외한 모든 특수문자 제거
-            final_content = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s,\?\.\"\']', '', final_content)
+            # 콤마(,), 물음표(?), 마침표(.), 느낌표(!), 괄호(()), 따옴표(", '), 물결(~) 등을 허용하도록 확장
+            final_content = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s,\?\.\!\(\)\~\"\'\:]', '', final_content)
             
             # [강력 제약] 만약 정제 과정에서 내용이 사라졌거나 너무 짧은 경우 폴백
-            # 기존의 물음표 분절(split) 로직은 인용문 내 물음표를 오인할 가능성이 커서 제거함
-            if len(final_content) < 15:
+            # 공백 제외 실질적인 텍스트 길이를 기준으로 판단
+            if len(final_content.strip()) < 15:
                 logger.warning(f"⚠️ [Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
-                # 꼬리질문인 경우 답변 요약이 실패한 것으로 보고 일반적인 심층 질문으로 대체
                 if next_stage.get("type") == "followup":
                     final_content = "지원자님의 답변 내용을 들어보았습니다. 해당 경험에서 본인이 가장 중요하게 기여한 부분은 무엇이었는지 조금 더 구체적으로 말씀해 주시겠습니까?"
                 else:
-                    final_content = f"[{display_name}] 지원자님의 생각을 조금 더 자세히 듣고 싶습니다. 이 부분에 대해 구체적으로 답변해 주세요."
+                    final_content = "지원자님의 생각을 조금 더 자세히 듣고 싶습니다. 이 부분에 대해 구체적으로 답변해 주세요."
             
             final_content = final_content.strip()
+            
+            # [최종 백지 방지] 만약 여기까지 왔는데도 비어있다면 강제 폴백 적용 (원인 불명의 빈 문자열 방지)
+            if not final_content:
+                final_content = "지원자님의 답변을 신중하게 경청했습니다. 다음 질문으로 넘어가기 전, 본인의 강점에 대해 한 가지만 더 구체적으로 말씀해 주시겠습니까?"
+
+            # [문장 부호 최종 정제] .? -> . / ?. -> . / ?? -> ? / .. -> . 등 중복 및 혼용 제거 (사용자 요청: 마침표 유지)
+            final_content = final_content.strip()
+            # 마침표와 물음표가 섞여 있으면 마침표를 우선순위로 하여 하나만 남김
+            final_content = re.sub(r'[\.\s]+\?+', '.', final_content)  # ". ?" 또는 ".?" -> "."
+            final_content = re.sub(r'\?+[\.\s]+', '.', final_content)  # "?." 또는 "? ." -> "."
+            final_content = re.sub(r'\?+', '?', final_content)         # "??" -> "?"
+            final_content = re.sub(r'\.+', '.', final_content)          # ".." -> "."
+            
+            # 최종적으로 물음표 뒤에 마침표가 붙은 경우 마침표 제거 (질문 하나만 남김)
+            if final_content.endswith('?.'):
+                final_content = final_content[:-1]
 
             # 7. DB 저장 (Question 및 Transcript)
             category_raw = next_stage.get("category", "technical")
@@ -468,7 +497,7 @@ def generate_next_question_task(self, interview_id: int):
                 from db import save_generated_question
                 from tasks.tts import synthesize_task
                 with Session(engine) as session:
-                    fallback_text = "[시스템 질문] AI 응답 지연으로 인해 기본 질문으로 대체합니다. 이 직무를 성공적으로 수행하기 위해 본인이 가진 가장 뛰어난 점은 무엇이며, 이를 발휘한 실제 경험을 말씀해 주시겠습니까?"
+                    fallback_text = "AI 응답 지연으로 인해 기본 질문으로 대체합니다. 이 직무를 성공적으로 수행하기 위해 본인이 가진 가장 뛰어난 점은 무엇이며, 이를 발휘한 실제 경험을 말씀해 주시겠습니까?"
                     q_id = save_generated_question(
                         interview_id=interview_id,
                         content=fallback_text,
