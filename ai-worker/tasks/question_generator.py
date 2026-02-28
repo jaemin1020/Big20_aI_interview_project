@@ -63,7 +63,7 @@ def generate_next_question_task(self, interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
-    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company
+    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company, get_kst_now
     from utils.exaone_llm import get_exaone_llm
     from tasks.tts import synthesize_task
     from utils.interview_helpers import check_if_transition
@@ -465,22 +465,37 @@ def generate_next_question_task(self, interview_id: int):
         if self.request.retries >= 3:
             logger.warning("⚠️ 질문 생성 최대 재시도 횟수 초과. 폴백(Fallback) 질문을 생성합니다.")
             try:
-                from db import save_generated_question
+                from db import save_generated_question, get_kst_now
                 from tasks.tts import synthesize_task
                 with Session(engine) as session:
-                    fallback_text = "[시스템 질문] AI 응답 지연으로 인해 기본 질문으로 대체합니다. 이 직무를 성공적으로 수행하기 위해 본인이 가진 가장 뛰어난 점은 무엇이며, 이를 발휘한 실제 경험을 말씀해 주시겠습니까?"
+                    # [개선] next_stage가 정의되어 있다면 해당 스테이지에 맞는 예비 질문 선택
+                    s_name = next_stage['stage'] if 'next_stage' in locals() and next_stage else "fallback"
+                    
+                    fallback_dict = {
+                        "skill": "지원자님께서 보유하신 직무 기술 중, 실제 업무에서 가장 자신 있게 활용할 수 있는 부분은 무엇입니까?",
+                        "skill_followup": "앞선 답변에 대해 조금 더 구체적으로 설명해 주시겠습니까?",
+                        "experience": "수행하신 프로젝트나 활동 중에서 본인이 가장 큰 기여를 했던 사례를 하나 말씀해 주세요.",
+                        "experience_followup": "그 과정에서 가장 어려웠던 점은 무엇이었고, 어떻게 대처하셨나요?",
+                        "problem_solving": "기술적인 문제를 해결하며 가장 보람찼던 순간은 언제입니까?",
+                        "communication": "팀원들과 협업할 때 본인만의 소통 방식이나 철학은 무엇인가요?",
+                        "responsibility": "지원자님이 평소 일에 임할 때 가장 중요하게 생각하는 책임감은 어떤 모습입니까?",
+                        "growth": "지원자님이 앞으로 이 직무에서 어떤 전문가로 성장하고 싶으신지 목표를 말씀해 주세요.",
+                        "final_statement": "마지막으로 본인을 더 어필할 수 있는 내용이나 궁금한 점이 있다면 자유롭게 말씀해 주세요."
+                    }
+                    fallback_text = fallback_dict.get(s_name, "지원자님, 해당 부분에 대해 조금 더 구체적으로 설명해 주시겠습니까?")
+                    
+                    fallback_stage_name = s_name
                     q_id = save_generated_question(
                         interview_id=interview_id,
                         content=fallback_text,
                         category="behavioral",
-                        stage="fallback",
-                        guide="에러 및 타임아웃 발생으로 인한 폴백 질문",
+                        stage=fallback_stage_name,
+                        guide="시스템 오류로 인한 스테이지별 폴백 질문",
                         session=session
                     )
                     if q_id:
-                        clean_text = fallback_text.split(']', 1)[-1].strip() if ']' in fallback_text else fallback_text
-                        synthesize_task.delay(clean_text, language="ko", question_id=q_id)
-                    return {"status": "success", "stage": "fallback", "question": fallback_text}
+                        synthesize_task.delay(fallback_text, language="ko", question_id=q_id)
+                    return {"status": "success", "stage": fallback_stage_name, "question": fallback_text}
             except Exception as fallback_e:
                 logger.error(f"❌ 폴백 질문 생성 실패: {fallback_e}")
                 return {"status": "error", "message": "Fallback question failed"}
