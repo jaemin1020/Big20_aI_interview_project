@@ -20,15 +20,16 @@ celery_app.conf.update(
     enable_utc=False,
     task_default_queue='cpu_queue',
     task_routes={
-        # GPU 사용 태스크 (질문 생성, 임베딩, EXAONE 평가)
-        'tasks.resume_pipeline.*': {'queue': 'gpu_queue'},
-        'tasks.question_generation.*': {'queue': 'gpu_queue'}, # ai-worker/main.py와 맞춤
+        # GPU 사용 태스크 (질문 생성, 임베딩, EXAONE 기반 작업)
+        'tasks.question_generation.*': {'queue': 'gpu_queue'},
         'tasks.question_generator.*': {'queue': 'gpu_queue'},
+        'tasks.resume_pipeline.generate_embeddings': {'queue': 'gpu_queue'},
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
-        'tasks.evaluator.analyze_answer': {'queue': 'gpu_queue'},  # EXAONE LLM 필요 -> GPU 워커 필수
+        'tasks.evaluator.analyze_answer': {'queue': 'gpu_queue'},
         
-        # CPU 사용 태스크 (비전, 파싱, TTS, 나머지 evaluator)
+        # CPU 사용 태스크 (파싱, STT, TTS, 비전)
+        'tasks.resume_pipeline.parse_pdf': {'queue': 'cpu_queue'},
         'tasks.stt.*': {'queue': 'cpu_queue'},
         'tasks.evaluator.*': {'queue': 'cpu_queue'},
         'tasks.vision.*': {'queue': 'cpu_queue'},

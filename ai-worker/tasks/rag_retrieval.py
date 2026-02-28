@@ -28,38 +28,36 @@ except ImportError:
 # -----------------------------------------------------------
 # [모델 설정] Step 6(저장) 때 쓴 모델과 100% 일치해야 함!
 # -----------------------------------------------------------
-EMBEDDING_MODEL = "nlpai-lab/KURE-v1" 
-
-_embedder = None
+from .embedding import get_embedder as _get_central_embedder
 
 def get_embedder():
-    global _embedder
-    if _embedder is None:
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        print(f"[STEP7] 임베딩 모델 로드 중 ({EMBEDDING_MODEL}) on {device}...")
-        print(f"📂 캐시 경로: {cache_dir}")
-        
-        try:
-            _embedder = HuggingFaceEmbeddings(
-                model_name=EMBEDDING_MODEL,
-                model_kwargs={'device': device},
-                encode_kwargs={'normalize_embeddings': True},
-                cache_folder=cache_dir
-            )
-            print("✅ RAG 임베딩 모델 로드 완료!")
-        except Exception as e:
-            print(f"❌ 임베딩 모델 로드 실패: {e}")
-            # 여기서 sys.exit(1)을 하면 워커 자체가 죽으므로 주의
-            return None
-    return _embedder
+    """중앙화된 임베딩 모델 인스턴스 반환 (싱글톤)"""
+    import torch
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    return _get_central_embedder(device)
+
+from langchain_community.vectorstores import PGVector
 
 # -----------------------------------------------------------
-# [핵심] 검색 함수 (하이브리드 검색 적용)
+# [핵심] 검색 인스턴스 싱글톤 관리
 # -----------------------------------------------------------
-from langchain_community.vectorstores import PGVector
+_vector_stores = {}
+
+def get_vector_store(collection_name):
+    """지정된 컬렉션에 대한 PGVector 인스턴스 싱글톤 반환"""
+    global _vector_stores
+    if collection_name not in _vector_stores:
+        embedder = get_embedder()
+        if not embedder:
+            return None
+        
+        connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
+        _vector_stores[collection_name] = PGVector(
+            connection_string=connection_string,
+            embedding_function=embedder,
+            collection_name=collection_name
+        )
+    return _vector_stores[collection_name]
 
 # -----------------------------------------------------------
 # [핵심] 검색 함수 (LangChain PGVector 활용)
@@ -81,15 +79,11 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
         logger.error("❌ 임베딩 모델 로드 실패로 검색을 중단합니다.")
         return []
     
-    connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
-    
     try:
-        # 2. PGVector 인스턴스 생성
-        vector_store = PGVector(
-            connection_string=connection_string,
-            embedding_function=embedder,
-            collection_name="resume_all_embeddings"
-        )
+        # 2. PGVector 인스턴스 가져오기 (캐싱 활용)
+        vector_store = get_vector_store("resume_all_embeddings")
+        if not vector_store:
+             return []
 
         # 3. 필터 설정 (resume_id + chunk_type)
         search_filter = {"resume_id": resume_id}
@@ -138,13 +132,10 @@ def get_retriever(resume_id=1, top_k=10, filter_type=None):
     LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
     """
     embedder = get_embedder()
-    connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
-    
-    vector_store = PGVector(
-        connection_string=connection_string,
-        embedding_function=embedder,
-        collection_name="resume_all_embeddings"
-    )
+    # 2. 인스턴스 가져오기
+    vector_store = get_vector_store("resume_all_embeddings")
+    if not vector_store:
+         return None
 
     # 필터 설정
     search_filter = {"resume_id": resume_id}
@@ -173,17 +164,11 @@ def retrieve_similar_questions(query, top_k=5):
         logger.error("❌ 임베딩 모델 로드 실패로 질문 은행 검색을 중단합니다.")
         return []
     
-    connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
-    
     try:
         # 질문 은행은 별도의 컬렉션/테이블(questions)을 사용하므로 collection_name을 맞춰줍니다.
-        # 주의: 랭체인 PGVector는 기본적으로 langchain_pg_embedding 테이블을 보려 하지만, 
-        # 기존 questions 테이블 포맷과 맞추기 위해 collection_name 인자를 활용합니다.
-        vector_store = PGVector(
-            connection_string=connection_string,
-            embedding_function=embedder,
-            collection_name="questions_collection" # 질문 데이터용 컬렉션
-        )
+        vector_store = get_vector_store("questions_collection")
+        if not vector_store:
+             return []
         
         # 유사도 검색 수행
         docs_with_scores = vector_store.similarity_search_with_score(query, k=top_k)

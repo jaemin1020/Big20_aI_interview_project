@@ -46,6 +46,11 @@ def get_embedder(device):
         print("✅ 임베딩 모델 메모리 상주 완료!")
         
     return _embedder # 이미 로드된 상태라면 바로 기존 모델을 돌려줍니다.
+ 
+def load_embedding_model():
+    """워커 시작 시 모델을 미리 로딩하기 위한 헬퍼"""
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    return get_embedder(device)
 
 def embed_chunks(chunks):
     """

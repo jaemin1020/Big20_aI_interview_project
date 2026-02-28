@@ -18,6 +18,7 @@ from db import (
     Company,
     Resume,
     Question,
+    Speaker,
     update_transcript_sentiment,
     update_transcript_scores,
     update_question_avg_score,
@@ -301,6 +302,42 @@ def generate_final_report(interview_id: int):
     try:
         transcripts = get_interview_transcripts(interview_id)
         logger.info(f"📊 Found {len(transcripts)} transcripts for Interview {interview_id}")
+
+        # 🚀 [Batch Evaluation] 평가되지 않은(total_score가 없는) 답변들 일괄 평가 진행
+        user_answers = [t for t in transcripts if t.speaker == Speaker.USER]
+        logger.info(f"🔍 Found {len(user_answers)} user answers. Checking for unevaluated ones...")
+
+        unevaluated_count = 0
+        for t in user_answers:
+            # total_score 또는 rubric_score가 None(비어있는) 경우에만 실시간 분석 실행
+            if t.total_score is None or t.rubric_score is None:
+                logger.info(f"📝 Pre-processing evaluation for transcript[{t.id}]...")
+                
+                # 원본 질문 텍스트와 정보를 찾기 위해 Question 조회
+                with Session(engine) as session:
+                    question = session.get(Question, t.question_id) if t.question_id else None
+                
+                if question:
+                    try:
+                        # analyze_answer를 직접 호출하여 평가 수행 (현재 워커에서 동기적으로 실행됨)
+                        analyze_answer(
+                            transcript_id=t.id,
+                            question_text=question.content,
+                            answer_text=t.text,
+                            rubric=question.rubric_json,
+                            question_id=question.id,
+                            question_type=question.question_type
+                        )
+                        unevaluated_count += 1
+                    except Exception as eval_err:
+                        logger.error(f"Failed to evaluate transcript {t.id} during pre-processing: {eval_err}")
+
+        if unevaluated_count > 0:
+            logger.info(f"✅ Batch evaluation completed for {unevaluated_count} answers. Re-fetching transcripts for summary.")
+            # 점수가 업데이트된 대화 기록을 다시 가져옴
+            transcripts = get_interview_transcripts(interview_id)
+        else:
+            logger.info("✅ All answers were already evaluated or no user answers found.")
         
         # 🧹 메모리 청소 (리포트 분석 전 공간 확보)
         import gc

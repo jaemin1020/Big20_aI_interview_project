@@ -76,22 +76,22 @@ async def create_transcript(
                     queue="gpu_queue"
                 )
 
-                # 2. 답변 분석 및 평가 요청 (gpu_queue: EXAONE LLM 필요 → GPU 워커 필수)
-                # [성능 최적화] 다음 질문 생성을 방해하지 않도록 120초 지연 후 시작 (GPU Solo Pool 블로킹 방지)
-                celery_app.send_task(
-                    "tasks.evaluator.analyze_answer",
-                    args=[
-                        transcript.id,
-                        question.content,
-                        transcript.text,
-                        question.rubric_json,
-                        question.id,
-                        question.question_type  # 9~14번 스테이지(협업/가치관/성장) 판별용
-                    ],
-                    queue="gpu_queue",
-                    countdown=10
-                )
-                logger.info(f"Triggered Next Question first, then Evaluation for transcript {transcript.id}")
+                # 2. [변경] 답변 분석 및 평가 요청은 전체 면접 종료 시점으로 미룹니다.
+                # (기존에는 실시간으로 analyze_answer를 호출했으나, 성능 최적화를 위해 generate_final_report에서 일괄 처리함)
+                # celery_app.send_task(
+                #     "tasks.evaluator.analyze_answer",
+                #     args=[
+                #         transcript.id,
+                #         question.content,
+                #         transcript.text,
+                #         question.rubric_json,
+                #         question.id,
+                #         question.question_type 
+                #     ],
+                #     queue="gpu_queue",
+                #     countdown=10
+                # )
+                logger.info(f"Triggered Next Question. Evaluation for transcript {transcript.id} is deferred to interview end.")
     except Exception as e:
         logger.error(f"Failed to save transcript: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to save transcript")

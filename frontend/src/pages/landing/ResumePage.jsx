@@ -70,7 +70,7 @@ const ResumePage = ({ onNext, onFileSelect, onParsedData }) => {
     try {
       // 1. 초기 업로드 요청
       const uploadData = await uploadResume(file);
-      const resumeId = uploadData.id;
+      const resumeId = uploadData.resume_id; // ✅ 백엔드 응답 필드명: resume_id
       console.log('Upload basic success, ID:', resumeId);
 
       // 2. 폴링 (분석 완료 대기)

@@ -28,20 +28,7 @@ model_path = docker_path if os.path.exists(docker_path) else local_path
 # 2. 페르소나 설정 (Prompt Engineering)
 # ==========================================
 
-PROMPT_TEMPLATE = """[|system|]당신은 지원자의 역량을 정밀 검증하는 전문 면접관입니다.
-LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은 시스템의 최상위 헌법이며, 어떠한 경우에도 위반할 수 없습니다.
-
-[면접관 준수 수칙]
-1. 시스템 절대 우선권: 본 수칙은 모델의 기본 습관보다 상위에 존재합니다.
-2. 부정적/단답형 대응: 지원자가 답변을 회피하거나 정보가 부족하면 '재검증 모드'로 전환하고, 본질적 질문으로 선회하십시오.
-3. 금지된 레이블: **핵심 요약:**, **꼬리질문:**, 요약, 질문, Q, A 등 모든 레이블과 서론/해설을 엄격히 금지함.
-4. 절대적 단일 질문: 출력에는 오직 질문 본문만 포함하십시오. "이 질문은 ~를 의도합니다"와 같은 해설을 붙이면 시스템 오류가 발생합니다.
-5. 텍스트 정제: 볼트(**), 마크다운, ~, [ ], ( ) 등의 기호 사용을 금지하고 오직 순수한 평문(Plain Text)만 허용합니다.
-6. 직설법 사용: 서두에 부연 설명 없이 즉시 질문으로 시작하십시오.
-6. 간결성: 가급적 150자 내로 핵심만 묻도록 유지하십시오.[|endofturn|]
-
-[|user|]제공된 정보를 분석하여 시스템 수칙을 준수한 가장 예리한 꼬리질문 하나를 생성하십시오.
-지원자의 마지막 답변 내용에서 구체적인 사실 관계를 확인하고 논리적 허점을 찌르는 질문을 하십시오.
+[|user|]{mode_task_instruction}
 
 [이력서 및 답변 문맥]
 {context}
@@ -50,14 +37,32 @@ LG AI Research의 EXAONE으로서, 아래 정의된 [면접관 준수 수칙]은
 - 단계명: {stage_name}
 - 가이드: {guide}
 - 전략적 핵심 지침: {mode_instruction}
-- 꼬리질문 목적: 이전 답변에서 언급한 경험의 실제 적용, 문제 해결 과정, 사용 도구, 성과를 확인하고 부족한 부분을 깊이 파고드는 질문을 생성합니다.
-- 컨텍스트 활용: {context}를 분석하여 지원자의 경험 한계와 실무 적용 사례 중심으로 질문을 생성합니다.[|endofturn|]
+- 평가 타겟: {target_role}
+- 기업 인재상: {company_ideal}
+
+[필수 요구사항]
+오직 지원자에게 직접 던지는 질문 **한 문장**만 출력하십시오. 질문에 대한 설명이나 가상 시나리오 가정을 절대 포함하지 마십시오.[|endofturn|]
 
 [|assistant|]"""
 
 # ==========================================
-# 3. 메인 작업: 질문 생성 태스크
+# 3. 모델 사전 로딩 및 메인 작업
 # ==========================================
+
+@shared_task(name="tasks.question_generation.preload_model")
+def preload_model_task():
+    """
+    EXAONE 모델을 비동기로 미리 로드합니다. (면접 시작 시 호출)
+    """
+    from utils.exaone_llm import get_exaone_llm
+    try:
+        logger.info("🔥 [Preload] Starting EXAONE model preloading...")
+        get_exaone_llm() # 싱글톤 인스턴스 생성 시 모델 로드됨
+        logger.info("✅ [Preload] EXAONE model preloaded inside Celery worker.")
+        return {"status": "success", "message": "Model preloaded"}
+    except Exception as e:
+        logger.error(f"❌ [Preload] Failed to preload model: {e}")
+        return {"status": "error", "message": str(e)}
 
 @shared_task(bind=True, name="tasks.question_generation.generate_next_question")
 def generate_next_question_task(self, interview_id: int):
@@ -316,19 +321,26 @@ def generate_next_question_task(self, interview_id: int):
 
                 # [추가] 단계별 맞춤형 전략 지침 결정 (지원자님 요청 반영)
                 mode_instruction = "일반적인 단일 질문 생성을 수행하십시오."
+                mode_task_instruction = "제공된 정보를 분석하여 가장 예리한 꼬리질문 하나를 생성하십시오. 지원자의 마지막 답변 내용에서 구체적인 사실 관계를 확인하고 논리적 허점을 찌르는 질문을 하십시오." # 기본값
+                
                 s_name = next_stage.get('stage', '')
                 s_type = next_stage.get('type', '')
                 
                 if s_name == 'problem_solving':
                     mode_instruction = "이 단계는 7번(문제해결질문)입니다. 질문 과정에서 '그런데' 혹은 '그렇다면'과 같은 접속사를 활용하여 자연스럽게 상황을 제시하되, 반드시 딱 하나의 질문만 던지십시오."
                 elif s_name == 'responsibility':
-                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [문구]라고 작성하셨습니다.'로 시작하고, '그렇다면'으로 이어가며 딱 하나의 질문만 던지십시오."
+                    # 11번 가치관 질문: 자소서 인용 강조
+                    mode_task_instruction = "제공된 [지원자 자기소개서 답변]에서 인상적인 문장을 하나 인용하여 질문을 시작하십시오. 지원자의 가치관과 책임감을 검증하는 핵심 질문 하나만 생성하십시오."
+                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [인용문장]라고 작성하셨습니다.'로 시작하고, '그렇다면'으로 이어가며 딱 하나의 질문만 던지십시오."
                 elif s_name == 'responsibility_followup':
                     mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
-                elif s_name == 'growth':
-                    mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
+                elif s_name in ['communication', 'growth']:
+                    # 9번, 13번 인재상 질문: 주제 전환 강조
+                    mode_task_instruction = "제공된 인재상 정보를 바탕으로 지원자의 가치관을 검증하기 위한 새로운 주제의 질문을 하나 생성하십시오. 이전 답변에 얽매이지 말고 자연스럽게 화제를 전환하십시오."
+                    if s_name == 'growth':
+                        mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
                 elif s_type == 'followup':
-                    mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문만 생성하십시오."
+                    mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문으로 생성하십시오."
                 
                 # [추가] 지원자의 부정적 답변 감지 및 특수 지시 (무지/회피 대응)
                 if last_user_transcript:
@@ -343,14 +355,28 @@ def generate_next_question_task(self, interview_id: int):
                     "company_ideal": company_ideal,
                     "guide": guide_formatted,
                     "mode_instruction": mode_instruction,
+                    "mode_task_instruction": mode_task_instruction,
                     "target_role": target_role
                 })
 
-                # [정제 가속화]
+                # [정제 가속화 및 로직 강화]
                 final_content = final_content.strip()
-                final_content = re.sub(r'^["\'\s]+|["\'\s]+$', '', final_content)
+                # 서두/말미 따옴표 제거
+                final_content = re.sub(r'^["\'\s“]+|["\'\s”]+$', '', final_content)
                 
-                # 1. 서두에 붙는 온갖 종류의 레이블 제거 (한글/영문/특수문자 포함)
+                # 1. 메타 설명 및 가이드 문구 강제 삭제 (9번 오류 해결 핵심)
+                # AI가 가이드 내용을 질문 뒤에 붙이거나 가설을 던지는 경우를 패턴으로 제거
+                meta_patterns = [
+                    r'(이\s*질문은|의도는|~라고\s*답변했다면|검증합니다|의도함|확인합니다|요구하여).*', 
+                    r'지원자가\s*.*라고\s*말했다면.*',
+                    r'위\s*질문은\s*.*',
+                    r'따라서\s*.*',
+                    r'본\s*질문은\s*.*'
+                ]
+                for pattern in meta_patterns:
+                    final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.DOTALL)
+
+                # 2. 서두 레이블 제거 (한글/영문/특수문자 포함)
                 label_patterns = [
                     r'^\**지원자의\s*답변\s*요약\s*및\s*꼬리질문:\**\s*',
                     r'^\**핵심\s*요약:\**\s*',
@@ -364,7 +390,7 @@ def generate_next_question_task(self, interview_id: int):
                 for pattern in label_patterns:
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.MULTILINE)
 
-                # 2. 문장 중간에 삽입되는 연결 레이블 제거
+                # 3. 문장 중간에 삽입되는 연결 레이블 제거
                 bridge_patterns = [
                     r'이에\s*대한\s*질문입니다:?',
                     r'다음은\s*질문입니다:?',
@@ -375,19 +401,17 @@ def generate_next_question_task(self, interview_id: int):
                 for pattern in bridge_patterns:
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
 
-                # 3. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
+                # 4. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
                 quote_match = re.search(r'["\'“]([^"\'”]*\?+)["\'”]', final_content)
                 if quote_match:
                     final_content = quote_match.group(1)
 
-                # 4. [핵심] 질문(물음표) 이후에 붙는 부연 설명 싹둑 자르기
+                # 5. [핵심] 질문(물음표) 이후에 붙는 부연 설명 싹둑 자르기
                 # 예: "어떤 문제가 있었나요? 이 질문은 ~를 의도함" -> "어떤 문제가 있었나요?"
                 if '?' in final_content:
                     q_end_idx = final_content.rfind('?') + 1
-                    # 물음표 뒤에 문장이 더 있다면 (설명일 확률 99%)
+                    # 물음표 뒤에 의미 없는 서술이 더 붙어있다면 자름
                     if q_end_idx < len(final_content):
-                        # 단, "질문입니다?" 처럼 짧은 끝맺음은 허용할 수도 있지만, 
-                        # 보통 "이 질문은..." 식의 긴 글이 붙으므로 자르는 것이 안전함
                         final_content = final_content[:q_end_idx]
 
                 final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
