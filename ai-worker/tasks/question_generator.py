@@ -374,14 +374,6 @@ def generate_next_question_task(self, interview_id: int):
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
 
                 final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
-                
-                # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
-                if final_content.count('?') > 1:
-                    logger.warning(f"⚠️ Multiple questions detected. Truncating: {final_content}")
-                    q_parts = final_content.split('?')
-                    final_content = q_parts[0] + '?' # 첫 번째 질문만 남김
-                
-                final_content = final_content.strip()
 
                 intro_tpl = next_stage.get("intro_sentence", "")
                 if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
@@ -404,9 +396,19 @@ def generate_next_question_task(self, interview_id: int):
                 display_name = next_stage.get("display_name", "심층 면접")
                 final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
 
-            # 6. DB 저장 (Question 및 Transcript)
+            # 6. [전역 정제] 모든 질문 타입에 대해 특수문자 제거 및 정제 수행
+            final_content = final_content.strip()
+            # 콤마(,), 물음표(?), 따옴표(", '), 점(.)을 제외한 모든 특수문자 제거
+            final_content = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s,\?\.\"\']', '', final_content)
+            
+            # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
+            if final_content.count('?') > 1:
+                q_parts = final_content.split('?')
+                final_content = q_parts[0] + '?' 
+            
+            final_content = final_content.strip()
 
-            # 6. DB 저장 (Question 및 Transcript)
+            # 7. DB 저장 (Question 및 Transcript)
             category_raw = next_stage.get("category", "technical")
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
@@ -421,17 +423,16 @@ def generate_next_question_task(self, interview_id: int):
                 session=session
             )
 
-            # 7. 메모리 정리
+            # 8. 메모리 정리
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            # 8. TTS 생성 태스크 즉시 트리거 (중복 방지: 파일 존재 확인)
+            # 9. TTS 생성 태스크 즉시 트리거
             if q_id:
                 import pathlib
                 tts_file = pathlib.Path(f"/app/uploads/tts/q_{q_id}.wav")
                 if not tts_file.exists():
-                    # [단계] 태그 제거 (TTS가 읽는 클린 텍스트)
                     clean_text = final_content
                     if final_content.startswith('[') and ']' in final_content:
                         clean_text = final_content.split(']', 1)[-1].strip()

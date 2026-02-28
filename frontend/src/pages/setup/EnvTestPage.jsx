@@ -307,7 +307,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             </PremiumButton>
           </div>
 
-          {/* 개발용 빠른 통과 버튼 */}
+          {/* 원격 환경 등 특수 상황을 위한 건너뛰기 버튼 */}
           <div style={{ marginTop: '1rem', textAlign: 'center' }}>
             <button
               onClick={() => {
@@ -317,18 +317,27 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
                 onNext();
               }}
               style={{
-                background: 'rgba(251, 191, 36, 0.1)',
-                border: '1px dashed rgba(251, 191, 36, 0.6)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--glass-border)',
                 borderRadius: '8px',
-                color: 'rgba(251, 191, 36, 0.9)',
+                color: 'var(--text-muted)',
                 padding: '8px 20px',
                 fontSize: '0.82rem',
                 fontWeight: '600',
                 cursor: 'pointer',
-                letterSpacing: '0.03em'
+                letterSpacing: '0.03em',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.color = 'var(--text-main)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.color = 'var(--text-muted)';
               }}
             >
-              🚀 개발 테스트: 음성+영상 즉시 통과
+              ⚠️ 장비 테스트 없이 시작하기 (원격/바이패스)
             </button>
           </div>
         </GlassCard>

@@ -102,13 +102,15 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
           </PremiumButton>
           <PremiumButton
             onClick={onNext}
-            disabled={isLoading || !allPassed}
+            disabled={isLoading}
             style={{
               flex: 1,
               padding: '1.2rem',
               fontSize: '1.1rem',
-              opacity: allPassed ? 1 : 0.4,
-              cursor: allPassed ? 'pointer' : 'not-allowed'
+              background: !allPassed ? 'rgba(255, 255, 255, 0.1)' : undefined,
+              border: !allPassed ? '1px solid rgba(255, 255, 255, 0.2)' : undefined,
+              color: !allPassed ? 'var(--text-muted)' : undefined,
+              cursor: 'pointer'
             }}
           >
             {isLoading ? (
@@ -116,7 +118,7 @@ const FinalGuidePage = ({ onNext, onPrev, isLoading }) => {
                 <div className="spinner" style={{ width: '20px', height: '20px', margin: 0, borderTopColor: '#fff', borderRightColor: 'rgba(255,255,255,0.3)', borderBottomColor: 'rgba(255,255,255,0.3)', borderLeftColor: 'rgba(255,255,255,0.3)' }}></div>
                 <span>면접실 입장 중...</span>
               </div>
-            ) : allPassed ? '지금 면접 시작하기' : '테스트를 먼저 완료해주세요'}
+            ) : allPassed ? '지금 면접 시작하기' : '테스트 생략하고 시작하기 (원격)'}
           </PremiumButton>
         </div>
       </div>
