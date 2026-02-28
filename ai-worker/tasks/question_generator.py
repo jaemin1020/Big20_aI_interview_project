@@ -27,8 +27,7 @@ model_path = docker_path if os.path.exists(docker_path) else local_path
 # ==========================================
 # 2. 페르소나 설정 (Prompt Engineering)
 # ==========================================
-
-[|user|]{mode_task_instruction}
+PROMPT_TEMPLATE = """[|user|]{mode_task_instruction}
 
 [이력서 및 답변 문맥]
 {context}
@@ -41,7 +40,8 @@ model_path = docker_path if os.path.exists(docker_path) else local_path
 - 기업 인재상: {company_ideal}
 
 [필수 요구사항]
-오직 지원자에게 직접 던지는 질문 **한 문장**만 출력하십시오. 질문에 대한 설명이나 가상 시나리오 가정을 절대 포함하지 마십시오.[|endofturn|]
+오직 지원자에게 직접 던지는 질문을 생성하십시오. 질문에 대한 설명이나 가상 시나리오 가정을 절대 포함하지 마십시오.
+**특히 질문을 할 때, 이력서에 기재된 구체적인 수치나 기술 스택을 직접 언급하거나 인용하여 질문하십시오.**[|endofturn|]
 
 [|assistant|]"""
 
@@ -282,10 +282,12 @@ def generate_next_question_task(self, interview_id: int):
                         context_text = f"{values_text}\n\n[추가 참고 정보]:\n{rag_context}".strip()
                         if not context_text: context_text = "특별한 가치관 정보 없음"
                     else:
-                        # 나머지 인재상 기반 질문 단계: 이력서 컨텍스트 비활성화
-                        logger.info(f"✨ Narrative mode ({next_stage.get('stage')}): Skipping Resume RAG, focusing strictly on Company Ideal.")
-                        context_text = f"회사의 인재상 중심 질문 단계입니다. 지원자의 개별 프로젝트보다는 회사의 가치관 부합 여부를 확인하십시오."
-                        rag_results = []
+                        # [개선] 인재상 단계에서도 이력서의 '대외활동'이나 '경험' 청크를 함께 활용하여 개인화된 질문 생성
+                        logger.info(f"✨ Narrative mode ({next_stage.get('stage')}): Retrieving personal experience for customized talent-fit questioning.")
+                        narrative_query = "지원자의 대외활동이나 프로젝트 중 도전과 성취를 보여주는 경험"
+                        rag_results = retrieve_context(narrative_query, resume_id=interview.resume_id, top_k=2)
+                        rag_context = "\n".join([r['text'] for r in rag_results]) if rag_results else ""
+                        context_text = f"회사의 인재상 중심 질문 단계입니다. 아래 정보를 활용하여 지원자의 과거 경험에 기반한 인재상 검증 질문을 생성하십시오.\n\n[지원자 경험 정보]:\n{rag_context}"
                 else:
                     # 일반 기술/경험 질문: 이력서 RAG 수행
                     query_template = next_stage.get("query_template", interview.position)
@@ -406,21 +408,27 @@ def generate_next_question_task(self, interview_id: int):
                 if quote_match:
                     final_content = quote_match.group(1)
 
-                # 5. [핵심] 질문(물음표) 이후에 붙는 부연 설명 싹둑 자르기
-                # 예: "어떤 문제가 있었나요? 이 질문은 ~를 의도함" -> "어떤 문제가 있었나요?"
+                # 5. [정제 로직 완화] 물음표 자르기를 정교하게 수행 (문맥 보존)
+                # 단일 문장만 남기는 대신, 마지막 물음표 이후의 '부연 설명(가이드라인)'만 제거
+                # AI가 가끔 말끝에 "이 질문은 ~를 의도함" 등을 붙이는 것 방지
+                final_content = final_content.replace("**", "").strip()
                 if '?' in final_content:
-                    q_end_idx = final_content.rfind('?') + 1
-                    # 물음표 뒤에 의미 없는 서술이 더 붙어있다면 자름
-                    if q_end_idx < len(final_content):
-                        final_content = final_content[:q_end_idx]
+                    # 패턴 기반: 질문 의도나 설명이 시작되는 키워드가 있으면 그 앞까지만 유지
+                    cut_patterns = ["이 질문은", "질문의 의도", "의도는", "답변을 통해", "확인하고자 함", "검증하고자 하는"]
+                    for pattern in cut_patterns:
+                        if pattern in final_content:
+                            final_content = final_content.split(pattern)[0].strip()
+                    
+                    # 만약 물음표가 있고 그 뒤에 아주 짧은 문장(설명조)이 더 있다면 마지막 물음표까지만 유지
+                    q_last_idx = final_content.rfind('?') + 1
+                    if q_last_idx < len(final_content) and len(final_content) - q_last_idx < 30:
+                        final_content = final_content[:q_last_idx]
 
-                final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
-                
-                # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
-                if final_content.count('?') > 1:
-                    logger.warning(f"⚠️ Multiple questions detected. Truncating: {final_content}")
+                # [완화] 무조건적인 물음표 1개 제한 대신, 너무 여러 개(3개 이상)인 경우만 상위 2개로 제한
+                if final_content.count('?') > 2:
+                    logger.warning(f"⚠️ Excessive questions detected. Truncating to first two.")
                     q_parts = final_content.split('?')
-                    final_content = q_parts[0] + '?' # 첫 번째 질문만 남김
+                    final_content = q_parts[0] + '?' + q_parts[1] + '?'
                 
                 final_content = final_content.strip()
 
