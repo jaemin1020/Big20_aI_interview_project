@@ -301,6 +301,8 @@ def generate_next_question_task(self, interview_id: int):
                         
                     if last_user_transcript:
                         context_text += f"\n[지원자의 최근 답변]: {last_user_transcript.text}"
+                    else:
+                        context_text += "\n[지원자의 응답 정보가 아직 전달되지 않았습니다.]"
 
                 llm = get_exaone_llm()
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
@@ -374,14 +376,6 @@ def generate_next_question_task(self, interview_id: int):
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
 
                 final_content = final_content.replace("**", "").strip() # 남은 볼트 제거
-                
-                # [강력 제약] 두 번째 물음표 이후의 모든 텍스트 제거 (물음표는 하나만 허용)
-                if final_content.count('?') > 1:
-                    logger.warning(f"⚠️ Multiple questions detected. Truncating: {final_content}")
-                    q_parts = final_content.split('?')
-                    final_content = q_parts[0] + '?' # 첫 번째 질문만 남김
-                
-                final_content = final_content.strip()
 
                 intro_tpl = next_stage.get("intro_sentence", "")
                 if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
@@ -403,10 +397,32 @@ def generate_next_question_task(self, interview_id: int):
                 
                 display_name = next_stage.get("display_name", "심층 면접")
                 final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
+                
+                # [백지 방지] 만약 정제 과정에서 내용이 사라졌거나 너무 짧은 경우 폴백
+                if len(final_content) < 10 or "?" not in final_content:
+                    logger.warning(f"⚠️ [Empty/Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
+                    # 단순히 질문만 다시 생성하거나, 시나리오 가이드를 질문으로 승화
+                    if "?" not in final_content:
+                        final_content += "?" # 최소한 물음표라도 붙임
 
-            # 6. DB 저장 (Question 및 Transcript)
+            # 6. [전역 정제] 모든 질문 타입에 대해 특수문자 제거 및 정제 수행
+            final_content = final_content.strip()
+            # 콤마(,), 물음표(?), 따옴표(", '), 점(.)을 제외한 모든 특수문자 제거
+            final_content = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s,\?\.\"\']', '', final_content)
+            
+            # [강력 제약] 만약 정제 과정에서 내용이 사라졌거나 너무 짧은 경우 폴백
+            # 기존의 물음표 분절(split) 로직은 인용문 내 물음표를 오인할 가능성이 커서 제거함
+            if len(final_content) < 15:
+                logger.warning(f"⚠️ [Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
+                # 꼬리질문인 경우 답변 요약이 실패한 것으로 보고 일반적인 심층 질문으로 대체
+                if next_stage.get("type") == "followup":
+                    final_content = "지원자님의 답변 내용을 들어보았습니다. 해당 경험에서 본인이 가장 중요하게 기여한 부분은 무엇이었는지 조금 더 구체적으로 말씀해 주시겠습니까?"
+                else:
+                    final_content = f"[{display_name}] 지원자님의 생각을 조금 더 자세히 듣고 싶습니다. 이 부분에 대해 구체적으로 답변해 주세요."
+            
+            final_content = final_content.strip()
 
-            # 6. DB 저장 (Question 및 Transcript)
+            # 7. DB 저장 (Question 및 Transcript)
             category_raw = next_stage.get("category", "technical")
             category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
             db_category = category_map.get(category_raw, "technical")
@@ -421,17 +437,20 @@ def generate_next_question_task(self, interview_id: int):
                 session=session
             )
 
-            # 7. 메모리 정리
+            # 8. 메모리 정리 (더 강력하게)
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                with torch.cuda.device(torch.cuda.current_device()):
+                    torch.cuda.empty_cache()
+            
+            logger.info(f"✅ [SUCCESS] Next question generated for Interview {interview_id}: {final_content[:50]}...")
 
-            # 8. TTS 생성 태스크 즉시 트리거 (중복 방지: 파일 존재 확인)
+            # 9. TTS 생성 태스크 즉시 트리거
             if q_id:
                 import pathlib
                 tts_file = pathlib.Path(f"/app/uploads/tts/q_{q_id}.wav")
                 if not tts_file.exists():
-                    # [단계] 태그 제거 (TTS가 읽는 클린 텍스트)
                     clean_text = final_content
                     if final_content.startswith('[') and ']' in final_content:
                         clean_text = final_content.split(']', 1)[-1].strip()
