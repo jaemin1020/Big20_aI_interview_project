@@ -1,5 +1,6 @@
 
 import { useState, useRef, useEffect } from 'react';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import {
   createInterview,
   getInterviewQuestions,
@@ -104,6 +105,11 @@ function App() {
   const currentIdxRef = useRef(0); // stale closure 방지용 : currentIdx 최신값 동기화
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
+
+  // [NEW] Deepgram SDK Refs
+  const audioContextRef = useRef(null);
+  const deepgramConnectionRef = useRef(null);
+  const workletNodeRef = useRef(null);
   const isInitialized = useRef(false);
   // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
   const liveTranscriptRef = useRef('');
@@ -422,6 +428,78 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
+  const setupDeepgram = async (stream) => {
+    try {
+      const DEEPGRAM_API_KEY = import.meta.env.DEEPGRAM_API_KEY;
+      if (!DEEPGRAM_API_KEY) {
+          console.error('[Deepgram] Missing API KEY');
+          return;
+      }
+      
+      const deepgram = createClient(DEEPGRAM_API_KEY);
+      const connection = deepgram.listen.live({
+        model: 'nova-2',
+        language: 'ko',
+        smart_format: true,
+        encoding: 'linear16',
+        sample_rate: 16000,
+      });
+
+      deepgramConnectionRef.current = connection;
+
+      connection.on(LiveTranscriptionEvents.Open, async () => {
+        console.log('[Deepgram] Connected.');
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: 16000,
+        });
+        audioContextRef.current = audioContext;
+
+        const workletPath = import.meta.env.DEV 
+          ? '/deepgram-processor.js' 
+          : `${import.meta.env.BASE_URL}deepgram-processor.js`;
+          
+        await audioContext.audioWorklet.addModule(workletPath);
+
+        const source = audioContext.createMediaStreamSource(stream);
+        const workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
+        workletNodeRef.current = workletNode;
+
+        workletNode.port.onmessage = (event) => {
+          if (connection.getReadyState() === 1 && isRecordingRef.current) {
+            connection.send(event.data);
+          }
+        };
+
+        source.connect(workletNode);
+        workletNode.connect(audioContext.destination);
+      });
+
+      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+        if (!isRecordingRef.current) return;
+        
+        const transcriptText = data.channel.alternatives[0].transcript;
+        if (transcriptText && data.is_final) {
+          setTranscript(prev => {
+            const newText = transcriptText.trim();
+            if (prev.endsWith(newText)) return prev;
+            return prev ? `${prev} ${newText}` : newText;
+          });
+        }
+      });
+
+      connection.on(LiveTranscriptionEvents.Error, (err) => {
+        console.error('[Deepgram] Error:', err);
+      });
+      
+      connection.on(LiveTranscriptionEvents.Close, () => {
+         console.log('[Deepgram] Connection closed.');
+      });
+
+    } catch (err) {
+      console.error('[Deepgram] setup failed:', err);
+    }
+  };
+
   const setupAiStreamWebSocket = (interviewId) => {
     // 백엔드 코어(8000)의 스트리밍 채널에 연결
     const ws = new WebSocket(`ws://localhost:8000/interviews/ws/${interviewId}`);
@@ -481,6 +559,8 @@ function App() {
         console.warn('[WebRTC] videoRef.current is missing during stream setup!');
       }
 
+      setupDeepgram(stream);
+
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track to PC:', track.kind, track.label);
@@ -490,6 +570,7 @@ function App() {
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('[WebRTC] Audio-only stream obtained.');
+        setupDeepgram(audioStream);
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
         if (videoRef.current) {
           videoRef.current.srcObject = audioStream;
@@ -551,14 +632,12 @@ function App() {
   const toggleRecording = async () => {
     if (isRecording) {
       console.log('[STT] Stopping recording...');
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
 
-        // WebSocket으로 녹음 중지 알림
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
-        }
+      // WebSocket으로 녹음 중지 알림 (media server에게 오디오 분석 비활성화 시그널)
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
       }
+      
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
@@ -575,69 +654,6 @@ function App() {
       // WebSocket으로 녹음 시작 알림
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'start_recording' }));
-      }
-
-      try {
-        const stream = videoRef.current?.srcObject;
-        if (!stream) {
-          throw new Error('No media stream available');
-        }
-
-        const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          throw new Error('No audio track found');
-        }
-
-        // 오디오만 포함하는 새 스트림 생성
-        const audioStream = new MediaStream(audioTracks);
-
-        const mediaRecorder = new MediaRecorder(audioStream, {
-          mimeType: 'audio/webm'
-        });
-        mediaRecorderRef.current = mediaRecorder;
-
-        const chunks = [];
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            chunks.push(e.data);
-          }
-        };
-
-        mediaRecorder.onstop = async () => {
-          console.log('[STT] Processing audio...');
-          setIsLoading(true);
-
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-
-          try {
-            console.log('[STT] Sending batch audio as fallback...');
-            const result = await recognizeAudio(blob);
-            console.log('[STT] Recognition result:', result);
-
-            if (result.text && result.text.trim()) {
-              const recognizedText = result.text.trim();
-              setTranscript(prev => {
-                // 실시간 텍스트가 이미 더 길다면 유지
-                if (prev.length > recognizedText.length) return prev;
-                return recognizedText;
-              });
-              console.log('[STT] ✅ Fallback Batch Recognition Success');
-            }
-          } catch (error) {
-            console.error('[STT] ❌ Fallback Error:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        };
-
-        mediaRecorder.start();
-        console.log('[STT] MediaRecorder started');
-
-      } catch (error) {
-        console.error('[STT] Failed to start recording:', error);
-        alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
-        setIsRecording(false);
-        isRecordingRef.current = false;
       }
     }
 
