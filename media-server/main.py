@@ -487,9 +487,9 @@ async def start_video_analysis(track, session_id):
                 if frame_count == 1:
                     print(f"🎉 [{session_id}] 첫 영상 프레임 수신 성공!", flush=True)
 
-                # [성능 조절] 5FPS (0.2s 간격) 분석 
-                # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
-                if curr - analysis_track.last_tracking_time > 0.2:
+                # [성능 조절] 2.5FPS (0.4s 간격) — STT 우선권 확보
+                # (Vision 부하를 줄여 cpu_queue 및 event loop에서 STT가 더 빠르게 처리되도록)
+                if curr - analysis_track.last_tracking_time > 0.4:
                     analysis_track.last_tracking_time = curr
                     asyncio.create_task(analysis_track.process_vision(frame, int(curr * 1000)))
 
@@ -537,8 +537,8 @@ async def start_remote_stt(track, session_id):
 
             accumulated_frames.append(frame)
 
-            # 150프레임(약 3초) 모이면 STT 전송
-            if len(accumulated_frames) >= 150:
+            # 75프레임(약 1.5초) 모이면 STT 전송 — 기존 150프레임(3초)에서 절반으로 단축
+            if len(accumulated_frames) >= 75:
 
                 # 2. WAV 변환 (In-Memory)
                 output_buffer = io.BytesIO()
@@ -600,14 +600,37 @@ async def start_remote_stt(track, session_id):
                     print(f"[{session_id}] ❌ [ERROR] NumPy 오디오 분석 실패: {e}", flush=True)
                     logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
                 
-                # 5. Celery Task 배달 (AI Worker에게)
-                celery_app.send_task(
-                    "tasks.stt.recognize",
-                    args=[audio_b64],
-                    queue="cpu_queue"
-                )
-                
-                logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
+                # 5. Celery Task 전송 + 결과를 WebSocket으로 브로드캐스트
+                # [핵심 수정] .get()은 동기 블로킹 → run_in_executor로 스레드 풀 위임
+                # (event loop를 차단하지 않아 다음 오디오 프레임 수신이 계속 가능)
+                async def _fetch_and_send_stt(b64: str, sid: str):
+                    try:
+                        loop = asyncio.get_event_loop()
+                        task = celery_app.send_task(
+                            "tasks.stt.recognize",
+                            args=[b64],
+                            queue="cpu_queue"
+                        )
+                        # 동기 .get()을 스레드 풀에서 실행 → event loop 비차단
+                        result = await loop.run_in_executor(
+                            None, lambda: task.get(timeout=10)
+                        )
+                        stt_text = result.get("text", "").strip() if result else ""
+                        if stt_text:
+                            ws = active_websockets.get(sid)
+                            if ws:
+                                await send_to_websocket(ws, {
+                                    "type": "stt_result",
+                                    "text": stt_text
+                                })
+                            logger.info(f"[{sid}] ✅ STT → WS 전송: {stt_text[:40]}")
+                        else:
+                            logger.info(f"[{sid}] STT 결과 없음 (무음 또는 환각 필터)")
+                    except Exception as e:
+                        logger.warning(f"[{sid}] ⚠️ STT Celery 처리 실패: {e}")
+
+                # STT 처리를 비동기 태스크로 분리 (오디오 수신 루프 블로킹 방지)
+                asyncio.create_task(_fetch_and_send_stt(audio_b64, session_id))
                 
                 # 버퍼 초기화
                 accumulated_frames = []

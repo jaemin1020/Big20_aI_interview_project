@@ -18,7 +18,7 @@ logger = logging.getLogger("STT-Task")
 stt_model = None
 
 # [문법] os.getenv(A, B): 환경변수 A를 찾고, 없으면 기본값 B를 사용하라는 뜻입니다.
-MODEL_SIZE = os.getenv("`WHISPER_MODEL_SIZE`", "large-v3-turbo")
+MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 
 def load_stt_model():
     """
@@ -103,8 +103,17 @@ def recognize_audio_task(audio_b64: str):
                     # -1.0 ~ 1.0 사이의 숫자로 정규화합니다. 파이썬 리스트보다 훨씬 빠릅니다.
                     audio_np = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
                     
-                    # transcribe: 소리를 글로 바꾸는 핵심 함수 (반환값은 문장들의 덩어리)
-                    segments, info = stt_model.transcribe(audio_np, beam_size=1, language="ko")
+                    # transcribe: 소리를 글로 바꾸는 핵심 함수
+                    # vad_filter=True: 무음 구간을 자동으로 건너뜀 → 속도 향상
+                    # condition_on_previous_text=False: 이전 문장 참조 없이 독립 처리 → 속도 향상
+                    segments, info = stt_model.transcribe(
+                        audio_np,
+                        beam_size=1,
+                        language="ko",
+                        vad_filter=True,
+                        vad_parameters=dict(min_silence_duration_ms=300),
+                        condition_on_previous_text=False
+                    )
                     
                     # [문법] 리스트 컴프리헨션(List Comprehension): 
                     # [s.text for s in segments]는 "segments 안의 각 요소 s에서 text만 뽑아 리스트를 만들어라"는 뜻입니다.
