@@ -1,6 +1,5 @@
 
 import { useState, useRef, useEffect } from 'react';
-import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import {
   createInterview,
   getInterviewQuestions,
@@ -106,13 +105,11 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
 
-  // [NEW] Deepgram SDK Refs
-  const audioContextRef = useRef(null);
-  const deepgramConnectionRef = useRef(null);
-  const workletNodeRef = useRef(null);
   const isInitialized = useRef(false);
   // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
   const liveTranscriptRef = useRef('');
+  // [Fix 1] 타이머 종료 시 STT 완료 후 자동 nextQuestion 트리거용 플래그
+  const autoNextAfterSTTRef = useRef(false);
 
   // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
   const navigateSafe = (targetStep, force = false) => {
@@ -428,77 +425,6 @@ function App() {
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
 
-  const setupDeepgram = async (stream) => {
-    try {
-      const DEEPGRAM_API_KEY = import.meta.env.DEEPGRAM_API_KEY;
-      if (!DEEPGRAM_API_KEY) {
-          console.error('[Deepgram] Missing API KEY');
-          return;
-      }
-      
-      const deepgram = createClient(DEEPGRAM_API_KEY);
-      const connection = deepgram.listen.live({
-        model: 'nova-2',
-        language: 'ko',
-        smart_format: true,
-        encoding: 'linear16',
-        sample_rate: 16000,
-      });
-
-      deepgramConnectionRef.current = connection;
-
-      connection.on(LiveTranscriptionEvents.Open, async () => {
-        console.log('[Deepgram] Connected.');
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-          sampleRate: 16000,
-        });
-        audioContextRef.current = audioContext;
-
-        const workletPath = import.meta.env.DEV 
-          ? '/deepgram-processor.js' 
-          : `${import.meta.env.BASE_URL}deepgram-processor.js`;
-          
-        await audioContext.audioWorklet.addModule(workletPath);
-
-        const source = audioContext.createMediaStreamSource(stream);
-        const workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
-        workletNodeRef.current = workletNode;
-
-        workletNode.port.onmessage = (event) => {
-          if (connection.getReadyState() === 1 && isRecordingRef.current) {
-            connection.send(event.data);
-          }
-        };
-
-        source.connect(workletNode);
-        workletNode.connect(audioContext.destination);
-      });
-
-      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
-        if (!isRecordingRef.current) return;
-        
-        const transcriptText = data.channel.alternatives[0].transcript;
-        if (transcriptText && data.is_final) {
-          setTranscript(prev => {
-            const newText = transcriptText.trim();
-            if (prev.endsWith(newText)) return prev;
-            return prev ? `${prev} ${newText}` : newText;
-          });
-        }
-      });
-
-      connection.on(LiveTranscriptionEvents.Error, (err) => {
-        console.error('[Deepgram] Error:', err);
-      });
-      
-      connection.on(LiveTranscriptionEvents.Close, () => {
-         console.log('[Deepgram] Connection closed.');
-      });
-
-    } catch (err) {
-      console.error('[Deepgram] setup failed:', err);
-    }
-  };
 
   const setupAiStreamWebSocket = (interviewId) => {
     // 백엔드 코어(8000)의 스트리밍 채널에 연결
@@ -559,8 +485,6 @@ function App() {
         console.warn('[WebRTC] videoRef.current is missing during stream setup!');
       }
 
-      setupDeepgram(stream);
-
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log('[WebRTC] Added track to PC:', track.kind, track.label);
@@ -570,7 +494,6 @@ function App() {
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('[WebRTC] Audio-only stream obtained.');
-        setupDeepgram(audioStream);
         audioStream.getTracks().forEach(track => pc.addTrack(track, audioStream));
         if (videoRef.current) {
           videoRef.current.srcObject = audioStream;
@@ -750,12 +673,14 @@ function App() {
   }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
 
   const nextQuestion = async () => {
-    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
+    // [Fix 1] liveTranscriptRef: setTranscript 비동기 업데이트 문제 방지
+    // onstop 직후 nextQuestion 호출 시 transcript state가 아직 구버전일 수 있으므로 ref 사용
+    const answerText = liveTranscriptRef.current.trim() || "답변 내용 없음";
+    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Answer:', answerText.substring(0, 30));
     if (!interview || !questions || !questions[currentIdx]) {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
     }
-    const answerText = transcript.trim() || "답변 내용 없음";
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
       console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
@@ -837,6 +762,28 @@ function App() {
       console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');
       setIsLoading(false);
+    }
+  };
+
+  // [Fix 1] 타이머 종료 핸들러 — InterviewPage의 onTimerEnd prop으로 연결
+  // wasRecording=true: 녹음을 멈추고 STT 완료 후 자동으로 nextQuestion 호출
+  // wasRecording=false: 즉시 nextQuestion 호출
+  const handleTimerEnd = (wasRecording) => {
+    if (wasRecording) {
+      console.log('[TimerEnd] 녹음 중 시간 초과 → STT 완료 대기 후 자동 진행');
+      autoNextAfterSTTRef.current = true; // onstop에서 감지
+      // 녹음 중지 (toggleRecording의 stop 부분만)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
+        }
+      }
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    } else {
+      console.log('[TimerEnd] 녹음 없이 시간 초과 → 즉시 다음 질문');
+      nextQuestion();
     }
   };
 
@@ -1082,6 +1029,7 @@ function App() {
             isLoading={isLoading}
             visionData={visionData}
             streamingQuestion={questions[currentIdx + 1]?.isStreaming ? questions[currentIdx + 1]?.content : null}
+            onTimerEnd={handleTimerEnd}
           />
         )}
 
