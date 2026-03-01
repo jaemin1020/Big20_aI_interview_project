@@ -129,6 +129,10 @@ function App() {
   const isAcceptingSTTRef = useRef(false);
   const isLoadingRef = useRef(isLoading);
 
+  const ttsAbortControllerRef = useRef(null);
+  const nextQAbortControllerRef = useRef(null);
+  const reportAbortControllerRef = useRef(null);
+
   useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);

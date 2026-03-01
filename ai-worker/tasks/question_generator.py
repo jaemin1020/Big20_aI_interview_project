@@ -114,12 +114,12 @@ def generate_next_question_task(self, interview_id: int):
             ).order_by(Transcript.id.desc())
             last_ai_transcript = session.exec(stmt_ai).first()
 
-            # 마지막 사용자 발화 가져오기 (단, 아주 짧은 노이즈는 무시하여 스테이지 스킵 방지)
+            # 마지막 사용자 발화 가져오기 (단, 아주 짧은 노이즈는 무시하되 1자 이상이면 답변으로 인정)
             from sqlalchemy import func
             stmt_user = select(Transcript).where(
                 Transcript.interview_id == interview_id,
                 Transcript.speaker != Speaker.AI,
-                func.length(Transcript.text) > 5  # 최소 6자 이상인 경우만 실제 답변으로 간주하여 스테이지 전환 판단
+                func.length(Transcript.text) >= 1  # 1자 이상이면 실제 답변으로 간주
             ).order_by(Transcript.id.desc())
             last_user_transcript = session.exec(stmt_user).first()
 
