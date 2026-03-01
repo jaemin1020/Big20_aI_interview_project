@@ -124,6 +124,7 @@ active_pcs: Dict[str, RTCPeerConnection] = {}
 active_video_tracks: Dict[str, 'VideoAnalysisTrack'] = {}
 active_analysis_tasks: Dict[str, asyncio.Task] = {}  # 분석 루프 태스크 관리
 active_recording_flags: Dict[str, bool] = {}          # [핵심] 세션별 녹음 상태 플래그
+active_recording_indices: Dict[str, int] = {}         # [신규] 세션별 녹음 중인 질문 인덱스
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -487,9 +488,9 @@ async def start_video_analysis(track, session_id):
                 if frame_count == 1:
                     print(f"🎉 [{session_id}] 첫 영상 프레임 수신 성공!", flush=True)
 
-                # [성능 조절] 5FPS (0.2s 간격) 분석 
-                # (LLM 질문 생성 속도 저하 방지를 위해 분석 부하 감소)
-                if curr - analysis_track.last_tracking_time > 0.2:
+                # [성능 조절] 2.5FPS (0.4s 간격) — STT 우선권 확보
+                # (Vision 부하를 줄여 cpu_queue 및 event loop에서 STT가 더 빠르게 처리되도록)
+                if curr - analysis_track.last_tracking_time > 0.4:
                     analysis_track.last_tracking_time = curr
                     asyncio.create_task(analysis_track.process_vision(frame, int(curr * 1000)))
 
@@ -523,100 +524,138 @@ async def send_to_websocket(ws: WebSocket, data: dict):
 async def start_remote_stt(track, session_id):
     logger.info(f"[{session_id}] 🎙️ 원격 STT 시작 (Remote STT Started)")
     
-    # 3초 단위로 오디오를 모아서 전송 (VAD 없이 시간 기반 분할)
-    CHUNK_DURATION_MS = 3000 
-    accumulated_frames = []
+    # ── 설계 원칙 ──────────────────────────────────────────────────────
+    # recording=True  동안: 프레임을 무제한 누적 (발화 손실 없음)
+    # recording=False 전환: 누적된 전체 오디오를 한 번에 STT 전송
+    # → 중간에 청크를 자르지 않아 VAD 앞부분 잘림 / 발화 손실 문제 없음
+    # ──────────────────────────────────────────────────────────────────
+    accumulated_frames = []   # 현재 녹음 세션의 모든 프레임
+    prev_recording = False    # 이전 루프에서의 recording 상태 (전환 감지용)
+    last_sent_q_idx = -1      # [신규] 마지막으로 시작된 녹음의 인덱스
+
+    async def _send_stt(frames: list, sid: str, q_idx: int):
+        """누적된 프레임 전체를 WAV로 인코딩 후 STT 전송 (질문 인덱스 포함)"""
+        if not frames:
+            return
+        try:
+            # 1. WAV 인코딩 (In-Memory)
+            output_buffer = io.BytesIO()
+            output_container = av.open(output_buffer, mode='w', format='wav')
+            output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+            for f in frames:
+                for pkt in output_stream.encode(f):
+                    output_container.mux(pkt)
+            for pkt in output_stream.encode(None):
+                output_container.mux(pkt)
+            output_container.close()
+            wav_bytes = output_buffer.getvalue()
+            audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+
+            duration_s = len(frames) * 20 / 1000
+            logger.info(f"[{sid}] 📤 STT 전송: {duration_s:.1f}초 오디오 ({len(wav_bytes)} bytes)")
+
+            # 2. 오디오 자신감 점수 계산
+            try:
+                audio_np = np.frombuffer(wav_bytes[44:], dtype=np.int16).astype(np.float32) / 32768.0  # 44바이트 WAV 헤더 skip
+                if len(audio_np) > 0:
+                    volume_rms = np.sqrt(np.mean(audio_np**2))
+                    if volume_rms > 0.02:
+                        volume_score = min(max((volume_rms - 0.02) / (0.15 - 0.02) * 60 + 40, 40), 100)
+                        speaking_ratio = np.count_nonzero(np.abs(audio_np) > 0.02) / len(audio_np)
+                        speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
+                        confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
+                        feedback_msg = (
+                            "👍 아주 좋습니다! (자신감 넘침)" if confidence_score >= 70 else
+                            "👌 안정적입니다. (무난함)" if confidence_score >= 60 else
+                            "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+                        )
+                        logger.info(
+                            f"[{sid}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
+                            f"(🔊RMS:{volume_rms:.4f}, 🐇발화율:{speaking_ratio:.2f})"
+                        )
+                        if sid in active_video_tracks:
+                            active_video_tracks[sid].audio_scores.append(confidence_score)
+                            active_video_tracks[sid].current_q_data["audio_scores"].append(confidence_score)
+            except Exception as e:
+                logger.warning(f"[{sid}] 오디오 자신감 분석 실패 (무시됨): {e}")
+
+            # 3. Celery STT 전송 → 결과 WebSocket 전달
+            # [알림] STT 서버 처리가 시작되었음을 알림
+            ws = active_websockets.get(sid)
+            if ws:
+                await ws.send_json({"type": "stt_processing", "index": q_idx})
+
+            loop = asyncio.get_running_loop()  # get_event_loop() deprecated in Python 3.10+
+            task = celery_app.send_task(
+                "tasks.stt.recognize",
+                args=[audio_b64],
+                queue="cpu_queue"
+            )
+            result = await loop.run_in_executor(
+                None, lambda: task.get(timeout=120)  # 최대 2분 (긴 답변 대응)
+            )
+            stt_text = result.get("text", "").strip() if result else ""
+            if stt_text:
+                ws = active_websockets.get(sid)
+                if not ws:
+                    logger.info(f"[{sid}] ⏳ WS 미연결, 최대 5초 대기...")
+                    for _ in range(10):
+                        await asyncio.sleep(0.5)
+                        ws = active_websockets.get(sid)
+                        if ws:
+                            break
+                if ws:
+                    try:
+                        # [핵심] 질문 인덱스를 포함하여 전송 (프론트엔드에서 필터링 가능하도록)
+                        await ws.send_json({
+                            "type": "stt_result", 
+                            "text": stt_text,
+                            "index": q_idx
+                        })
+                        logger.info(f"[{sid}] ✅ STT → WS 전송 성공 (Index:{q_idx}): '{stt_text[:50]}'")
+                    except Exception as ws_err:
+                        logger.warning(f"[{sid}] ❌ STT WS 전송 실패: {ws_err}")
+                else:
+                    logger.warning(f"[{sid}] ❌ STT WS 5초 내 미연결")
+            else:
+                logger.info(f"[{sid}] STT 결과 없음 (무음 또는 환각 필터)")
+        except Exception as e:
+            logger.warning(f"[{sid}] ⚠️ STT 전송 실패: {e}")
+
     try:
         while True:
-            # 1. 오디오 프레임 수신 (항상)
             frame = await track.recv()
+            is_recording = active_recording_flags.get(session_id, False)
 
-            # 녹음 버튼이 ON일 때만 프레임을 누적
-            if not active_recording_flags.get(session_id, False):
-                continue
-
-            accumulated_frames.append(frame)
-
-            # 150프레임(약 3초) 모이면 STT 전송
-            if len(accumulated_frames) >= 150:
-
-                # 2. WAV 변환 (In-Memory)
-                output_buffer = io.BytesIO()
-                output_container = av.open(output_buffer, mode='w', format='wav')
-                output_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+            if is_recording:
+                # 발화 중 → 프레임 누적 (최대 18,000프레임=6분, 메모리 보호)
+                if not prev_recording:
+                    last_sent_q_idx = active_recording_indices.get(session_id, -1)
+                    logger.info(f"[{session_id}] 🔴 녹음 시작 (Index:{last_sent_q_idx}) — 프레임 누적 시작")
                 
-                for f in accumulated_frames:
-                    for packet in output_stream.encode(f):
-                        output_container.mux(packet)
-                        
-                # 3. 마무리 (Flush)
-                for packet in output_stream.encode(None):
-                    output_container.mux(packet)
-                output_container.close()
-                
-                # 4. Base64 인코딩
-                wav_bytes = output_buffer.getvalue()
-                audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+                if len(accumulated_frames) < 18000:
+                    accumulated_frames.append(frame)
+                prev_recording = True
 
-                # [오디오 자신감 분석] NumPy RMS Volume & Density
-                try:
-                    audio_np = np.frombuffer(wav_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-                    if len(audio_np) > 0:
-                        volume_rms = np.sqrt(np.mean(audio_np**2))
-                        
-                        if volume_rms > 0.02:
-                            # 성량 점수: WebRTC 오디오 기준 (RMS 0.02~0.15 범위)
-                            # 영상 점수와 동일하게 40점 기본 + 올라갈수록 최대 100점
-                            volume_score = min(max((volume_rms - 0.02) / (0.15 - 0.02) * 60 + 40, 40), 100)
-
-                            # 발화 비율: threshold 0.05 → 0.02로 낮춤 (WebRTC 압축 오디오 기준)
-                            # 0.05는 너무 높아서 실제 발화 샘플도 잘 안 잡힘
-                            speaking_ratio = np.count_nonzero(np.abs(audio_np) > 0.02) / len(audio_np)
-                            # 20% 이상 발화 시 100점 (기본 40점)
-                            speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
-
-                            confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
-
-                            if confidence_score >= 70:
-                                feedback_msg = "👍 아주 좋습니다! (자신감 넘침)"
-                            elif confidence_score >= 60:
-                                feedback_msg = "👌 안정적입니다. (무난함)"
-                            else:
-                                feedback_msg = "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
-
-                            logger.info(
-                                f"[{session_id}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
-                                f"(🔊성량: {volume_score:4.1f}점/RMS:{volume_rms:.4f}, "
-                                f"🐇속도: {speed_score:4.1f}점/Ratio:{speaking_ratio:.2f})"
-                            )
-                            
-                            # VideoTrack에 점수 저장
-                            if session_id in active_video_tracks:
-                                active_video_tracks[session_id].audio_scores.append(confidence_score)
-                                active_video_tracks[session_id].current_q_data["audio_scores"].append(confidence_score)
-
-                except Exception as e:
-                    print(f"[{session_id}] ❌ [ERROR] NumPy 오디오 분석 실패: {e}", flush=True)
-                    logger.warning(f"[{session_id}] 오디오 분석 실패 (무시됨): {e}")
-                
-                # 5. Celery Task 배달 (AI Worker에게)
-                celery_app.send_task(
-                    "tasks.stt.recognize",
-                    args=[audio_b64],
-                    queue="cpu_queue"
-                )
-                
-                logger.info(f"[{session_id}] 📤 오디오 청크 전송 완료 ({len(wav_bytes)} bytes)")
-                
-                # 버퍼 초기화
-                accumulated_frames = []
+            else:
+                if prev_recording:
+                    # recording True → False 전환: 전체 누적 오디오를 STT로 전송
+                    logger.info(f"[{session_id}] ⬛ 녹음 종료 — {len(accumulated_frames)}프레임({len(accumulated_frames)*20//1000}초) STT 전송 (Index:{last_sent_q_idx})")
+                    frames_to_send = accumulated_frames[:]
+                    accumulated_frames = []
+                    asyncio.create_task(_send_stt(frames_to_send, session_id, last_sent_q_idx))
+                prev_recording = False
 
     except Exception as e:
         logger.info(f"[{session_id}] STT 스트림 종료: {e}")
+        # 스트림 종료 시 누적된 프레임이 있으면 마지막으로 전송 (인덱스 포함)
+        if accumulated_frames:
+            logger.info(f"[{session_id}] 스트림 종료 전 {len(accumulated_frames)}프레임 최종 전송 (Index:{last_sent_q_idx})")
+            asyncio.create_task(_send_stt(accumulated_frames[:], session_id, last_sent_q_idx))
     finally:
         logger.info(f"[{session_id}] STT 리소스 정리")
         active_recording_flags.pop(session_id, None)
+        active_recording_indices.pop(session_id, None) # [추가] 인덱스도 함께 정리
 
 
 @app.websocket("/ws/{session_id}")
@@ -634,8 +673,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 # [핵심] 녹음 버튼 상태 동기화
                 if msg_type == "start_recording":
+                    active_recording_indices[session_id] = msg.get("index", -1) # 인덱스 저장
                     active_recording_flags[session_id] = True
-                    logger.info(f"[{session_id}] 🔴 STT 녹음 시작")
+                    logger.info(f"[{session_id}] 🔴 STT 녹음 시작 (Index: {active_recording_indices[session_id]})")
 
                 elif msg_type == "stop_recording":
                     active_recording_flags[session_id] = False

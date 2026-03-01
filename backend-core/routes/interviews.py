@@ -164,9 +164,9 @@ async def create_interview(
 
         for stage_config in initial_stages:
             question_text = generate_template_question(stage_config["template"], candidate_info)
-            display_name = stage_config.get("display_name", "면접질문")
+            # [단계] 안내 문구 추가
             intro_msg = stage_config.get("intro_sentence", "")
-            question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
+            question_text = f"{intro_msg} {question_text}" if intro_msg else question_text
 
             # 2-1. Question 객체 생성
             question = Question(
@@ -393,19 +393,31 @@ async def save_behavior_scores(
 
     per_question = request.get("per_question", [])
     if per_question:
+        # User(답변자) transcript를 순서대로 조회
+        # [수정1] Speaker.USER Enum 사용으로 Enum/문자열 혼재 환경에서도 정확하게 필터링
+        from db_models import Speaker as SpeakerEnum
         user_transcripts = db.exec(
             select(Transcript).where(
                 Transcript.interview_id == interview_id,
-                Transcript.speaker == "User"
+                Transcript.speaker == SpeakerEnum.USER
             ).order_by(Transcript.id)
         ).all()
 
-        for i, q_score in enumerate(per_question):
-            if i < len(user_transcripts):
-                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
-                user_transcripts[i].sentiment_score = q_score.get("total")
-                db.add(user_transcripts[i])
-                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+        logger.info(f"  [behavior-scores] User transcripts found: {len(user_transcripts)}, per_question count: {len(per_question)}")
+
+        # [수정2] q_idx 기반 매핑: 단순 배열 인덱스(i) 대신 q_score['q_idx']를 사용하여
+        # 질문 순서가 다르거나 건너뛰기가 발생해도 올바른 transcript에 연결
+        for q_score in per_question:
+            q_idx = q_score.get("q_idx", -1)
+            # q_idx는 0부터 시작하는 질문 순번 → user_transcripts 리스트의 인덱스와 대응
+            if 0 <= q_idx < len(user_transcripts):
+                user_transcripts[q_idx].emotion = json_lib.dumps(q_score, ensure_ascii=False)
+                user_transcripts[q_idx].sentiment_score = q_score.get("total")
+                db.add(user_transcripts[q_idx])
+                logger.info(f"  📝 Q{q_idx} → transcript[{user_transcripts[q_idx].id}].emotion 저장")
+            else:
+                logger.warning(f"  ⚠️ Q{q_idx} → 매핑 가능한 transcript 없음 (user_transcripts 길이: {len(user_transcripts)})")
+
 
     db.commit()
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
@@ -467,9 +479,9 @@ async def get_evaluation_report(
             "technical_feedback": "분석이 완료되면 여기에 표시됩니다.",
             "experience_feedback": "데이터 분석 중...",
             "problem_solving_feedback": "데이터 분석 중...",
-            "communication_feedback": "데이터 분석 중...",
-            "responsibility_feedback": "데이터 분석 중...",
-            "growth_feedback": "데이터 분석 중...",
+            "communication_feedback": "의사소통 역량을 분석 중입니다.",
+            "responsibility_feedback": "책임감 및 조직 적합성을 분석 중입니다.",
+            "growth_feedback": "성장 가능성을 분석 중입니다.",
             "strengths": ["분석 진행 중"],
             "improvements": ["분석 진행 중"]
         }
@@ -492,11 +504,11 @@ async def get_evaluation_report(
     report_dict["problem_solving_score"] = details.get("problem_solving_score", 0)
 
     report_dict["technical_feedback"] = details.get("technical_feedback") or report.summary_text or "기술 역량 분석 결과가 생성 중입니다."
-    report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 분석 결과입니다."
-    report_dict["problem_solving_feedback"] = details.get("problem_solving_feedback") or "논리적 대처 능력에 대한 분석 결과입니다."
-    report_dict["communication_feedback"] = details.get("communication_feedback") or "의사소통 스타일에 대한 분석 결과입니다."
-    report_dict["responsibility_feedback"] = details.get("responsibility_feedback") or "업무 태도 및 책임감 분석 결과입니다."
-    report_dict["growth_feedback"] = details.get("growth_feedback") or "향후 발전 가능성에 대한 분석 결과입니다."
+    report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 AI 분석 결과입니다."
+    report_dict["problem_solving_feedback"] = details.get("problem_solving_feedback") or "문제 해결 능력에 대한 AI 분석 결과입니다."
+    report_dict["communication_feedback"] = details.get("communication_feedback") or "의사소통 스타일에 대한 AI 분석 결과입니다."
+    report_dict["responsibility_feedback"] = details.get("responsibility_feedback") or "지원자의 직업 윤리 및 책임감에 대한 상세 분석 내용입니다."
+    report_dict["growth_feedback"] = details.get("growth_feedback") or "향후 발전 가능성 및 인재상 부합도에 대한 분석 내용입니다."
 
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
@@ -556,9 +568,9 @@ async def create_realtime_interview(
                 stage_config.get("template", "{candidate_name}님 시작해주세요."),
                 candidate_info
             )
-            display_name = stage_config.get("display_name", "면접질문")
+            # [단계] 안내 문구 추가
             intro_msg = stage_config.get("intro_sentence", "")
-            question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
+            question_text = f"{intro_msg} {question_text}" if intro_msg else question_text
 
             question = Question(
                 content=question_text,
