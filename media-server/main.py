@@ -124,6 +124,7 @@ active_pcs: Dict[str, RTCPeerConnection] = {}
 active_video_tracks: Dict[str, 'VideoAnalysisTrack'] = {}
 active_analysis_tasks: Dict[str, asyncio.Task] = {}  # 분석 루프 태스크 관리
 active_recording_flags: Dict[str, bool] = {}          # [핵심] 세션별 녹음 상태 플래그
+active_recording_indices: Dict[str, int] = {}         # [신규] 세션별 녹음 중인 질문 인덱스
 
 class VideoAnalysisTrack(MediaStreamTrack):
     """비디오 프레임을 추출하여 ai-worker에 감정 분석을 요청하는 트랙"""
@@ -530,9 +531,10 @@ async def start_remote_stt(track, session_id):
     # ──────────────────────────────────────────────────────────────────
     accumulated_frames = []   # 현재 녹음 세션의 모든 프레임
     prev_recording = False    # 이전 루프에서의 recording 상태 (전환 감지용)
+    last_sent_q_idx = -1      # [신규] 마지막으로 시작된 녹음의 인덱스
 
-    async def _send_stt(frames: list, sid: str):
-        """누적된 프레임 전체를 WAV로 인코딩 후 STT 전송"""
+    async def _send_stt(frames: list, sid: str, q_idx: int):
+        """누적된 프레임 전체를 WAV로 인코딩 후 STT 전송 (질문 인덱스 포함)"""
         if not frames:
             return
         try:
@@ -578,6 +580,11 @@ async def start_remote_stt(track, session_id):
                 logger.warning(f"[{sid}] 오디오 자신감 분석 실패 (무시됨): {e}")
 
             # 3. Celery STT 전송 → 결과 WebSocket 전달
+            # [알림] STT 서버 처리가 시작되었음을 알림
+            ws = active_websockets.get(sid)
+            if ws:
+                await ws.send_json({"type": "stt_processing", "index": q_idx})
+
             loop = asyncio.get_running_loop()  # get_event_loop() deprecated in Python 3.10+
             task = celery_app.send_task(
                 "tasks.stt.recognize",
@@ -599,8 +606,13 @@ async def start_remote_stt(track, session_id):
                             break
                 if ws:
                     try:
-                        await ws.send_json({"type": "stt_result", "text": stt_text})
-                        logger.info(f"[{sid}] ✅ STT → WS 전송 성공: '{stt_text[:50]}'")
+                        # [핵심] 질문 인덱스를 포함하여 전송 (프론트엔드에서 필터링 가능하도록)
+                        await ws.send_json({
+                            "type": "stt_result", 
+                            "text": stt_text,
+                            "index": q_idx
+                        })
+                        logger.info(f"[{sid}] ✅ STT → WS 전송 성공 (Index:{q_idx}): '{stt_text[:50]}'")
                     except Exception as ws_err:
                         logger.warning(f"[{sid}] ❌ STT WS 전송 실패: {ws_err}")
                 else:
@@ -617,32 +629,33 @@ async def start_remote_stt(track, session_id):
 
             if is_recording:
                 # 발화 중 → 프레임 누적 (최대 18,000프레임=6분, 메모리 보호)
+                if not prev_recording:
+                    last_sent_q_idx = active_recording_indices.get(session_id, -1)
+                    logger.info(f"[{session_id}] 🔴 녹음 시작 (Index:{last_sent_q_idx}) — 프레임 누적 시작")
+                
                 if len(accumulated_frames) < 18000:
                     accumulated_frames.append(frame)
-                else:
-                    logger.warning(f"[{session_id}] ⚠️ 누적 버퍼 6분 초과 — 이후 프레임 드롭")
-                if not prev_recording:
-                    logger.info(f"[{session_id}] 🔴 녹음 시작 — 프레임 누적 시작")
                 prev_recording = True
 
             else:
                 if prev_recording:
                     # recording True → False 전환: 전체 누적 오디오를 STT로 전송
-                    logger.info(f"[{session_id}] ⬛ 녹음 종료 — {len(accumulated_frames)}프레임({len(accumulated_frames)*20//1000}초) STT 전송")
+                    logger.info(f"[{session_id}] ⬛ 녹음 종료 — {len(accumulated_frames)}프레임({len(accumulated_frames)*20//1000}초) STT 전송 (Index:{last_sent_q_idx})")
                     frames_to_send = accumulated_frames[:]
                     accumulated_frames = []
-                    asyncio.create_task(_send_stt(frames_to_send, session_id))
+                    asyncio.create_task(_send_stt(frames_to_send, session_id, last_sent_q_idx))
                 prev_recording = False
 
     except Exception as e:
         logger.info(f"[{session_id}] STT 스트림 종료: {e}")
-        # 스트림 종료 시 누적된 프레임이 있으면 마지막으로 전송
+        # 스트림 종료 시 누적된 프레임이 있으면 마지막으로 전송 (인덱스 포함)
         if accumulated_frames:
-            logger.info(f"[{session_id}] 스트림 종료 전 {len(accumulated_frames)}프레임 최종 전송")
-            asyncio.create_task(_send_stt(accumulated_frames[:], session_id))
+            logger.info(f"[{session_id}] 스트림 종료 전 {len(accumulated_frames)}프레임 최종 전송 (Index:{last_sent_q_idx})")
+            asyncio.create_task(_send_stt(accumulated_frames[:], session_id, last_sent_q_idx))
     finally:
         logger.info(f"[{session_id}] STT 리소스 정리")
         active_recording_flags.pop(session_id, None)
+        active_recording_indices.pop(session_id, None) # [추가] 인덱스도 함께 정리
 
 
 @app.websocket("/ws/{session_id}")
@@ -660,8 +673,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 # [핵심] 녹음 버튼 상태 동기화
                 if msg_type == "start_recording":
+                    active_recording_indices[session_id] = msg.get("index", -1) # 인덱스 저장
                     active_recording_flags[session_id] = True
-                    logger.info(f"[{session_id}] 🔴 STT 녹음 시작")
+                    logger.info(f"[{session_id}] 🔴 STT 녹음 시작 (Index: {active_recording_indices[session_id]})")
 
                 elif msg_type == "stop_recording":
                     active_recording_flags[session_id] = False

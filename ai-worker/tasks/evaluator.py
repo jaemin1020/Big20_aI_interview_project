@@ -246,7 +246,7 @@ def generate_final_report(interview_id: int):
     try:
         # [추가] 1. 개별 답변 선제적 평가 (평가 데이터가 없는 경우 한꺼번에 처리)
         transcripts = get_interview_transcripts(interview_id)
-        user_transcripts = [t for t in transcripts if t.speaker == 'User']
+        user_transcripts = [t for t in transcripts if str(t.speaker).lower() in ('user', 'speaker.user')]
         logger.info(f"🧐 Evaluating {len(user_transcripts)} individual answers before final report...")
         
         for t in user_transcripts:
@@ -401,7 +401,7 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
             logger.error(f"LLM Summary failed: {llm_err}")
             # 개별 답변들의 점수가 있다면 그것들의 평균으로 폴백
             try:
-                user_transcripts = [t for t in transcripts if t.speaker == 'User']
+                user_transcripts = [t for t in transcripts if str(t.speaker).lower() in ('user', 'speaker.user')]
                 valid_scores = []
                 for t in user_transcripts:
                     try:

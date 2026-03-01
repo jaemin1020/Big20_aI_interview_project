@@ -78,11 +78,19 @@ function App() {
 
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
   const [position, setPosition] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
   const [parsedResumeData, setParsedResumeData] = useState(null);
   const [visionData, setVisionData] = useState(null); // [NEW] Vision Analysis Data
+  // [Fix] 답변 완료 상태 추적 (타이머 정지 및 버튼 교체용)
+  const [isAnswerFinished, setIsAnswerFinished] = useState(false);
+  const isAnswerFinishedRef = useRef(false);
+  // [Fix] STT 최종 확정 상태 (상태로 관리하여 UI 연동)
+  const [isTranscriptLocked, setIsTranscriptLocked] = useState(false);
+  const [isSttProcessing, setIsSttProcessing] = useState(false); // [신규] STT 서버 처리 중 상태
+  const finalizeTimeoutRef = useRef(null);
 
   // Recruiter State
   const [allInterviews, setAllInterviews] = useState([]);
@@ -108,8 +116,34 @@ function App() {
   const isInitialized = useRef(false);
   // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
   const liveTranscriptRef = useRef('');
-  // [Fix 1] 타이머 종료 시 STT 완료 후 자동 nextQuestion 트리거용 플래그
-  const autoNextAfterSTTRef = useRef(false);
+  // [Fix] STT 누출 방지: 현재 녹음이 어느 질문 인덱스에 속하는지 추적
+  const recordingIdxRef = useRef(-1);
+  // [Fix] STT 최종 확정 상태 (Grace Period 종료 후 수정 방지)
+  const isTranscriptLockedRef = useRef(false);
+  const isTranscriptSavedRef = useRef(false); // [Fix] 중복 저장 방지용 Ref
+  const isSttProcessingRef = useRef(false);   // [신규] STT 처리 중 Ref
+  const interviewRef = useRef(null);          // [Fix] stale closure 방지용 Ref
+  const questionsRef = useRef([]);            // [Fix] stale closure 방지용 Ref
+
+  // [Fix] 현재 질문에 대한 STT를 받아도 되는 상태인지 추적 (세션 가드)
+  const isAcceptingSTTRef = useRef(false);
+  const isLoadingRef = useRef(isLoading);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    isSttProcessingRef.current = isSttProcessing;
+  }, [isSttProcessing]);
+
+  useEffect(() => {
+    interviewRef.current = interview;
+  }, [interview]);
+
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
 
   // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
   const navigateSafe = (targetStep, force = false) => {
@@ -329,13 +363,13 @@ function App() {
     setStep('resume');
   };
 
-  const [isLoading, setIsLoading] = useState(false);
   const [subtitle, setSubtitle] = useState('');
 
   const initInterviewSession = async () => {
     setIsLoading(true);
     setIsMediaReady(false); // 새 세션 시작 시 상태 리셋
     setCurrentIdx(0); // 새로운 면접 시작 시 질문 인덱스 초기화
+    setIsAnswerFinished(false); // 답변 상태 초기화
     try {
       // 1. Create Interview with Parsed Position & Resume ID
       const structuredBase = parsedResumeData?.structured_data;
@@ -404,13 +438,65 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'stt_result' && data.text) {
+        if (data.type === 'stt_processing') {
+          // [신규] 서버에서 STT 처리가 시작됨을 알림
+          if (data.index === currentIdxRef.current) {
+            setIsSttProcessing(true);
+            isSttProcessingRef.current = true;
+            console.log(`[STT Status] Processing for Index ${data.index}...`);
+          }
+        } else if (data.type === 'stt_result' && data.text) {
           const newText = data.text.trim();
-          console.log('[STT Received]:', newText);
-          setTranscript(prev => {
-            if (prev.endsWith(newText)) return prev;
-            const updated = prev ? `${prev} ${newText}` : newText;
-            liveTranscriptRef.current = updated; // nextQuestion stale closure 방지
+          const sttIdx = data.index !== undefined ? data.index : recordingIdxRef.current;
+          console.log('[STT Received]:', newText, 'for Index:', sttIdx, 'Current:', currentIdxRef.current);
+
+          setIsSttProcessing(false); // 결과가 오면 처리 중 상태 해제
+          isSttProcessingRef.current = false;
+
+          setTranscript(_ => {
+            // [Fix 1] 세션 가드
+            // [Fix 2] 다음 질문 인터뷰 로딩 중(isLoading)에도 차단
+            const isIndexMismatch = (sttIdx !== -1 && sttIdx !== currentIdxRef.current);
+            const isLocked = isTranscriptLockedRef.current;
+
+            if (isLoadingRef.current || isIndexMismatch || isLocked) {
+              console.warn(`[STT Ignored] Guard: Loading=${isLoadingRef.current}, IndexMatch=${!isIndexMismatch} (${sttIdx} vs ${currentIdxRef.current}), Locked=${isLocked}`);
+              return liveTranscriptRef.current;
+            }
+
+            if (liveTranscriptRef.current.endsWith(newText)) return liveTranscriptRef.current;
+
+            const updated = liveTranscriptRef.current ? `${liveTranscriptRef.current} ${newText}` : newText;
+
+            // [중요] Ref를 먼저 업데이트하고 리턴하여 상태 동기화 불일치 원천 차단
+            liveTranscriptRef.current = updated;
+
+            // [추가] 답변 종료(Stop) 상태에서 결과가 오면 즉시 확정 (또는 약간의 딜레이 후 확정)
+            if (isAnswerFinishedRef.current) {
+              console.log("[STT Finalizing] Result arrived after Stop Answer. Unlocking & Re-locking.");
+              // 잠금을 잠시 풀고 최신 텍스트로 다시 확정
+              setIsTranscriptLocked(true);
+              isTranscriptLockedRef.current = true;
+              isAcceptingSTTRef.current = false;
+
+              // [핵심] 결과가 왔으므로 DB 저장 시도 (강제 저장)
+              const currentInterview = interviewRef.current;
+              const currentQuestions = questionsRef.current;
+              const targetQuestion = currentQuestions[currentIdxRef.current];
+
+              if (currentInterview && targetQuestion) {
+                console.log("[STT Background Save] Final transcript arrived. Saving to DB...");
+                createTranscript(currentInterview.id, 'User', updated, targetQuestion.id)
+                  .then(() => {
+                    isTranscriptSavedRef.current = true;
+                    console.log("[STT Background Save] Success for Index:", currentIdxRef.current);
+                  })
+                  .catch(e => console.error("[STT Background Save] Error:", e));
+              } else {
+                console.warn("[STT Background Save] Skipped: Interview or Question not found in Ref.");
+              }
+            }
+
             return updated;
           });
         } else if (data.type === 'vision_analysis') {
@@ -553,6 +639,65 @@ function App() {
     setIsMediaReady(true);
   };
 
+  // [Fix] STT 최종 확정을 위한 디바운스 함수
+  const resetFinalizeTimer = () => {
+    if (finalizeTimeoutRef.current) {
+      clearTimeout(finalizeTimeoutRef.current);
+    }
+    // [Fix] 문장이 길거나 지연이 있을 수 있으므로 여유롭게 2.5초간 침묵 시 최종 확정
+    finalizeTimeoutRef.current = setTimeout(async () => {
+      // [신규] 서버에서 아직 STT 분석 중이라면 확정하지 않고 더 기다림 (Recursive check)
+      if (isSttProcessingRef.current) {
+        console.log('[STT Lock Delayed] Server is still processing. Waiting 2s more...');
+        resetFinalizeTimer();
+        return;
+      }
+
+      if (isLoadingRef.current) return;
+
+      setIsTranscriptLocked(true);
+      isTranscriptLockedRef.current = true; // Ref 동기화 (WS 핸들러용)
+      isAcceptingSTTRef.current = false;    // 이제 이 질문에 대한 STT는 더 이상 수신 안 함
+      setIsSttProcessing(false);            // 타임아웃 종료 시 처리 상태도 강제 해제
+
+      if (!liveTranscriptRef.current.trim()) {
+        // [수정] 정말로 답변이 없는지 최종 확인 (서버 분석 중이면 더 기다림)
+        if (isSttProcessingRef.current) {
+          console.log('[STT Lock Delayed] Server is still processing. Skipping "No Content" lock.');
+          resetFinalizeTimer();
+          return;
+        }
+        setTranscript('답변 내용 없음');
+        liveTranscriptRef.current = '답변 내용 없음';
+      }
+      console.log('[STT Locked] Final Transcript:', liveTranscriptRef.current);
+
+      // [핵심 추가] 확정 즉시 DB 저장 시도 (Auto-Save)
+      const currentInterview = interviewRef.current;
+      const currentQuestions = questionsRef.current;
+      const targetQuestion = currentQuestions[currentIdxRef.current];
+
+      if (!isTranscriptSavedRef.current && currentInterview && targetQuestion) {
+        try {
+          console.log('[STT Auto-Save] Saving transcript for Index:', currentIdxRef.current);
+          console.log('[STT Auto-Save] Payload:', {
+            interviewId: currentInterview.id,
+            speaker: 'User',
+            text: liveTranscriptRef.current,
+            questionId: targetQuestion.id
+          });
+          await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current, targetQuestion.id);
+          isTranscriptSavedRef.current = true;
+          console.log('[STT Auto-Save] Transcript saved successfully');
+        } catch (e) {
+          console.error('[STT Auto-Save] Failed to save transcript:', e);
+        }
+      } else {
+        console.log('[STT Auto-Save] Skipped: isTranscriptSaved=', isTranscriptSavedRef.current);
+      }
+    }, 2500);
+  };
+
   const toggleRecording = async () => {
     if (isRecording) {
       console.log('[STT] Stopping recording...');
@@ -561,23 +706,33 @@ function App() {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
       }
-      
+
       setIsRecording(false);
       isRecordingRef.current = false;
+      setIsAnswerFinished(true); // 답변 종료 상태로 전환
+      isAnswerFinishedRef.current = true;
+
+      // [Fix] Debounce 방식으로 최종 확정 시작
+      resetFinalizeTimer();
     } else {
       // 녹음 시작
       if (!isMediaReady) {
         alert('장비가 아직 준비되지 않았습니다. 잠시만 기다려주세요.');
         return;
       }
-      console.log('[STT] Starting recording...');
+      console.log('[STT] Starting recording for index:', currentIdx);
       setTranscript('');
+      liveTranscriptRef.current = '';
       setIsRecording(true);
       isRecordingRef.current = true;
+      isAcceptingSTTRef.current = true;     // STT 수신 시작
+      recordingIdxRef.current = currentIdx; // 현재 질문 인덱스 고정
+      setIsSttProcessing(false); // 녹음 시작 시 상태 초기화
+      isTranscriptSavedRef.current = false; // 새 녹음 시작 시 저장 상태 초기화
 
-      // WebSocket으로 녹음 시작 알림
+      // WebSocket으로 녹음 시작 알림 (인덱스 포함)
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'start_recording' }));
+        wsRef.current.send(JSON.stringify({ type: 'start_recording', index: currentIdx }));
       }
     }
 
@@ -620,10 +775,16 @@ function App() {
   };
 
   const finishInterview = async () => {
-    // 0. 마지막 답변이 있다면 저장 후 종료
-    if (transcript.trim()) {
+    // 0. 마지막 답변이 저장되지 않았다면 저장 시도
+    const currentInterview = interviewRef.current;
+    const currentQuestions = questionsRef.current;
+    const targetQuestion = currentQuestions[currentIdxRef.current];
+
+    if (!isTranscriptSavedRef.current && liveTranscriptRef.current.trim() && currentInterview && targetQuestion) {
       try {
-        await createTranscript(interview.id, 'User', transcript.trim(), questions[currentIdx].id);
+        console.log('[finishInterview] Saving final transcript before finish.');
+        await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current.trim(), targetQuestion.id);
+        isTranscriptSavedRef.current = true;
         console.log('[finishInterview] Final transcript saved.');
       } catch (e) {
         console.warn('[finishInterview] Failed to save final transcript:', e);
@@ -634,9 +795,11 @@ function App() {
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
 
     try {
-      await completeInterview(interview.id);
-      setStep('complete'); // SCR-025(면접 종료 안내 화면)으로 즉시 이동
-      pollReport(interview.id); // 백그라운드에서 리포트 폴링 시작
+      if (currentInterview) {
+        await completeInterview(currentInterview.id);
+        setStep('complete'); // SCR-025(면접 종료 안내 화면)으로 즉시 이동
+        pollReport(currentInterview.id); // 백그라운드에서 리포트 폴링 시작
+      }
     } catch (err) {
       console.error('[Finish Error]:', err);
       alert('면접 종료 처리 중 오류가 발생했습니다.');
@@ -644,9 +807,7 @@ function App() {
     }
   };
 
-  // [추가] 현재 질문의 오디오 URL이 없을 경우 폴링하여 갱신 (TTS 지연 대응)
-  const questionsRef = useRef(questions);
-  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
 
   useEffect(() => {
     // 인터뷰 중이고, 현재 질문은 있는데 audio_url이 없는 경우에만 실행
@@ -674,19 +835,32 @@ function App() {
   }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
 
   const nextQuestion = async () => {
-    // [Fix 1] liveTranscriptRef: setTranscript 비동기 업데이트 문제 방지
-    // onstop 직후 nextQuestion 호출 시 transcript state가 아직 구버전일 수 있으므로 ref 사용
-    const answerText = liveTranscriptRef.current.trim() || "답변 내용 없음";
-    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Answer:', answerText.substring(0, 30));
-    if (!interview || !questions || !questions[currentIdx]) {
-      console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
+    // [Fix 1] 질문 전환 시작 즉시 이전 답변의 모든 STT 수신을 강제로 차단하여 오염 방지
+    isAcceptingSTTRef.current = false;
+    isTranscriptLockedRef.current = true;
+
+    const answerText = liveTranscriptRef.current.trim();
+    const currentInterview = interviewRef.current;
+    const currentQuestions = questionsRef.current;
+    const targetQuestion = currentQuestions[currentIdxRef.current];
+
+    console.log('[nextQuestion] START - ID:', targetQuestion?.id, 'Answer:', answerText.substring(0, 30));
+    if (!currentInterview || !currentQuestions || !targetQuestion) {
+      console.error('[nextQuestion] Missing data from Refs:', { currentInterview, currentQuestions, targetQuestion });
       return;
     }
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
-      console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
-      await createTranscript(interview.id, 'User', answerText, questions[currentIdx].id);
-      console.log('[nextQuestion] Transcript saved successfully');
+
+      // [Fix] 이미 자동 저장되지 않은 경우에만 저장 시도
+      if (!isTranscriptSavedRef.current) {
+        console.log('[nextQuestion] Manual saving transcript for question ID:', targetQuestion.id);
+        await createTranscript(currentInterview.id, 'User', answerText || '답변 내용 없음', targetQuestion.id);
+        isTranscriptSavedRef.current = true;
+        console.log('[nextQuestion] Transcript saved successfully');
+      } else {
+        console.log('[nextQuestion] Transcript already saved by Auto-Save, skipping manual save');
+      }
 
       // 1. 현재 로컬 배열에 다음 질문이 있는지 확인
       if (currentIdx < questions.length - 1) {
@@ -699,6 +873,13 @@ function App() {
         const nextIdx = currentIdx + 1;
         setCurrentIdx(nextIdx);
         setTranscript('');
+        liveTranscriptRef.current = '';
+        setIsAnswerFinished(false);
+        isAnswerFinishedRef.current = false;
+        setIsTranscriptLocked(false);
+        isTranscriptLockedRef.current = false; // 잠금 해제
+        isTranscriptSavedRef.current = false; // 저장 상태 초기화
+        recordingIdxRef.current = -1; // 질문 전환 시 녹음 매칭 인덱스 초기화
         setIsLoading(false);
 
         // WebSocket으로 질문 전환 알림
@@ -734,6 +915,12 @@ function App() {
             setQuestions(updatedQs);
             setCurrentIdx(prev => prev + 1);
             setTranscript('');
+            liveTranscriptRef.current = '';
+            setIsAnswerFinished(false);
+            isAnswerFinishedRef.current = false;
+            setIsTranscriptLocked(false);
+            isTranscriptLockedRef.current = false; // 잠금 해제
+            isTranscriptSavedRef.current = false; // 저장 상태 초기화
             foundNew = true;
 
             // WebSocket으로 신규 질문 전환 알림
@@ -771,20 +958,26 @@ function App() {
   // wasRecording=false: 즉시 nextQuestion 호출
   const handleTimerEnd = (wasRecording) => {
     if (wasRecording) {
-      console.log('[TimerEnd] 녹음 중 시간 초과 → STT 완료 대기 후 자동 진행');
-      autoNextAfterSTTRef.current = true; // onstop에서 감지
-      // 녹음 중지 (toggleRecording의 stop 부분만)
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
-        }
+      console.log('[TimerEnd] 녹음 중 시간 초과 → 답변 종료 처리');
+      // 녹음 중지 시그널 전송
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
       }
       setIsRecording(false);
       isRecordingRef.current = false;
+      setIsAnswerFinished(true); // 답변 종료 상태로 전환
+      isAnswerFinishedRef.current = true;
+
+      // [Fix] Debounce 방식으로 최종 확정 시작
+      resetFinalizeTimer();
     } else {
-      console.log('[TimerEnd] 녹음 없이 시간 초과 → 즉시 다음 질문');
-      nextQuestion();
+      console.log('[TimerEnd] 녹음 없이 시간 초과 → 답변 내용 없음 표시');
+      setTranscript('답변 내용 없음');
+      setIsAnswerFinished(true); // 녹음 안 했어도 시간 초과면 답변 완료 상태로 전환
+      isAnswerFinishedRef.current = true;
+      setIsTranscriptLocked(true); // 녹음이 없었으므로 즉시 확정
+      isTranscriptLockedRef.current = true;
+      // [Fix] 절대 자동으로 nextQuestion()을 호출하지 않음. 사용자가 직접 버튼을 눌러야 함.
     }
   };
 
@@ -842,7 +1035,7 @@ function App() {
           showLogout={!!user}
           onLogoClick={() => {
             if (step === 'interview') {
-              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 이용해주세요.");
+              alert("면접 진행 중에는 메인 화면으로 이동할 수 없습니다.\n면접을 종료하려면 '면접 종료' 버튼을 눌러주세요.");
               return;
             }
             if (user && (user.role === 'recruiter' || user.role === 'admin')) {
@@ -1031,6 +1224,9 @@ function App() {
             visionData={visionData}
             streamingQuestion={questions[currentIdx + 1]?.isStreaming ? questions[currentIdx + 1]?.content : null}
             onTimerEnd={handleTimerEnd}
+            isAnswerFinished={isAnswerFinished}
+            isTranscriptLocked={isTranscriptLocked}
+            isSttProcessing={isSttProcessing} // [신규] 전달
           />
         )}
 
