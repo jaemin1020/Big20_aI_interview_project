@@ -24,25 +24,44 @@ local_path = r"C:\big20\Big20_aI_interview_project\ai-worker\models\EXAONE-3.5-7
 docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 model_path = docker_path if os.path.exists(docker_path) else local_path
 
+def is_meaningless(text: str) -> bool:
+    """지원자의 답변이 무의미한지(자음 나열, 너무 짧음 등) 체크합니다."""
+    if not text: return True
+    text = text.strip()
+    # 1. 너무 짧음 (5자 미만)
+    if len(text) < 5: return True
+    # 2. 자음/모음만 나열 (ㄴㅇㄹㄴㅇㄹ, ㅋㅋㅋㅋ 등)
+    if re.fullmatch(r'[ㄱ-ㅎㅏ-ㅣ\s]+', text): return True
+    # 3. 단순 특수문자/숫자 반복 (...., 123123 등)
+    if re.fullmatch(r'[\.\,\!\?\-\=\s\d]+', text): return True
+    # 4. 영어 랜덤 문자열 (asdf, qwer 등)
+    if re.fullmatch(r'[a-zA-Z]{1,5}', text): return True
+    return False
+
 # ==========================================
 # 2. 페르소나 설정 (Prompt Engineering)
 # ==========================================
-PROMPT_TEMPLATE = """[|user|]{mode_task_instruction}
+PROMPT_TEMPLATE = """[|user|]당신은 전문적인 지식과 공정한 태도를 겸비한 베테랑 AI 면접관입니다.
+다음 지침에 따라 지원자의 잠재력을 예리하게 파악할 수 있는 **단 하나의 질문**을 생성하십시오.
 
-[이력서 및 답변 문맥]
+### [면접 전략 및 페르소나]
+- 평가 대상 직무: {target_role}
+- 핵심 인재상: {company_ideal}
+- 면접 단계: {stage_name} ({guide})
+
+### [참고 문맥: 지원자 정보 및 이전 답변]
 {context}
 
-[실시간 지시사항]
-- 단계명: {stage_name}
-- 가이드: {guide}
-- 전략적 핵심 지침: {mode_instruction}
-- 평가 타겟: {target_role}
-- 기업 인재상: {company_ideal}
+### [실시간 핵심 임무]
+- 수행 과업: {mode_task_instruction}
+- 실행 상세: {mode_instruction}
+- 전역 제약: {global_constraint}
 
-[필수 요구사항]
-오직 지원자에게 직접 던지는 질문을 생성하십시오. 질문에 대한 설명이나 가상 시나리오 가정을 절대 포함하지 마십시오.
-**특히 질문을 할 때, 이력서에 기재된 구체적인 수치나 기술 스택을 직접 언급하거나 인용하여 질문하십시오.**[|endofturn|]
-
+### [출력 규칙 - 반드시 준수]
+1. 인사말, 부연 설명, 자기소개, 가설 제시를 절대 하지 마십시오.
+2. "질문입니다", "다음 질문은" 등 서두를 일절 붙이지 마십시오.
+3. 오직 지원자에게 직접 던지는 **물음표(?)로 끝나는 단일 문장의 질문**만 출력하십시오.
+4. 전문적인 한국어 구어체(하십시오체)를 사용하십시오.[|endofturn|]
 [|assistant|]"""
 
 # ==========================================
@@ -282,14 +301,28 @@ def generate_next_question_task(self, interview_id: int):
                         context_text = f"{values_text}\n\n[추가 참고 정보]:\n{rag_context}".strip()
                         if not context_text: context_text = "특별한 가치관 정보 없음"
                     else:
-                        # [개선] 인재상 단계에서도 이력서의 '대외활동'이나 '경험' 청크를 함께 활용하여 개인화된 질문 생성
-                        logger.info(f"✨ Narrative mode ({next_stage.get('stage')}): Retrieving personal experience for customized talent-fit questioning.")
-                        narrative_query = "지원자의 대외활동이나 프로젝트 중 도전과 성취를 보여주는 경험"
-                        rag_results = retrieve_context(narrative_query, resume_id=interview.resume_id, top_k=2)
+                        # [개선] 9-14번 인성 면접: 각 역량(협업, 성장, 책임감)에 특화된 RAG 수행
+                        s_name = next_stage.get('stage', '')
+                        behavioral_keywords = {
+                            "communication": "협업 사례, 팀 프로젝트 중 갈등 조율, 팀워크 발휘, 소통 능력",
+                            "growth": "자기계발 노력, 새로운 기술 학습 태도, 실패 극복 및 성장 사례",
+                            "responsibility": "직업 윤리, 약속 이행, 정직함과 관련된 경험"
+                        }
+                        # 해당 단계에 맞는 쿼리 선택 (없으면 기본 가치관 경험 검색)
+                        target_query = behavioral_keywords.get(s_name, "본인의 강점, 성취감, 도전적인 경험 사례")
+                        
+                        logger.info(f"✨ Behavioral RAG ({s_name}): Searching for '{target_query}'")
+                        rag_results = retrieve_context(target_query, resume_id=interview.resume_id, top_k=2)
                         rag_context = "\n".join([r['text'] for r in rag_results]) if rag_results else ""
-                        context_text = f"회사의 인재상 중심 질문 단계입니다. 아래 정보를 활용하여 지원자의 과거 경험에 기반한 인재상 검증 질문을 생성하십시오.\n\n[지원자 경험 정보]:\n{rag_context}"
+                        
+                        context_text = (
+                            f"이 단계는 {next_stage['display_name']}를 확인하는 인성 면접입니다.\n"
+                            f"지원자의 기술력 검증보다는 **태도, 가치관, 조직 적응력**을 파악하는 데 집중하십시오.\n"
+                            f"아래 [지원자 경험 정보]를 '배경'으로 활용하여 구체적인 질문을 생성하십시오.\n\n"
+                            f"[지원자 경험 정보]:\n{rag_context}"
+                        )
                 else:
-                    # 일반 기술/경험 질문: 이력서 RAG 수행
+                    # 일반 기술/경험 기반 질문 (4, 5, 8번 등 새로운 주제 시작 시)
                     query_template = next_stage.get("query_template", interview.position)
                     try:
                         query = query_template.format(target_role=target_role, major=major or "")
@@ -304,10 +337,14 @@ def generate_next_question_task(self, interview_id: int):
                         context_text = "지원자가 보유한 자격증 목록:\n" + cert_list
                         rag_results = [{'text': f"보유 자격: {cert_list}"}]
                     else:
-                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
                         context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
                         
                     if last_user_transcript:
+                        # [전략 4] 무의미한 답변일 경우 이전 컨텍스트를 삭제하여 환각 방어
+                        if is_meaningless(last_user_transcript.text):
+                             context_text = "[주의: 지원자의 이전 답변이 무의미하거나 누락되었습니다. 과거 정보에 의존하지 말고 다시 물어보십시오.]"
+                             logger.warning("🚫 Meaningless input detected! Isolating context to prevent hallucination.")
+                        
                         context_text += f"\n[지원자의 최근 답변]: {last_user_transcript.text}"
 
                 llm = get_exaone_llm()
@@ -324,32 +361,43 @@ def generate_next_question_task(self, interview_id: int):
                 # [추가] 단계별 맞춤형 전략 지침 결정 (지원자님 요청 반영)
                 mode_instruction = "일반적인 단일 질문 생성을 수행하십시오."
                 mode_task_instruction = "제공된 정보를 분석하여 가장 예리한 꼬리질문 하나를 생성하십시오. 지원자의 마지막 답변 내용에서 구체적인 사실 관계를 확인하고 논리적 허점을 찌르는 질문을 하십시오." # 기본값
+                global_constraint = "오직 질문만을 생성하고, 기술 스택과 수치를 적절히 인용하십시오." # 기본 기술 지침
                 
                 s_name = next_stage.get('stage', '')
                 s_type = next_stage.get('type', '')
                 
+                # 인성 면접 단계(9~14) 여부 확인
+                is_narrative = (next_stage.get('category') == 'narrative') or (s_name in ['communication', 'communication_followup', 'responsibility', 'responsibility_followup', 'growth', 'growth_followup'])
+
+                if is_narrative:
+                    global_constraint = "인성 단계입니다. **코드, 설계, 개발과 같은 직무 단어를 사용하지 말고**, 태도와 가치관을 인용하여 짧게 질문하십시오."
+                
                 if s_name == 'problem_solving':
                     mode_instruction = "이 단계는 7번(문제해결질문)입니다. 질문 과정에서 '그런데' 혹은 '그렇다면'과 같은 접속사를 활용하여 자연스럽게 상황을 제시하되, 반드시 딱 하나의 질문만 던지십시오."
                 elif s_name == 'responsibility':
-                    # 11번 가치관 질문: 자소서 인용 강조
-                    mode_task_instruction = "제공된 [지원자 자기소개서 답변]에서 인상적인 문장을 하나 인용하여 질문을 시작하십시오. 지원자의 가치관과 책임감을 검증하는 핵심 질문 하나만 생성하십시오."
-                    mode_instruction = "이 단계는 11번(가치관 질문)입니다. 반드시 인사말 없이 즉시 '자기소개서에 [인용문장]라고 작성하셨습니다.'로 시작하고, '그렇다면'으로 이어가며 딱 하나의 질문만 던지십시오."
+                    # 11번 가치관 질문: 기술 중심 인용 대신 가치 중심 전환 (전체 길이 30% 축소)
+                    mode_task_instruction = "자기소개서에서 나타난 지원자의 핵심 가치관(정직, 책임감 등)을 파악하여 인재상과 연결하십시오. 서비스 설계나 코드 같은 기술 내용은 일절 언급하지 말고 오직 인성적인 면모를 80자 이내로 물으십시오."
+                    mode_instruction = "이전 답변 요약을 생략하고, '자기소개서에서 ~한 가치관이 인상적이었습니다. 그렇다면...'과 같이 자연스럽게 대화하십시오. 30% 더 짧게 생성하십시오."
                 elif s_name == 'responsibility_followup':
-                    mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
+                    mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변에 실제 내용이 있을 경우에만 아주 짧게 요약하고, 곧바로 가치관에 대한 질문 하나를 던지십시오. 60자 이내로 구성하십시오."
                 elif s_name in ['communication', 'growth']:
-                    # 9번, 13번 인재상 질문: 주제 전환 강조
-                    mode_task_instruction = "제공된 인재상 정보를 바탕으로 지원자의 가치관을 검증하기 위한 새로운 주제의 질문을 하나 생성하십시오. 이전 답변에 얽매이지 말고 자연스럽게 화제를 전환하십시오."
-                    if s_name == 'growth':
-                        mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
+                    # 9번, 13번 인성 질문: 태도 강조 및 길이 축소
+                    mode_task_instruction = "인재상과 이력서를 결합하되, 기술적 성취가 원인이 아닌 '협업 태도'와 '성장 의지'가 질문의 주인공이 되게 하십시오. 모든 문장은 현재보다 30% 더 짧고 간략하게 구성하십시오."
+                    mode_instruction = f"이 단계는 {s_name} 검증입니다. 코드, 개발, 스택 같은 단어를 배제하고 대화하듯 딱 하나의 간결한 한 문장으로만 질문하십시오."
                 elif s_type == 'followup':
                     mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문으로 생성하십시오."
                 
                 # [추가] 지원자의 부정적 답변 감지 및 특수 지시 (무지/회피 대응)
                 if last_user_transcript:
                     u_text = last_user_transcript.text.strip()
-                    negative_keywords = ["모르겠습니다", "모르겠어요", "아니요", "없습니다", "기억이 안 남", "잘 모름"]
-                    if any(kw in u_text for kw in negative_keywords) and len(u_text) < 20:
-                        mode_instruction += " [주의: 지원자가 답변을 회피하거나 모르겠다고 했습니다. 무리하게 다음 단계를 칭찬하며 요약하지 말고, 답변이 부족함을 언급(예: '구체적인 설명이 부족하여 아쉽습니다만, 이 부분은 어떠신가요?')하며 다른 방향으로 재질문을 던지십시오.]"
+                    # "싫다", "몰라" 등 키워드 보강
+                    negative_keywords = ["모르겠습니다", "모르겠어요", "아니요", "없습니다", "기억이 안 남", "잘 모름", "몰라요", "몰라", "싫어", "싫음", "싫다"]
+                    
+                    # [전략 3] 무의미한 입력이거나 명시적 거절일 때 지시어 전환
+                    if is_meaningless(u_text) or any(kw in u_text for kw in negative_keywords):
+                        mode_task_instruction = "지원자가 답변을 하지 못하거나 의미 없는 입력을 했습니다. 이전 내용에 대한 요약이나 추측을 100% 생략하고, 정중하게 다시 설명을 요청하거나 다른 주제로 전환하십시오."
+                        global_constraint = "이전 답변 요약을 **절대** 하지 마십시오. 답변을 지어내지 말고, '알겠습니다. 그렇다면 이번에는...'과 같이 자연스럽게 대화를 이어가십시오."
+                        mode_instruction = "환각(Hallucination) 없이 담백하게 다음 질문으로 넘어가거나 재설명을 요청하십시오."
 
                 final_content = chain.invoke({
                     "context": context_text,
@@ -358,6 +406,7 @@ def generate_next_question_task(self, interview_id: int):
                     "guide": guide_formatted,
                     "mode_instruction": mode_instruction,
                     "mode_task_instruction": mode_task_instruction,
+                    "global_constraint": global_constraint,
                     "target_role": target_role
                 })
 
@@ -403,7 +452,12 @@ def generate_next_question_task(self, interview_id: int):
                 for pattern in bridge_patterns:
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE)
 
-                # 4. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
+                # 4. Markdown 제목(#) 및 불필요한 태그 제거 (## 제목, [질문레이블] 등)
+                final_content = re.sub(r'#+\s*.*?\n', '\n', final_content) # ## 제목 제거
+                final_content = re.sub(r'#+\s*.*$', '', final_content)    # 줄 끝의 # 제거
+                final_content = re.sub(r'\[.*?질문\]', '', final_content)   # [성장가능성질문] 등 제거
+                
+                # 5. [핵심] 만약 AI가 "..." 처럼 따옴표 안에 질문을 넣었다면 그것만 추출
                 quote_match = re.search(r'["\'“]([^"\'”]*\?+)["\'”]', final_content)
                 if quote_match:
                     final_content = quote_match.group(1)
