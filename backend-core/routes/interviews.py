@@ -54,11 +54,12 @@ def _fire_tts_for_question(question_id: int, question_text: str) -> None:
     # [Idempotency] Redis 분산 락 체크 (중복 요청 방지)
     if redis_client:
         lock_key = f"lock:tts:{question_id}"
-        if redis_client.get(lock_key):
-            logger.debug(f"🛑 [TTS] 요청 스킵 (이미 처리 중): {filename}")
+        # [핵심 수정] SET NX (set with nx=True)를 사용하여 원자적으로 락 획득
+        # '이 값이 없을 때만 새로 만들어!'라는 명령이라 0.0001초의 틈도 주지 않음
+        is_locked = redis_client.set(lock_key, "in_progress", ex=60, nx=True)
+        if not is_locked:
+            logger.debug(f"🛑 [TTS] 요청 스킵 (이미 락이 채워져 있음): {filename}")
             return
-        # 60초 동안 락 설정 (태스크가 큐에 머무는 시간 고려)
-        redis_client.setex(lock_key, 60, "in_progress")
 
     # [...] 미리보기 태그 제거 (TTS가 읽는 클린 텍스트)
     clean_text = question_text
@@ -299,6 +300,14 @@ async def get_interview_questions(
             return url
         
         logger.warning(f"⏳ [TTS Missing] ID: {question_id}, Path: {filepath}")
+
+        # [추가] 스레드를 만들기 전에도 락이 있는지 확인해서 불필요한 일꾼 생성을 막음
+        if redis_client:
+            lock_key = f"lock:tts:{question_id}"
+            if redis_client.get(lock_key):
+                logger.debug(f"🛑 [TTS] 스레드 생성 스킵 (이미 처리 중): q_{question_id}.wav")
+                return None
+
         import threading
         threading.Thread(
             target=_fire_tts_for_question,

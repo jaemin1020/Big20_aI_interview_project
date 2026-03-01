@@ -207,6 +207,13 @@ def synthesize_task(text: str, language="ko", speed=1.0, **kwargs):
         
         # 락을 사용하여 한 번에 하나의 음성 합성만 수행 (CPU 경쟁 및 엔진 충돌 방지)
         with tts_lock:
+            # [추가] 락을 획득한 직후에도 파일이 생겼는지 한 번 더 확인 (이중 방어)
+            if question_id is not None:
+                final_out = pathlib.Path(f"/app/uploads/tts/q_{question_id}.wav")
+                if final_out.exists() and final_out.stat().st_size > 0:
+                    logger.info(f"⏩ [TTS 이중 스킵] 락 획득 후 확인 결과 파일 이미 존재")
+                    return {"status": "success", "audio_size_bytes": final_out.stat().st_size, "duration_ms": 0}
+
             result = tts_engine.generate_speech(text, temp_path, language=language)
         
         if not result["success"]:

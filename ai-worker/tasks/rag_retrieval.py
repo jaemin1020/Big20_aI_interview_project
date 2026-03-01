@@ -44,16 +44,18 @@ from langchain_community.vectorstores import PGVector
 _vector_stores = {}
 
 def get_vector_store(collection_name):
-    """지정된 컬렉션에 대한 PGVector 인스턴스 싱글톤 반환"""
+    """지정된 컬렉션에 대한 PGVector 인스턴스 싱글톤 반환 (engine 공유)"""
     global _vector_stores
     if collection_name not in _vector_stores:
         embedder = get_embedder()
         if not embedder:
             return None
         
-        connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
+        # [핵심 수정] connection_string 대신 이미 최적화된 db.py의 engine 사용
+        # 이렇게 하면 커넥션 풀을 공유하고 세션 관리가 훨씬 안정적으로 바뀜
+        from db import engine
         _vector_stores[collection_name] = PGVector(
-            connection_string=connection_string,
+            connection=engine, 
             embedding_function=embedder,
             collection_name=collection_name
         )
