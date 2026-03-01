@@ -78,19 +78,6 @@ async def create_transcript(
 
                 # 2. [변경] 답변 분석 및 평가 요청은 전체 면접 종료 시점으로 미룹니다.
                 # (기존에는 실시간으로 analyze_answer를 호출했으나, 성능 최적화를 위해 generate_final_report에서 일괄 처리함)
-                # celery_app.send_task(
-                #     "tasks.evaluator.analyze_answer",
-                #     args=[
-                #         transcript.id,
-                #         question.content,
-                #         transcript.text,
-                #         question.rubric_json,
-                #         question.id,
-                #         question.question_type 
-                #     ],
-                #     queue="gpu_queue",
-                #     countdown=10
-                # )
                 logger.info(f"Triggered Next Question. Evaluation for transcript {transcript.id} is deferred to interview end.")
     except Exception as e:
         logger.error(f"Failed to save transcript: {str(e)}")

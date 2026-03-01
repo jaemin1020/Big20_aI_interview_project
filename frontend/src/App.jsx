@@ -104,12 +104,16 @@ function App() {
   const currentIdxRef = useRef(0); // stale closure 방지용 : currentIdx 최신값 동기화
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
+
   const isInitialized = useRef(false);
   // [수정] 클로저 stale 문제 해결: transcript 최신값을 ref로 항상 동기화
   const liveTranscriptRef = useRef('');
+  // HEAD: 비동기 요청 중단용 제어기
   const ttsAbortControllerRef = useRef(null);
   const nextQAbortControllerRef = useRef(null);
   const reportAbortControllerRef = useRef(null);
+  // main: 타이머 종료 시 STT 완료 후 자동 nextQuestion 트리거용 플래그
+  const autoNextAfterSTTRef = useRef(false);
 
   // 프로필 페이지에서 동작 중 이탈 시 다른 step으로 안전하게 이동
   const navigateSafe = (targetStep, force = false) => {
@@ -408,9 +412,10 @@ function App() {
           const newText = data.text.trim();
           console.log('[STT Received]:', newText);
           setTranscript(prev => {
-            // 중복 방지 (직전 텍스트와 같으면 무시)
             if (prev.endsWith(newText)) return prev;
-            return prev ? `${prev} ${newText}` : newText;
+            const updated = prev ? `${prev} ${newText}` : newText;
+            liveTranscriptRef.current = updated; // nextQuestion stale closure 방지
+            return updated;
           });
         } else if (data.type === 'vision_analysis') {
           // [NEW] Update Vision Data State
@@ -424,6 +429,7 @@ function App() {
     ws.onerror = (error) => console.error('[WebSocket] Error:', error);
     ws.onclose = () => console.log('[WebSocket] Closed');
   };
+
 
   const setupAiStreamWebSocket = (interviewId) => {
     // 백엔드 코어(8000)의 스트리밍 채널에 연결
@@ -554,14 +560,12 @@ function App() {
   const toggleRecording = async () => {
     if (isRecording) {
       console.log('[STT] Stopping recording...');
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
 
-        // WebSocket으로 녹음 중지 알림
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
-        }
+      // WebSocket으로 녹음 중지 알림 (media server에게 오디오 분석 비활성화 시그널)
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
       }
+
       setIsRecording(false);
       isRecordingRef.current = false;
     } else {
@@ -578,69 +582,6 @@ function App() {
       // WebSocket으로 녹음 시작 알림
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'start_recording' }));
-      }
-
-      try {
-        const stream = videoRef.current?.srcObject;
-        if (!stream) {
-          throw new Error('No media stream available');
-        }
-
-        const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          throw new Error('No audio track found');
-        }
-
-        // 오디오만 포함하는 새 스트림 생성
-        const audioStream = new MediaStream(audioTracks);
-
-        const mediaRecorder = new MediaRecorder(audioStream, {
-          mimeType: 'audio/webm'
-        });
-        mediaRecorderRef.current = mediaRecorder;
-
-        const chunks = [];
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            chunks.push(e.data);
-          }
-        };
-
-        mediaRecorder.onstop = async () => {
-          console.log('[STT] Processing audio...');
-          setIsLoading(true);
-
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-
-          try {
-            console.log('[STT] Sending batch audio as fallback...');
-            const result = await recognizeAudio(blob);
-            console.log('[STT] Recognition result:', result);
-
-            if (result.text && result.text.trim()) {
-              const recognizedText = result.text.trim();
-              setTranscript(prev => {
-                // 실시간 텍스트가 이미 더 길다면 유지
-                if (prev.length > recognizedText.length) return prev;
-                return recognizedText;
-              });
-              console.log('[STT] ✅ Fallback Batch Recognition Success');
-            }
-          } catch (error) {
-            console.error('[STT] ❌ Fallback Error:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        };
-
-        mediaRecorder.start();
-        console.log('[STT] MediaRecorder started');
-
-      } catch (error) {
-        console.error('[STT] Failed to start recording:', error);
-        alert('녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요.');
-        setIsRecording(false);
-        isRecordingRef.current = false;
       }
     }
 
@@ -748,12 +689,14 @@ function App() {
   }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
 
   const nextQuestion = async () => {
-    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Transcript Length:', transcript.length);
+    // [Fix 1] liveTranscriptRef: setTranscript 비동기 업데이트 문제 방지
+    // onstop 직후 nextQuestion 호출 시 transcript state가 아직 구버전일 수 있으므로 ref 사용
+    const answerText = liveTranscriptRef.current.trim() || "답변 내용 없음";
+    console.log('[nextQuestion] START - ID:', questions[currentIdx]?.id, 'Answer:', answerText.substring(0, 30));
     if (!interview || !questions || !questions[currentIdx]) {
       console.error('[nextQuestion] Missing data:', { interview, questions, currentIdx });
       return;
     }
-    const answerText = transcript.trim() || "답변 내용 없음";
     try {
       setIsLoading(true); // AI 질문 생성을 기다리는 동안 로딩 표시
       console.log('[nextQuestion] Saving transcript for question ID:', questions[currentIdx].id);
@@ -843,6 +786,28 @@ function App() {
       console.error('Answer submission error:', err);
       alert('답변 제출에 실패했습니다.');
       setIsLoading(false);
+    }
+  };
+
+  // [Fix 1] 타이머 종료 핸들러 — InterviewPage의 onTimerEnd prop으로 연결
+  // wasRecording=true: 녹음을 멈추고 STT 완료 후 자동으로 nextQuestion 호출
+  // wasRecording=false: 즉시 nextQuestion 호출
+  const handleTimerEnd = (wasRecording) => {
+    if (wasRecording) {
+      console.log('[TimerEnd] 녹음 중 시간 초과 → STT 완료 대기 후 자동 진행');
+      autoNextAfterSTTRef.current = true; // onstop에서 감지
+      // 녹음 중지 (toggleRecording의 stop 부분만)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop_recording' }));
+        }
+      }
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    } else {
+      console.log('[TimerEnd] 녹음 없이 시간 초과 → 즉시 다음 질문');
+      nextQuestion();
     }
   };
 
@@ -1088,6 +1053,7 @@ function App() {
             isLoading={isLoading}
             visionData={visionData}
             streamingQuestion={questions[currentIdx + 1]?.isStreaming ? questions[currentIdx + 1]?.content : null}
+            onTimerEnd={handleTimerEnd}
           />
         )}
 
