@@ -27,6 +27,7 @@ celery_app.conf.update(
         'tasks.resume_embedding.*': {'queue': 'gpu_queue'},
         'tasks.evaluator.generate_final_report': {'queue': 'gpu_queue'},
         'tasks.evaluator.analyze_answer': {'queue': 'gpu_queue'},
+        'tasks.evaluator.finalize_report_task': {'queue': 'gpu_queue'},
         
         # CPU 사용 태스크 (파싱, STT, TTS, 비전)
         'tasks.resume_pipeline.parse_pdf': {'queue': 'cpu_queue'},
