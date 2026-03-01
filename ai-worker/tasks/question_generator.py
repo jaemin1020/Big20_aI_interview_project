@@ -121,6 +121,7 @@ def generate_next_question_task(self, interview_id: int):
 
             # [삭제] 10초 이내 스킵 로직 (Race Condition 방지 목적이었으나 초기 템플릿 로드 시 방해됨)
 
+
             # [수정] 3. 전공/직무 기반 시나리오 결정
             major = ""
             if interview.resume and interview.resume.structured_data:
@@ -266,7 +267,7 @@ def generate_next_question_task(self, interview_id: int):
             else:
                 category_raw = next_stage.get("category")
                 
-                # [핵심 수정] narrative 카테고리(9-14번)는 이력서 RAG를 건너뛰고 인재상에만 집중
+                # [수정] 9-14번 인성 질문(narrative)도 이력서 RAG와 인재상을 모두 활용하도록 강화
                 if next_stage.get("type") == "followup":
                     logger.info("🎯 Follow-up mode: Focusing purely on conversation context.")
                     context_text = f"이전 질문: {last_ai_transcript.text if last_ai_transcript else '없음'}\n"
@@ -337,6 +338,7 @@ def generate_next_question_task(self, interview_id: int):
                         context_text = "지원자가 보유한 자격증 목록:\n" + cert_list
                         rag_results = [{'text': f"보유 자격: {cert_list}"}]
                     else:
+                        rag_results = retrieve_context(query, resume_id=interview.resume_id, top_k=3)
                         context_text = "\n".join([r['text'] for r in rag_results]) if rag_results else "특별한 정보 없음"
                         
                     if last_user_transcript:
