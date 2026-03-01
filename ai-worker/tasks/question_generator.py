@@ -366,6 +366,30 @@ def generate_next_question_task(self, interview_id: int):
                 except:
                     guide_formatted = guide_raw
 
+                # ── [연속 저점수 감지] 아이스브레킹 난이도 하향 ─────────────────
+                LOW_SCORE_THRESHOLD = 60   # 저점수 기준 (0-100점 척도)
+                LOW_SCORE_CONSECUTIVE = 3  # 연속 저점수 횟수 임계값
+
+                user_transcripts_scored = session.exec(
+                    select(Transcript)
+                    .where(
+                        Transcript.interview_id == interview_id,
+                        Transcript.speaker != Speaker.AI,
+                        Transcript.total_score.isnot(None),
+                    )
+                    .order_by(Transcript.id.desc())
+                    .limit(LOW_SCORE_CONSECUTIVE)
+                ).all()
+
+                is_low_score_streak = (
+                    len(user_transcripts_scored) >= LOW_SCORE_CONSECUTIVE
+                    and all(
+                        (t.total_score or 0) < LOW_SCORE_THRESHOLD
+                        for t in user_transcripts_scored
+                    )
+                )
+                # ──────────────────────────────────────────────────────────────
+
                 # [추가] 단계별 맞춤형 전략 지침 결정 (지원자님 요청 반영)
                 mode_instruction = "일반적인 단일 질문 생성을 수행하십시오."
                 s_name = next_stage.get('stage', '')
@@ -384,6 +408,20 @@ def generate_next_question_task(self, interview_id: int):
                 elif s_type == 'followup':
                     mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문만 생성하십시오."
                 
+                # ── [아이스브레킹 주입] 연속 저점수 시 격려 및 난이도 하향 ──────
+                if is_low_score_streak:
+                    mode_instruction += (
+                        " [지원자 지원 모드] 지원자가 여러 차례 답변에 어려움을 겪고 있습니다."
+                        " 이번 질문은 난이도를 한 단계 낮추어 생성하십시오."
+                        " 반드시 질문 문장 앞에 '천천히 답변하셔도 괜찮습니다, 너무 긴장하지 마세요.' 와 같은"
+                        " 자연스러운 격려 문장을 먼저 포함하고, 그 뒤에 쉽고 간결한 질문을 이어가십시오."
+                    )
+                    logger.info(
+                        f"🧊 [ICE-BREAK] {LOW_SCORE_CONSECUTIVE}회 연속 저점수 감지 "
+                        f"(기준: {LOW_SCORE_THRESHOLD}점 미만). 난이도 하향 및 격려 멘트 주입."
+                    )
+                # ──────────────────────────────────────────────────────────────
+
                 # [추가] 지원자의 부정적 답변 감지 및 특수 지시 (무지/회피 대응)
                 if last_user_transcript:
                     u_text = last_user_transcript.text.strip()
