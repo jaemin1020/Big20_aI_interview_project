@@ -415,13 +415,12 @@ def generate_next_question_task(self, interview_id: int):
                 # 서두/말미 따옴표 제거
                 final_content = re.sub(r'^["\'\s“]+|["\'\s”]+$', '', final_content)
                 
-                # 1. 메타 설명 및 가이드 문구 강제 삭제 (9번 오류 해결 핵심)
-                # AI가 가이드 내용을 질문 뒤에 붙이거나 가설을 던지는 경우를 패턴으로 제거
+                # 1. 메타 설명 및 가이드 문구 강제 삭제 (패턴 보강)
                 meta_patterns = [
+                    r'(그렇다면|따라서|이에|제공된|분석하여)\s*(지원자의|내용을|부족한|부분을|파악하여|탐구할)\s*.*?(제시하겠습니다|드리겠습니다|하겠습니다|질문입니다)[\.\s]*',
                     r'(이\s*질문은|의도는|~라고\s*답변했다면|검증합니다|의도함|확인합니다|요구하여).*', 
                     r'지원자가\s*.*라고\s*말했다면.*',
                     r'위\s*질문은\s*.*',
-                    r'따라서\s*.*',
                     r'본\s*질문은\s*.*'
                 ]
                 for pattern in meta_patterns:
@@ -429,7 +428,8 @@ def generate_next_question_task(self, interview_id: int):
 
                 # 2. 서두 레이블 제거 (한글/영문/특수문자 포함)
                 label_patterns = [
-                    r'^\**지원자의\s*답변\s*요약\s*및\s*꼬리질문:\**\s*',
+                    r'^\**지원자의?\s*답변\s*요약\s*(및\s*꼬리질문)?:\**\s*',
+                    r'^\**심층\s*질문:\**\s*',
                     r'^\**핵심\s*요약:\**\s*',
                     r'^\**꼬리질문:\**\s*',
                     r'^\**요약:\**\s*',
@@ -440,6 +440,12 @@ def generate_next_question_task(self, interview_id: int):
                 ]
                 for pattern in label_patterns:
                     final_content = re.sub(pattern, '', final_content, flags=re.IGNORECASE | re.MULTILINE)
+
+                # 3. [핵심] 만약 여전히 "요약: ... 질문: ..." 구조라면 '질문:' 이후만 추출
+                if '질문:' in final_content:
+                    final_content = final_content.split('질문:')[-1].strip()
+                elif '질문 :' in final_content:
+                    final_content = final_content.split('질문 :')[-1].strip()
 
                 # 3. 문장 중간에 삽입되는 연결 레이블 제거
                 bridge_patterns = [
