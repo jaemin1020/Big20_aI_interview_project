@@ -17,7 +17,8 @@ const InterviewPage = ({
   isLoading,
   isMediaReady,
   visionData,
-  streamingQuestion  // [신규] AI가 실시간으로 생성 중인 다음 질문 텍스트
+  streamingQuestion,  // [신규] AI가 실시간으로 생성 중인 다음 질문 텍스트
+  onTimerEnd          // [Fix 1] 타이머 종료 시 호출 (App.jsx의 handleTimerEnd)
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   // isTimerActive는 ttsFinished state로 대체됨 (아래 54행)
@@ -133,9 +134,13 @@ const InterviewPage = ({
 
     if (timeLeft <= 0) {
       if (isTimeOverRef.current) return;
-      if (!isRecording) {
-        console.log("⏰ Time over!");
-      }
+      isTimeOverRef.current = true;
+
+      console.log('⏰ Time over! isRecording:', isRecording);
+      // [Fix 1] 모든 로직을 App.jsx의 handleTimerEnd로 위임
+      // - 녹음 중: 녹음 중지 → STT 완료 후 자동 nextQuestion
+      // - 녹음 안 함: 즉시 nextQuestion
+      onTimerEnd(isRecording);
       return;
     }
 
@@ -144,7 +149,7 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, nextQuestion, isRecording, ttsFinished]);
+  }, [timeLeft, onTimerEnd, isRecording, ttsFinished]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -534,7 +539,7 @@ const InterviewPage = ({
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', paddingBottom: '1rem' }}>
           <PremiumButton
             variant={isRecording ? 'danger' : 'success'}
-            disabled={!isMediaReady}
+            disabled={!isMediaReady || (!ttsFinished && !isRecording)}
             onClick={() => {
               console.log('[InterviewPage] 답변 버튼 클릭:', isRecording ? '종료' : '시작');
               toggleRecording();
@@ -545,14 +550,23 @@ const InterviewPage = ({
               padding: '1rem',
               fontSize: '1rem',
               fontWeight: '700',
-              opacity: isMediaReady ? 1 : 0.6
+              opacity: (isMediaReady && (ttsFinished || isRecording)) ? 1 : 0.6
             }}
           >
-            {!isMediaReady ? '⏳ 준비 중' : (isRecording ? '⏸ 답변 종료' : '답변 시작')}
+            {!isMediaReady ? '⏳ 준비 중' : (!ttsFinished && !isRecording ? '🔇 질문 재생 중...' : (isRecording ? '⏸ 답변 종료' : '답변 시작'))}
           </PremiumButton>
           <PremiumButton
             onClick={nextQuestion}
-            style={{ flex: 1, minWidth: '140px', padding: '1rem', fontSize: '1rem', fontWeight: '700' }}
+            disabled={isRecording || isLoading || transcript.trim().length === 0}
+            style={{
+              flex: 1,
+              minWidth: '140px',
+              padding: '1rem',
+              fontSize: '1rem',
+              fontWeight: '700',
+              opacity: (isRecording || isLoading || transcript.trim().length === 0) ? 0.6 : 1,
+              cursor: (isRecording || isLoading || transcript.trim().length === 0) ? 'not-allowed' : 'pointer'
+            }}
           >
             {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
           </PremiumButton>

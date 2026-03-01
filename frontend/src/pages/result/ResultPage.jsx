@@ -203,11 +203,11 @@ const ResultPage = ({ results, report, interview, onReset, onBack }) => {
               />
               <FeedbackItem
                 title="직무 관련 경험"
-                content={getText(report?.details_json?.experience_feedback, "수행하신 프로젝트 경험에 대한 AI 분석 결과입니다.")}
+                content={getText(report?.details_json?.experience_feedback, "프로젝트 경험에 대한 AI 분석 결과입니다.")}
               />
               <FeedbackItem
                 title="문제 해결 능력"
-                content={getText(report?.details_json?.problem_solving_feedback, "문제 상황 대처 및 해결 논리에 대한 AI 분석 결과입니다.")}
+                content={getText(report?.details_json?.problem_solving_feedback, "문제 해결 능력에 대한 AI 분석 결과입니다.")}
               />
             </div>
           </GlassCard>
@@ -228,15 +228,15 @@ const ResultPage = ({ results, report, interview, onReset, onBack }) => {
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               <FeedbackItem
                 title="의사소통 능력"
-                content={getText(report?.details_json?.communication_feedback || report?.communication_feedback, "답변 과정에서의 전달력과 의사소통 스타일에 대한 분석 결과입니다.")}
+                content={getText(report?.details_json?.communication_feedback || report?.communication_feedback, "의사소통 스타일에 대한 AI 분석 결과입니다.")}
               />
               <FeedbackItem
                 title="책임감"
-                content={getText(report?.details_json?.responsibility_feedback, "업무 임하는 태도와 책임감에 대한 AI 분석 결과입니다.")}
+                content={getText(report?.details_json?.responsibility_feedback, "지원자의 직업 윤리 및 책임감에 대한 상세 분석 내용입니다.")}
               />
               <FeedbackItem
                 title="성장 의지"
-                content={getText(report?.details_json?.growth_feedback, "자기계발 의지와 발전 가능성에 대한 AI 분석 결과입니다.")}
+                content={getText(report?.details_json?.growth_feedback, "향후 발전 가능성 및 인재상 부합도에 대한 분석 내용입니다.")}
               />
             </div>
           </GlassCard>

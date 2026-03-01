@@ -107,17 +107,29 @@ def generate_next_question_task(self, interview_id: int):
             stmt_all = select(Transcript).where(Transcript.interview_id == interview_id).order_by(Transcript.id.desc())
             last_transcript = session.exec(stmt_all).first()
 
+            # 마지막 AI 발화 가져오기
             stmt_ai = select(Transcript).where(
                 Transcript.interview_id == interview_id,
                 Transcript.speaker == Speaker.AI
             ).order_by(Transcript.id.desc())
             last_ai_transcript = session.exec(stmt_ai).first()
 
+            # 마지막 사용자 발화 가져오기 (단, 아주 짧은 노이즈는 무시하여 스테이지 스킵 방지)
+            from sqlalchemy import func
             stmt_user = select(Transcript).where(
                 Transcript.interview_id == interview_id,
-                Transcript.speaker == Speaker.USER
+                Transcript.speaker != Speaker.AI,
+                func.length(Transcript.text) > 5  # 최소 6자 이상인 경우만 실제 답변으로 간주하여 스테이지 전환 판단
             ).order_by(Transcript.id.desc())
             last_user_transcript = session.exec(stmt_user).first()
+
+            # 만약 위에서 못찾았다면 진짜 마지막 발화라도 가져옴 (대기 로직용)
+            if not last_user_transcript:
+                stmt_user_any = select(Transcript).where(
+                    Transcript.interview_id == interview_id,
+                    Transcript.speaker != Speaker.AI
+                ).order_by(Transcript.id.desc())
+                last_user_transcript = session.exec(stmt_user_any).first()
 
             # [삭제] 10초 이내 스킵 로직 (Race Condition 방지 목적이었으나 초기 템플릿 로드 시 방해됨)
 
@@ -137,6 +149,21 @@ def generate_next_question_task(self, interview_id: int):
             if last_ai_transcript and last_ai_transcript.question_id:
                 last_question = session.get(Question, last_ai_transcript.question_id)
                 last_stage_name = last_question.question_type if last_question else "intro"
+                
+                # [복구 로직] 만약 마지막 스테이지가 'fallback' 이라면, 그 이전의 정상적인 스테이지를 찾아야 함
+                if last_stage_name == "fallback":
+                    logger.warning(f"⚠️ Last stage was 'fallback'. Searching for previous valid stage for Interview {interview_id}.")
+                    stmt_ai_prev = select(Transcript).where(
+                        Transcript.interview_id == interview_id,
+                        Transcript.speaker == Speaker.AI,
+                        Transcript.id < last_ai_transcript.id
+                    ).order_by(Transcript.id.desc())
+                    prev_ai = session.exec(stmt_ai_prev).first()
+                    if prev_ai and prev_ai.question_id:
+                        prev_q = session.get(Question, prev_ai.question_id)
+                        if prev_q and prev_q.question_type and prev_q.question_type != "fallback":
+                            last_stage_name = prev_q.question_type
+                            logger.info(f"🔄 Recovered stage from fallback: {last_stage_name}")
             else:
                 last_stage_name = "intro"
 
@@ -150,9 +177,18 @@ def generate_next_question_task(self, interview_id: int):
                 session.commit()
                 return {"status": "completed"}
 
-            # [수정] 동기화 로직: 이미 AI가 다음 질문(들)을 던졌는데 사용자가 아직 이전 질문에 답하는 중이라면 대기
+            # [수정] 동기화 및 스테이지 스킵 방지 로직 강화
             if last_ai_transcript and last_user_transcript:
-                # 마지막 AI 발화가 아직 사용자 답변에 의해 참조되지 않았다면? (즉, 아직 답하지 않은 질문이 있다면)
+                # 1. 만약 마지막 AI 질문이 방금 전(3초 이내)에 던져졌다면, 사용자 답변이 충분히 길지 않은 이상 다음 단계로 넘어가지 않음
+                #    (음성 인식 지연/지터로 인해 이전 답변이 새 질문 ID에 꽂히는 현상 방지)
+                time_since_ai = (get_kst_now() - last_ai_transcript.timestamp.replace(tzinfo=None)).total_seconds()
+                is_short_answer = len(last_user_transcript.text.strip()) < 10
+                
+                if time_since_ai < 3.0 and is_short_answer:
+                    logger.info(f"AI just spoke {time_since_ai:.1f}s ago. Current user answer is short ('{last_user_transcript.text}'). Waiting for a real answer.")
+                    return {"status": "waiting_for_user_to_catch_up"}
+
+                # 2. 마지막 AI 발화가 아직 사용자 답변에 의해 참조되지 않았다면? (즉, 아직 답하지 않은 질문이 있다면)
                 if last_user_transcript.question_id != last_ai_transcript.question_id:
                     logger.info(f"AI has already spoken up to stage '{last_stage_name}', but user just answered a previous question. Waiting for user to answer current question.")
                     return {"status": "waiting_for_user_to_catch_up"}
@@ -195,6 +231,11 @@ def generate_next_question_task(self, interview_id: int):
             if db_company and db_company.ideal:
                 company_ideal = db_company.ideal
                 logger.info(f"🏢 Dynamic Talent Image Loaded: {company_ideal[:30]}...")
+
+            # [공통] 카테고리 및 DB 변수 선언 (NameError 방지)
+            category_raw = next_stage.get("category", "technical")
+            category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
+            db_category = category_map.get(category_raw, "technical")
 
             # 4. [최적화] template stage는 RAG/LLM 없이 즉시 포맷
             if next_stage.get("type") == "template":
@@ -259,12 +300,13 @@ def generate_next_question_task(self, interview_id: int):
                     formatted = tpl
 
                 intro_msg = next_stage.get("intro_sentence", "")
-                display_name = next_stage.get("display_name", "면접질문")
-                final_content = f"[{display_name}] {intro_msg} {formatted}".strip() if intro_msg else f"[{display_name}] {formatted}"
+                final_content = f"{intro_msg} {formatted}".strip() if intro_msg else formatted
+                # [중요] 템플릿 스테이지에서도 sc를 정의해두어야 아래 정제 로직에서 참조 오류가 안 남
+                sc = final_content.strip()
                 logger.info(f"Template stage '{next_stage['stage']}' → 즉시 포맷 완료")
 
             else:
-                category_raw = next_stage.get("category")
+                # category_raw는 위에서 공통으로 정의됨
                 
                 # [핵심 수정] narrative 카테고리(9-14번)는 이력서 RAG를 건너뛰고 인재상에만 집중
                 if next_stage.get("type") == "followup":
@@ -287,10 +329,19 @@ def generate_next_question_task(self, interview_id: int):
                                 
                                 self_intro_list = s_data.get("self_intro", [])
                                 for item in self_intro_list:
-                                    if "[질문1]" in item.get("question", ""):
-                                        values_text = f"[지원자 자기소개서 질문1 답변]: {item.get('answer', '')}"
-                                        logger.info("📍 Found Question 1 in Self-Intro.")
-                                        break
+                                    q_text = item.get("question", "")
+                                    # [개선] 더욱 유연하게 질문1 탐색 (인덱스 또는 키워드)
+                                    if "[질문1]" in q_text or "질문 1" in q_text or q_text.startswith("1."):
+                                        ans = item.get('answer', '')
+                                        if len(ans) > 20: # 최소한의 유의미한 길이
+                                            values_text = f"[지원자 자기소개서 질문1 답변]: {ans}"
+                                            logger.info("📍 Found Question 1 in Self-Intro.")
+                                            break
+                                
+                                # 만약 질문 1을 못찾았다면, 전체 자소서에서 가치관스러운 문장을 추출 (fallback)
+                                if not values_text and self_intro_list:
+                                    all_answers = " ".join([i.get("answer", "") for i in self_intro_list if i.get("answer")])
+                                    values_text = f"[지원자 자기소개서 요약]: {all_answers[:300]}" # 앞부분 300자라도 제공
                         except Exception as e:
                             logger.error(f"Failed to extract self_intro values: {e}")
 
@@ -346,6 +397,8 @@ def generate_next_question_task(self, interview_id: int):
                              logger.warning("🚫 Meaningless input detected! Isolating context to prevent hallucination.")
                         
                         context_text += f"\n[지원자의 최근 답변]: {last_user_transcript.text}"
+                    else:
+                        context_text += "\n[지원자의 응답 정보가 아직 전달되지 않았습니다.]"
 
                 llm = get_exaone_llm()
                 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
@@ -379,11 +432,19 @@ def generate_next_question_task(self, interview_id: int):
                     mode_task_instruction = "자기소개서에서 나타난 지원자의 핵심 가치관(정직, 책임감 등)을 파악하여 인재상과 연결하십시오. 서비스 설계나 코드 같은 기술 내용은 일절 언급하지 말고 오직 인성적인 면모를 80자 이내로 물으십시오."
                     mode_instruction = "이전 답변 요약을 생략하고, '자기소개서에서 ~한 가치관이 인상적이었습니다. 그렇다면...'과 같이 자연스럽게 대화하십시오. 30% 더 짧게 생성하십시오."
                 elif s_name == 'responsibility_followup':
+<<<<<<< HEAD
                     mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변에 실제 내용이 있을 경우에만 아주 짧게 요약하고, 곧바로 가치관에 대한 질문 하나를 던지십시오. 60자 이내로 구성하십시오."
                 elif s_name in ['communication', 'growth']:
                     # 9번, 13번 인성 질문: 태도 강조 및 길이 축소
                     mode_task_instruction = "인재상과 이력서를 결합하되, 기술적 성취가 원인이 아닌 '협업 태도'와 '성장 의지'가 질문의 주인공이 되게 하십시오. 모든 문장은 현재보다 30% 더 짧고 간략하게 구성하십시오."
                     mode_instruction = f"이 단계는 {s_name} 검증입니다. 코드, 개발, 스택 같은 단어를 배제하고 대화하듯 딱 하나의 간결한 한 문장으로만 질문하십시오."
+=======
+                    mode_instruction = "이 단계는 12번(가치관 심층)입니다. 지원자의 답변을 요약한 뒤 '그런데' 등의 접속사를 사용하여 딱 하나의 질문으로 자연스럽게 연결하십시오."
+                elif s_name == 'growth':
+                    mode_instruction = "이 단계는 13번(성장가능성)입니다. 핵심 인재상 가치 하나를 선택하여 자연스러운 구어체로 딱 하나의 질문만 던지십시오."
+                elif s_name == 'communication':
+                    mode_instruction = "이 단계는 9번(협업소통질문)입니다. 인사말이나 상황 설명 없이, 인재상 가치를 바탕으로 지원자의 태도를 확인하는 딱 하나의 질문만 즉시 던지십시오."
+>>>>>>> main
                 elif s_type == 'followup':
                     mode_instruction = "이 단계는 꼬리질문입니다. 답변 요약과 질문을 하나의 문장으로 결합하여 딱 하나의 질문으로 생성하십시오."
                 
@@ -410,6 +471,7 @@ def generate_next_question_task(self, interview_id: int):
                     "target_role": target_role
                 })
 
+<<<<<<< HEAD
                 # [정제 가속화 및 로직 강화]
                 final_content = final_content.strip()
                 # 서두/말미 따옴표 제거
@@ -485,8 +547,69 @@ def generate_next_question_task(self, interview_id: int):
                     final_content = q_parts[0] + '?' + q_parts[1] + '?'
                 
                 final_content = final_content.strip()
+=======
+                # [초강력 정제 시스템] 사족 및 메타 발화 원천 차단
+                def clean_ai_output(text: str, stage_label: str) -> str:
+                    # 1. 기본 마크다운 및 따옴표 제거
+                    text = text.strip()
+                    # 따옴표는 문맥상 필요할 수 있으므로(인용 등), 문장 시작/끝의 따옴표만 조심히 제거하거나 
+                    # 전체적으로 제거하되 질문 의미를 해치지 않게 함
+                    text = re.sub(r'[\*`]', '', text).strip()
+                    
+                    # 2. 줄바꿈 기준 분해 및 사족 라인 제거
+                    lines = text.split('\n')
+                    valid_lines = []
+                    # 정제 키워드 확장 (이 문구들이 들어간 '짧은' 라인은 사족일 확률이 높음)
+                    meta_kws = ["질문", "제시", "생성", "경우", "답변", "내용", "요약", "수칙", "준수", "면접관", "꼬리질문", "작성하셨습니다", "말씀해 주셨는데요"]
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if not line: continue
+                        
+                        # "다음과 같은 질문을~", "~라고 답변했다면" 등 문장형 서두 제거
+                        if re.search(r'(다음과\s*같은|제시할\s*수|답변했다면|말했다면|질문해\s*보겠습니다|생성한\s*질문|참고하여\s*질문)', line):
+                            if ":" in line:
+                                line = line.split(":", 1)[-1].strip()
+                            else:
+                                continue
+                        
+                        # 단순 레이블형 또는 스테이지명 서두 제거 (Regex 이스케이프 적용)
+                        escaped_label = re.escape(stage_label)
+                        line = re.sub(fr'^({escaped_label}|핵심\s*요약|요약|질문|답변|Q|A|꼬리질문|질문 내용|면접관 질문|AI 질문)[:\s\-]*', '', line, flags=re.IGNORECASE)
+                        
+                        # 문장 도중 혹은 끝에 남은 따옴표 제거 (따옴표 안에 질문이 있는 경우 대비)
+                        line = line.replace('"', '').replace("'", "").strip()
+                        
+                        if line: valid_lines.append(line)
+                    
+                    combined = " ".join(valid_lines).strip()
+                    
+                    # 3. [핵심] 문장 끝 사족 제거 (더욱 강력한 패턴)
+                    # "라고 ." 또는 "라고 합니다." 등의 꼬리표를 제거
+                    # 문장에 물음표가 이미 있다면 그 뒤의 "라고~" 이후는 모두 제거
+                    if "?" in combined:
+                        parts = combined.split("?", 1)
+                        if len(parts) > 1 and any(kw in parts[1] for kw in ["라고", "문구", "질문", "합니다"]):
+                            combined = parts[0] + "?"
+                    
+                    # 정규식으로 한 번 더 미세 조정
+                    tail_patterns = [
+                        r'\s*라고\s*(합니다|질문합니다|생성했습니다|말했습니다|물었습니다|요약합니다|드립니다)[\.\?]?\s*$',
+                        r'\s*라는\s*질문을\s*(제시|생성|드립니다|하겠습니다)[\.\?]?\s*$',
+                        r'\s*면접관으로서\s*(질문|조언|물음)[\.\?]?\s*$',
+                        r'\s*라고\s*[\.\s]*$',  # "라고 ." 또는 "라고  " 제거
+                        r'\s*[\.\s]+라고\s*$'
+                    ]
+                    for pattern in tail_patterns:
+                        combined = re.sub(pattern, '', combined).strip()
+                    
+                    return combined
+
+                final_content = clean_ai_output(final_content, next_stage.get('display_name', ''))
+>>>>>>> main
 
                 intro_tpl = next_stage.get("intro_sentence", "")
+                intro_msg = ""
                 if next_stage['stage'] == 'skill' and 'cert_name' in intro_tpl:
                     cert_name = "자료에 명시된"
                     if rag_results:
@@ -498,21 +621,114 @@ def generate_next_question_task(self, interview_id: int):
                         intro_msg = intro_tpl.format(candidate_name=candidate_name)
                     except:
                         intro_msg = intro_tpl
-                else:
-                    intro_msg = ""
-
-                if next_stage.get("type") == "followup":
-                    intro_msg = "" 
                 
-                display_name = next_stage.get("display_name", "심층 면접")
-                final_content = f"[{display_name}] {intro_msg} {final_content}".strip() if intro_msg else f"[{display_name}] {final_content}".strip()
+                # Follow-up은 intro_sentence를 무시하는 경향이 있으나 필요시 결합
+                if next_stage.get("type") == "followup":
+                    # 팔로업은 흐름상 인트로를 최소화
+                    pass 
+                
+                final_content = f"{intro_msg} {final_content}".strip() if intro_msg else final_content.strip()
+                sc = final_content.strip() if final_content else ""
+                if len(sc) < 10:
+                    logger.warning(f"⚠️ [Empty/Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
+                    if not sc:
+                        s_name = next_stage.get('stage', '')
+                        if s_name == 'communication':
+                            final_content = "팀 프로젝트를 수행하며 의견 차이가 생겼을 때, 본인만의 방식으로 갈등을 조율하여 해결했던 경험이 있다면 구체적으로 말씀해 주시겠습니까?"
+                        elif s_name == 'growth':
+                            final_content = "지원자님께서 지금까지 성장해 오면서 가장 중요하게 생각하는 삶의 가치나 철학은 무엇인지 말씀해 주시겠습니까?"
+                        else:
+                            final_content = "지원자님, 해당 부분에 대해 조금 더 구체적으로 설명해 주시겠습니까?"
 
-            # 6. DB 저장 (Question 및 Transcript)
+            # [전역 정제] 모든 질문 타입에 대해 특수문자 제거 및 정제 수행
+            final_content = final_content.strip()
+            # 콤마(,), 물음표(?), 마침표(.), 느낌표(!), 괄호(()), 따옴표(", '), 물결(~) 등을 허용하도록 확장
+            final_content = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s,\?\.\!\(\)\~\"\'\:]', '', final_content)
+            
+            # [강력 제약] 만약 정제 과정에서 내용이 사라졌거나 너무 짧은 경우 폴백
+            # 공백 제외 실질적인 텍스트 길이를 기준으로 판단
+            sc = final_content.strip()
+            if len(sc) < 15:
+                logger.warning(f"⚠️ [Short Question Detected] Stage: {next_stage['stage']}, Content: '{final_content}'")
+                s_name = next_stage.get('stage', '')
+                if s_name == 'skill':
+                    final_content = "지원자님께서 보유하신 직무 관련 자격이나 기술 중에서, 실제 업무에 가장 큰 도움이 될 것이라고 생각하는 것은 무엇입니까?"
+                elif s_name == 'experience':
+                    final_content = "실행하신 프로젝트나 업무 경험 중에서, 본인이 가장 주도적으로 참여하여 성과를 냈던 사례에 대해 자세히 말씀해 주시겠습니까?"
+                elif s_name == 'experience_followup':
+                    final_content = "지원자님, 해당 경험을 통해 기술적으로 가장 크게 성장했다고 느끼신 부분은 무엇인지 조금 더 구체적으로 말씀해 주세요."
+                elif s_name == 'problem_solving':
+                    final_content = "팀 프로젝트를 수행하며 어려움이 있었을 때, 이를 어떻게 해결하고 목표를 달성하셨는지 구체적으로 말씀해 주시기 바랍니다."
+                elif s_name == 'problem_solving_followup' or s_name == 'problem_solving_deep':
+                    final_content = "그 과정에서 발생한 예상치 못한 변수를 어떻게 관리하셨는지, 그리고 그 결과에서 얻은 교훈은 무엇인가요?"
+                elif s_name == 'communication':
+                    final_content = "팀원들과 의견 차이가 생겼을 때, 본인만의 방식으로 조율하여 원만하게 해결했던 경험이 있다면 말씀해 주시겠습니까?"
+                elif s_name == 'communication_followup':
+                    final_content = "당시 본인의 의견을 관철시키기보다는 팀의 목표를 위해 양보하거나 협협했던 구체적인 사례가 있다면 설명해 주세요."
+                elif s_name == 'responsibility':
+                    final_content = "지원자님의 가치관과 책임감을 엿볼 수 있는 가장 대표적인 경험 하나를 선정하여 자세히 설명해 주세요."
+                elif s_name == 'responsibility_followup':
+                    final_content = "지원자님, 그런 상황에서 본인의 가치관을 지키기 위해 가장 중요하게 고려해야 할 점은 무엇이라고 생각하시나요?"
+                elif s_name == 'growth':
+                    final_content = "지원자님께서 지금까지 성장해 오면서 가장 중요하게 생각하는 삶의 가치나 철학은 무엇인지 말씀해 주시겠습니까?"
+                elif s_name == 'growth_followup':
+                    final_content = "지원자님, 배움의 과정에서 본인의 목표가 뜻대로 되지 않을 때 이를 극복하고 꾸준히 나아가는 본인만의 원동력은 무엇인가요?"
+                elif s_name == 'final_statement':
+                    final_content = "지원자님, 마지막으로 꼭 하고 싶으신 말씀이나 본인을 어필할 수 있는 한 마디가 있다면 부탁드립니다."
+                elif next_stage.get("type") == "followup":
+                    final_content = "지원자님의 답변 내용을 잘 들어보았습니다. 그 과정에서 가장 큰 배움을 얻거나 깨달았던 점은 무엇이었는지 조금 더 구체적으로 설명해 주시겠습니까?"
+                else:
+                    final_content = "지원자님의 소중한 답변 감사합니다. 다음 질문으로 넘어가기 전, 본인의 강점에 대해 한 가지만 더 구체적으로 말씀해 주시겠습니까?"
+            
+            final_content = final_content.strip()
+            
+            # [최종 백지 방지] 만약 여기까지 왔는데도 비어있다면 강제 폴백 적용 (원인 불명의 빈 문자열 방지)
+            if not final_content.strip():
+                s_name = next_stage.get('stage', '')
+                if s_name == 'skill':
+                    final_content = "지원자님께서 보유하신 직무 관련 자격이나 기술 중에서, 실제 업무에 가장 큰 도움이 될 것이라고 생각하는 것은 무엇입니까?"
+                elif s_name == 'experience':
+                    final_content = "실행하신 프로젝트나 업무 경험 중에서, 본인이 가장 주도적으로 참여하여 성과를 냈던 사례에 대해 자세히 말씀해 주시겠습니까?"
+                elif s_name == 'experience_followup':
+                    final_content = "지원자님, 해당 경험을 통해 기술적으로 가장 크게 성장했다고 느끼신 부분은 무엇인지 조금 더 구체적으로 말씀해 주세요."
+                elif s_name == 'problem_solving':
+                    final_content = "팀 프로젝트를 수행하며 어려움이 있었을 때, 이를 어떻게 해결하고 목표를 달성하셨는지 구체적으로 말씀해 주시기 바랍니다."
+                elif s_name == 'problem_solving_followup' or s_name == 'problem_solving_deep':
+                    final_content = "그 과정에서 발생한 예상치 못한 변수를 어떻게 관리하셨는지, 그리고 그 결과에서 얻은 교훈은 무엇인가요?"
+                elif s_name == 'communication':
+                    final_content = "팀 프로젝트를 수행하며 의견 차이가 생겼을 때, 본인만의 방식으로 갈등을 조율하여 해결했던 경험이 있다면 구체적으로 말씀해 주시겠습니까?"
+                elif s_name == 'communication_followup':
+                    final_content = "당시 본인의 의견을 관철시키기보다는 팀의 목표를 위해 양보하거나 협력했던 구체적인 사례가 있다면 설명해 주세요."
+                elif s_name == 'responsibility':
+                    final_content = "지원자님의 가치관과 책임감을 엿볼 수 있는 가장 대표적인 경험 하나를 선정하여 자세히 설명해 주세요."
+                elif s_name == 'responsibility_followup':
+                    final_content = "지원자님, 그런 상황에서 본인의 가치관을 지키기 위해 가장 중요하게 고려해야 할 점은 무엇이라고 생각하시나요?"
+                elif s_name == 'growth':
+                    final_content = "지원자님께서 지금까지 성장해 오면서 가장 중요하게 생각하는 삶의 가치나 철학은 무엇인지 말씀해 주시겠습니까?"
+                elif s_name == 'growth_followup':
+                    final_content = "지원자님, 배움의 과정에서 본인의 목표가 뜻대로 되지 않을 때 이를 극복하고 꾸준히 나아가는 본인만의 원동력은 무엇인가요?"
+                elif s_name == 'final_statement':
+                    final_content = "지원자님, 마지막으로 꼭 하고 싶으신 말씀이나 본인을 어필할 수 있는 한 마디가 있다면 부탁드립니다."
+                else:
+                    final_content = "지원자님의 답변을 신중하게 경청했습니다. 해당 부분에 대해 조금 더 구체적으로 말씀해 주시겠습니까?"
 
-            # 6. DB 저장 (Question 및 Transcript)
-            category_raw = next_stage.get("category", "technical")
-            category_map = {"certification": "technical", "project": "technical", "narrative": "behavioral", "problem_solving": "situational"}
-            db_category = category_map.get(category_raw, "technical")
+            # [문장 부호 최종 정제] .? -> . / ?. -> . / ?? -> ? / .. -> . 등 중복 및 혼용 제거 (사용자 요청: 마침표 유지)
+            final_content = final_content.strip()
+            
+            # 마침표 뒤에 바로 글자가 오는 경우 띄어쓰기 추가 (가독성)
+            final_content = re.sub(r'\.([가-힣])', r'. \1', final_content)
+
+            # 마침표와 물음표가 섞여 있으면 마침표를 우선순위로 하여 하나만 남김
+            final_content = re.sub(r'[\.\s]+\?+', '.', final_content)  # ". ?" 또는 ".?" -> "."
+            final_content = re.sub(r'\?+[\.\s]+', '.', final_content)  # "?." 또는 "? ." -> "."
+            final_content = re.sub(r'\?+', '?', final_content)         # "??" -> "?"
+            final_content = re.sub(r'\.+', '.', final_content)          # ".." -> "."
+            
+            # 한 번 더 공백 정리
+            final_content = re.sub(r'\s+', ' ', final_content).strip()
+
+            # 7. DB 저장 (Question 및 Transcript)
+                # db_category는 최상단에서 이미 정의됨
 
             logger.info(f"💾 Saving generated question to DB for Interview {interview_id} (Stage: {next_stage['stage']})")
             q_id = save_generated_question(
@@ -524,17 +740,20 @@ def generate_next_question_task(self, interview_id: int):
                 session=session
             )
 
-            # 7. 메모리 정리
+            # 8. 메모리 정리 (더 강력하게)
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                with torch.cuda.device(torch.cuda.current_device()):
+                    torch.cuda.empty_cache()
+            
+            logger.info(f"✅ [SUCCESS] Next question generated for Interview {interview_id}: {final_content[:50]}...")
 
-            # 8. TTS 생성 태스크 즉시 트리거 (중복 방지: 파일 존재 확인)
+            # 9. TTS 생성 태스크 즉시 트리거
             if q_id:
                 import pathlib
                 tts_file = pathlib.Path(f"/app/uploads/tts/q_{q_id}.wav")
                 if not tts_file.exists():
-                    # [단계] 태그 제거 (TTS가 읽는 클린 텍스트)
                     clean_text = final_content
                     if final_content.startswith('[') and ']' in final_content:
                         clean_text = final_content.split(']', 1)[-1].strip()
@@ -547,24 +766,42 @@ def generate_next_question_task(self, interview_id: int):
     except Exception as e:
         logger.error(f"❌ 실시간 질문 생성 실패 (Retry: {self.request.retries}/3): {e}")
         if self.request.retries >= 3:
-            logger.warning("⚠️ 질문 생성 최대 재시도 횟수 초과. 폴백(Fallback) 질문을 생성합니다.")
+            logger.warning("⚠️ 질문 생성 최대 재시도 횟수 초과. 스테이지별 폴백 질문을 생성합니다.")
             try:
                 from db import save_generated_question
                 from tasks.tts import synthesize_task
                 with Session(engine) as session:
-                    fallback_text = "[시스템 질문] AI 응답 지연으로 인해 기본 질문으로 대체합니다. 이 직무를 성공적으로 수행하기 위해 본인이 가진 가장 뛰어난 점은 무엇이며, 이를 발휘한 실제 경험을 말씀해 주시겠습니까?"
+                    # 현재 스테이지에 맞는 질문 선택 (같은 질문 반복 방지)
+                    s_name = next_stage['stage'] if 'next_stage' in locals() and next_stage else ""
+                    fallback_dict = {
+                        "skill": "지원자님께서 보유하신 직무 기술 중, 실제 업무에서 가장 자신 있게 활용할 수 있는 부분은 무엇입니까?",
+                        "skill_followup": "앞선 답변에 대해 조금 더 구체적으로 설명해 주시겠습니까?",
+                        "experience": "수행하신 프로젝트나 활동 중에서 본인이 가장 큰 기여를 했던 사례를 하나 말씀해 주세요.",
+                        "experience_followup": "그 과정에서 가장 어려웠던 점은 무엇이었고, 어떻게 대처하셨나요?",
+                        "problem_solving": "기술적인 문제를 해결하며 가장 보람찼던 순간은 언제입니까?",
+                        "problem_solving_followup": "그 판단을 내릴 때 가장 중요하게 고려한 기준은 무엇이었나요?",
+                        "communication": "팀원들과 협업할 때 본인만의 소통 방식이나 철학은 무엇인가요?",
+                        "communication_followup": "의견 차이가 생겼을 때 본인은 주로 어떻게 해결하십니까?",
+                        "responsibility": "지원자님이 평소 일에 임할 때 가장 중요하게 생각하는 책임감은 어떤 모습입니까?",
+                        "responsibility_followup": "그런 상황에서 본인의 가치관을 지키기 위해 가장 중요하게 고려해야 할 점은 무엇이라고 생각하시나요?",
+                        "growth": "지원자님이 앞으로 이 직무에서 어떤 전문가로 성장하고 싶으신지 목표를 말씀해 주세요.",
+                        "growth_followup": "목표 달성이 어렵게 느껴질 때 본인만의 극복 방법이 있다면 말씀해 주세요.",
+                        "final_statement": "마지막으로 본인을 더 어필할 수 있는 내용이나 궁금한 점이 있다면 자유롭게 말씀해 주세요.",
+                    }
+                    fallback_text = fallback_dict.get(s_name, "지원자님, 해당 부분에 대해 조금 더 구체적으로 설명해 주시겠습니까?")
+                    fallback_stage_name = s_name if s_name else "fallback"
+                    
                     q_id = save_generated_question(
                         interview_id=interview_id,
                         content=fallback_text,
                         category="behavioral",
-                        stage="fallback",
-                        guide="에러 및 타임아웃 발생으로 인한 폴백 질문",
+                        stage=fallback_stage_name,
+                        guide="시스템 오류로 인한 스테이지별 폴백 질문",
                         session=session
                     )
                     if q_id:
-                        clean_text = fallback_text.split(']', 1)[-1].strip() if ']' in fallback_text else fallback_text
-                        synthesize_task.delay(clean_text, language="ko", question_id=q_id)
-                    return {"status": "success", "stage": "fallback", "question": fallback_text}
+                        synthesize_task.delay(fallback_text, language="ko", question_id=q_id)
+                    return {"status": "success", "stage": fallback_stage_name, "question": fallback_text}
             except Exception as fallback_e:
                 logger.error(f"❌ 폴백 질문 생성 실패: {fallback_e}")
                 return {"status": "error", "message": "Fallback question failed"}

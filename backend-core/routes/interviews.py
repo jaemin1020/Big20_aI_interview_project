@@ -166,7 +166,7 @@ async def create_interview(
             question_text = generate_template_question(stage_config["template"], candidate_info)
             display_name = stage_config.get("display_name", "면접질문")
             intro_msg = stage_config.get("intro_sentence", "")
-            question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
+            question_text = f"{intro_msg} {question_text}" if intro_msg else question_text
 
             # 2-1. Question 객체 생성
             question = Question(
@@ -467,9 +467,9 @@ async def get_evaluation_report(
             "technical_feedback": "분석이 완료되면 여기에 표시됩니다.",
             "experience_feedback": "데이터 분석 중...",
             "problem_solving_feedback": "데이터 분석 중...",
-            "communication_feedback": "데이터 분석 중...",
-            "responsibility_feedback": "데이터 분석 중...",
-            "growth_feedback": "데이터 분석 중...",
+            "communication_feedback": "의사소통 역량을 분석 중입니다.",
+            "responsibility_feedback": "책임감 및 조직 적합성을 분석 중입니다.",
+            "growth_feedback": "성장 가능성을 분석 중입니다.",
             "strengths": ["분석 진행 중"],
             "improvements": ["분석 진행 중"]
         }
@@ -492,11 +492,11 @@ async def get_evaluation_report(
     report_dict["problem_solving_score"] = details.get("problem_solving_score", 0)
 
     report_dict["technical_feedback"] = details.get("technical_feedback") or report.summary_text or "기술 역량 분석 결과가 생성 중입니다."
-    report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 분석 결과입니다."
-    report_dict["problem_solving_feedback"] = details.get("problem_solving_feedback") or "논리적 대처 능력에 대한 분석 결과입니다."
-    report_dict["communication_feedback"] = details.get("communication_feedback") or "의사소통 스타일에 대한 분석 결과입니다."
-    report_dict["responsibility_feedback"] = details.get("responsibility_feedback") or "업무 태도 및 책임감 분석 결과입니다."
-    report_dict["growth_feedback"] = details.get("growth_feedback") or "향후 발전 가능성에 대한 분석 결과입니다."
+    report_dict["experience_feedback"] = details.get("experience_feedback") or "프로젝트 경험에 대한 AI 분석 결과입니다."
+    report_dict["problem_solving_feedback"] = details.get("problem_solving_feedback") or "문제 해결 능력에 대한 AI 분석 결과입니다."
+    report_dict["communication_feedback"] = details.get("communication_feedback") or "의사소통 스타일에 대한 AI 분석 결과입니다."
+    report_dict["responsibility_feedback"] = details.get("responsibility_feedback") or "지원자의 직업 윤리 및 책임감에 대한 상세 분석 내용입니다."
+    report_dict["growth_feedback"] = details.get("growth_feedback") or "향후 발전 가능성 및 인재상 부합도에 대한 분석 내용입니다."
 
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
@@ -558,7 +558,7 @@ async def create_realtime_interview(
             )
             display_name = stage_config.get("display_name", "면접질문")
             intro_msg = stage_config.get("intro_sentence", "")
-            question_text = f"[{display_name}] {intro_msg} {question_text}" if intro_msg else f"[{display_name}] {question_text}"
+            question_text = f"{intro_msg} {question_text}" if intro_msg else question_text
 
             question = Question(
                 content=question_text,

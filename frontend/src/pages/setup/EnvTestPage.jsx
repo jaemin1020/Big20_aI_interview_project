@@ -173,6 +173,7 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
       }, 2000);
     } catch (err) {
       console.error("Camera access failed:", err);
+      sessionStorage.setItem('env_video_ok', 'false'); // 카메라 접근 실패 시 명시적 실패 저장
     }
   };
 
@@ -304,6 +305,40 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             >
               다음 진행
             </PremiumButton>
+          </div>
+
+          {/* 원격 환경 등 특수 상황을 위한 건너뛰기 버튼 */}
+          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            <button
+              onClick={() => {
+                sessionStorage.setItem('env_audio_ok', 'true');
+                sessionStorage.setItem('env_video_ok', 'true');
+                if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+                onNext();
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '8px',
+                color: 'var(--text-muted)',
+                padding: '8px 20px',
+                fontSize: '0.82rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                letterSpacing: '0.03em',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.color = 'var(--text-main)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.color = 'var(--text-muted)';
+              }}
+            >
+              ⚠️ 장비 테스트 없이 시작하기 (원격/바이패스)
+            </button>
           </div>
         </GlassCard>
       </div>
