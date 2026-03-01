@@ -51,13 +51,14 @@ def get_vector_store(collection_name):
         if not embedder:
             return None
         
-        # [핵심 수정] connection_string 대신 이미 최적화된 db.py의 engine 사용
-        # 이렇게 하면 커넥션 풀을 공유하고 세션 관리가 훨씬 안정적으로 바뀜
+        # [최종 수정] 위치 인자(Positional)로 전달하여 라이브러리 호환성 문제 완벽 해결
         from db import engine
+        connection_url = os.getenv("DATABASE_URL", "postgresql+psycopg://admin:1234@db:5432/interview_db")
         _vector_stores[collection_name] = PGVector(
-            connection=engine, 
-            embedding_function=embedder,
-            collection_name=collection_name
+            connection_url,        # 1. connection_string (위치 인자)
+            embedder,              # 2. embedding_function (위치 인자)
+            collection_name=collection_name,
+            connection=engine      # 3. 객체 공유
         )
     return _vector_stores[collection_name]
 

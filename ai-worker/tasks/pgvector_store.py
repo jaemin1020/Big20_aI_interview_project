@@ -82,15 +82,15 @@ def store_embeddings(resume_id, embedded_chunks):
     embeddings = get_embedder(device) # 저장할 때도 텍스트를 숫자로 바꿀 똑같은 모델이 필요합니다.
 
     try:
-        # [해석] PGVector.from_documents: 
-        # 1. 문서를 받는다 2. 모델로 숫자로 바꾼다 3. DB 테이블에 쏙 집어넣는다.
-        # 이 모든 과정을 함수 하나가 자동으로 처리해줍니다.
+        # [개선] connection_string과 함께 engine을 전달하여 커넥션 풀 공유 보장
+        from db import engine
         vector_store = PGVector.from_documents(
-            embedding=embeddings,
-            documents=documents,
-            collection_name="resume_all_embeddings", # 테이블 내의 논리적 그룹 이름
+            documents,              # 1. 위치 인자
+            embeddings,             # 2. 위치 인자
+            collection_name="resume_all_embeddings",
             connection_string=connection_string,
-            pre_delete_collection=False, # 기존 데이터를 싹 지우고 새로 저장할지 여부 (여기선 유지)
+            connection=engine,      # engine 객체 전달로 세션 꼬임 방지
+            pre_delete_collection=False
         )
         
         print(f"[STEP6] ✅ 총 {len(documents)}개의 조각이 DB에 저장되었습니다.")
