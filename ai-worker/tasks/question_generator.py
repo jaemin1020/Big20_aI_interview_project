@@ -63,7 +63,7 @@ def generate_next_question_task(self, interview_id: int):
     """
     인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
     """
-    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company
+    from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company, get_kst_now
     from utils.exaone_llm import get_exaone_llm
     from tasks.tts import synthesize_task
     from utils.interview_helpers import check_if_transition
