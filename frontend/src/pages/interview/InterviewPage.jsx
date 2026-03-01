@@ -18,7 +18,10 @@ const InterviewPage = ({
   isMediaReady,
   visionData,
   streamingQuestion,  // [신규] AI가 실시간으로 생성 중인 다음 질문 텍스트
-  onTimerEnd          // [Fix 1] 타이머 종료 시 호출 (App.jsx의 handleTimerEnd)
+  onTimerEnd,          // [Fix 1] 타이머 종료 시 호출 (App.jsx의 handleTimerEnd)
+  isAnswerFinished,     // [Fix 2] 답변 완료 상태
+  isTranscriptLocked,    // [추가] STT 최종 확정 상태
+  isSttProcessing        // [신규] STT 서버 처리 중 상태
 }) => {
   const [timeLeft, setTimeLeft] = React.useState(60);
   // isTimerActive는 ttsFinished state로 대체됨 (아래 54행)
@@ -130,7 +133,7 @@ const InterviewPage = ({
 
   // 1분 카운트다운 — ttsFinished가 true일 때만 작동
   React.useEffect(() => {
-    if (!ttsFinished) return; // ★ TTS 안 끝났으면 interval 안 만듦
+    if (!ttsFinished || isAnswerFinished) return; // ★ TTS 안 끝났거나 답변 완료면 중단
 
     if (timeLeft <= 0) {
       if (isTimeOverRef.current) return;
@@ -149,7 +152,7 @@ const InterviewPage = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, onTimerEnd, isRecording, ttsFinished]);
+  }, [timeLeft, onTimerEnd, isRecording, ttsFinished, isAnswerFinished]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -471,7 +474,7 @@ const InterviewPage = ({
             fontWeight: '600',
             textTransform: 'uppercase'
           }}>
-            {isRecording ? '🎤 실시간 인식 중...' : '답변 입력'}
+            {isRecording ? '🎤 실시간 인식 중...' : (isSttProcessing ? '⏳ 서버 분석 중 (잠시만 기다려주세요)...' : (isTranscriptLocked ? '🔒 답변 수합 완료 (고정됨)' : (isAnswerFinished ? '⏳ 마지막 답변 수집 중...' : '답변 입력')))}
           </h4>
           <textarea
             value={transcript}
@@ -514,16 +517,16 @@ const InterviewPage = ({
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              background: isRecording ? '#ef4444' : (transcript ? '#10b981' : 'var(--text-muted)'),
+              background: isRecording ? '#ef4444' : (isSttProcessing ? '#f59e0b' : (isTranscriptLocked ? '#10b981' : (isAnswerFinished ? '#f59e0b' : 'var(--text-muted)'))),
               boxShadow: isRecording ? '0 0 8px #ef4444' : 'none',
-              animation: isRecording ? 'pulse 1.5s infinite' : 'none'
+              animation: (isRecording || isSttProcessing) ? 'pulse 1.5s infinite' : 'none'
             }}></div>
             <span style={{
               fontSize: '0.85rem',
               fontWeight: '700',
-              color: isRecording ? '#ef4444' : (transcript ? '#10b981' : 'var(--text-muted)')
+              color: isRecording ? '#ef4444' : (isSttProcessing ? '#f59e0b' : (isTranscriptLocked ? '#10b981' : (isAnswerFinished ? '#f59e0b' : 'var(--text-muted)')))
             }}>
-              {isRecording ? '답변 수집 중...' : (transcript ? '답변 완료' : '답변 대기 중')}
+              {isRecording ? '답변 수집 중...' : (isSttProcessing ? '서버 분석 중' : (isTranscriptLocked ? '답변 확정' : (isAnswerFinished ? '수집 마무리 중' : '답변 대기 중')))}
             </span>
           </div>
           <style>{`
@@ -537,39 +540,43 @@ const InterviewPage = ({
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', paddingBottom: '1rem' }}>
-          <PremiumButton
-            variant={isRecording ? 'danger' : 'success'}
-            disabled={!isMediaReady || (!ttsFinished && !isRecording)}
-            onClick={() => {
-              console.log('[InterviewPage] 답변 버튼 클릭:', isRecording ? '종료' : '시작');
-              toggleRecording();
-            }}
-            style={{
-              flex: 1,
-              minWidth: '140px',
-              padding: '1rem',
-              fontSize: '1rem',
-              fontWeight: '700',
-              opacity: (isMediaReady && (ttsFinished || isRecording)) ? 1 : 0.6
-            }}
-          >
-            {!isMediaReady ? '⏳ 준비 중' : (!ttsFinished && !isRecording ? '🔇 질문 재생 중...' : (isRecording ? '⏸ 답변 종료' : '답변 시작'))}
-          </PremiumButton>
-          <PremiumButton
-            onClick={nextQuestion}
-            disabled={isRecording || isLoading || transcript.trim().length === 0}
-            style={{
-              flex: 1,
-              minWidth: '140px',
-              padding: '1rem',
-              fontSize: '1rem',
-              fontWeight: '700',
-              opacity: (isRecording || isLoading || transcript.trim().length === 0) ? 0.6 : 1,
-              cursor: (isRecording || isLoading || transcript.trim().length === 0) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'}
-          </PremiumButton>
+          {!isAnswerFinished ? (
+            <PremiumButton
+              variant={isRecording ? 'danger' : 'success'}
+              disabled={!isMediaReady || (!ttsFinished && !isRecording)}
+              onClick={() => {
+                console.log('[InterviewPage] 답변 버튼 클릭:', isRecording ? '종료' : '시작');
+                toggleRecording();
+              }}
+              style={{
+                flex: 1,
+                minWidth: '140px',
+                padding: '1rem',
+                fontSize: '1rem',
+                fontWeight: '700',
+                opacity: (isMediaReady && (ttsFinished || isRecording)) ? 1 : 0.6
+              }}
+            >
+              {!isMediaReady ? '⏳ 준비 중' : (!ttsFinished && !isRecording ? '🔇 질문 재생 중...' : (isRecording ? '⏸ 답변 종료' : '답변 시작'))}
+            </PremiumButton>
+          ) : (
+            <PremiumButton
+              onClick={nextQuestion}
+              disabled={isLoading || !isTranscriptLocked}
+              style={{
+                flex: 1,
+                minWidth: '140px',
+                padding: '1rem',
+                fontSize: '1rem',
+                fontWeight: '700',
+                opacity: (isLoading || !isTranscriptLocked || isSttProcessing) ? 0.6 : 1,
+                cursor: (isLoading || !isTranscriptLocked || isSttProcessing) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {isSttProcessing ? '⏳ 서버 분석 대기 중...' : (!isTranscriptLocked ? '✅ 마지막 답변 수집 중...' : (currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'))}
+            </PremiumButton>
+          )}
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
             {showTooltip && (
               <div style={{

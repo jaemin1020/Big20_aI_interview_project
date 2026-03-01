@@ -544,20 +544,30 @@ async def save_behavior_scores(
     per_question = request.get("per_question", [])
     if per_question:
         # User(답변자) transcript를 순서대로 조회
+        # [수정1] Speaker.USER Enum 사용으로 Enum/문자열 혼재 환경에서도 정확하게 필터링
+        from db_models import Speaker as SpeakerEnum
         user_transcripts = db.exec(
             select(Transcript).where(
                 Transcript.interview_id == interview_id,
-                Transcript.speaker == "User"
+                Transcript.speaker == SpeakerEnum.USER
             ).order_by(Transcript.id)
         ).all()
 
-        for i, q_score in enumerate(per_question):
-            if i < len(user_transcripts):
-                # emotion 컬럼에 채점 결과를 JSON 문자열로 저장
-                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
-                user_transcripts[i].sentiment_score = q_score.get("total")
-                db.add(user_transcripts[i])
-                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+        logger.info(f"  [behavior-scores] User transcripts found: {len(user_transcripts)}, per_question count: {len(per_question)}")
+
+        # [수정2] q_idx 기반 매핑: 단순 배열 인덱스(i) 대신 q_score['q_idx']를 사용하여
+        # 질문 순서가 다르거나 건너뛰기가 발생해도 올바른 transcript에 연결
+        for q_score in per_question:
+            q_idx = q_score.get("q_idx", -1)
+            # q_idx는 0부터 시작하는 질문 순번 → user_transcripts 리스트의 인덱스와 대응
+            if 0 <= q_idx < len(user_transcripts):
+                user_transcripts[q_idx].emotion = json_lib.dumps(q_score, ensure_ascii=False)
+                user_transcripts[q_idx].sentiment_score = q_score.get("total")
+                db.add(user_transcripts[q_idx])
+                logger.info(f"  📝 Q{q_idx} → transcript[{user_transcripts[q_idx].id}].emotion 저장")
+            else:
+                logger.warning(f"  ⚠️ Q{q_idx} → 매핑 가능한 transcript 없음 (user_transcripts 길이: {len(user_transcripts)})")
+
 
     db.commit()
 
