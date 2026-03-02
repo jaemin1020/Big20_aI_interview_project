@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql
       - ./backend-core/data:/data
     ports:
-      - "15432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
+      - "5432:5432" # 김린만 15432 , 다른모든분은 5432쓰시면 됩니다.
 
     networks:
       - interview_network
