@@ -474,7 +474,7 @@ const InterviewPage = ({
             fontWeight: '600',
             textTransform: 'uppercase'
           }}>
-            {isRecording ? '🎤 실시간 인식 중...' : (isSttProcessing ? '⏳ 서버 분석 중 (잠시만 기다려주세요)...' : (isTranscriptLocked ? '🔒 답변 수합 완료 (고정됨)' : (isAnswerFinished ? '⏳ 마지막 답변 수집 중...' : '답변 입력')))}
+            {isRecording ? '🎤 실시간 인식 중...' : (isSttProcessing ? ' 답변 분석 중 (잠시만 기다려주세요)...' : (isTranscriptLocked ? ' 답변 수집 완료 ' : (isAnswerFinished ? '⏳ 마지막 답변 수집 중...' : '답변 입력')))}
           </h4>
           <textarea
             value={transcript}
@@ -526,7 +526,7 @@ const InterviewPage = ({
               fontWeight: '700',
               color: isRecording ? '#ef4444' : (isSttProcessing ? '#f59e0b' : (isTranscriptLocked ? '#10b981' : (isAnswerFinished ? '#f59e0b' : 'var(--text-muted)')))
             }}>
-              {isRecording ? '답변 수집 중...' : (isSttProcessing ? '서버 분석 중' : (isTranscriptLocked ? '답변 확정' : (isAnswerFinished ? '수집 마무리 중' : '답변 대기 중')))}
+              {isRecording ? '답변 수집 중...' : (isSttProcessing ? '답변 분석 중' : (isTranscriptLocked ? '답변 확정' : (isAnswerFinished ? '수집 마무리 중' : '답변 대기 중')))}
             </span>
           </div>
           <style>{`
@@ -574,7 +574,7 @@ const InterviewPage = ({
                 transition: 'all 0.3s ease'
               }}
             >
-              {isSttProcessing ? '⏳ 서버 분석 대기 중...' : (!isTranscriptLocked ? '✅ 마지막 답변 수집 중...' : (currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'))}
+              {isSttProcessing ? '⏳ 답변 분석 대기 중...' : (!isTranscriptLocked ? '✅ 마지막 답변 수집 중...' : (currentIdx < totalQuestions - 1 ? '다음 질문' : '답변 완료 (다음 단계)'))}
             </PremiumButton>
           )}
           <div style={{ position: 'relative', flex: 1, minWidth: '140px' }}>
