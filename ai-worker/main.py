@@ -1,7 +1,15 @@
 import logging
 import os
 import sys
+import time
 import multiprocessing
+
+# ✅ TZ 강제 설정 (컨테이너에서 tzdata가 있어도 Python 프로세스에 반영 안 될 수 있음)
+os.environ['TZ'] = 'Asia/Seoul'
+try:
+    time.tzset()  # Unix 계열에서 TZ 환경변수를 Python 프로세스에 즉시 적용
+except AttributeError:
+    pass  # Windows에서는 time.tzset()이 없음 (컨테이너는 Linux이므로 정상 동작)
 
 # 0. 경로 우선순위 조정 (중요)
 # ai-worker 루트가 backend-core보다 먼저 오도록 강제 (utils 폴더 충돌 방지)
@@ -25,10 +33,13 @@ from celery import Celery
 # CUDA 호환성을 위해 spawn 방식 사용
 multiprocessing.set_start_method('spawn', force=True)
 
-# 1. 로깅 설정 (JSON/로그 원칙)
+# 1. 로깅 설정
+# tzdata 재설치 후 os.environ['TZ'] + time.tzset()으로 KST 적용됨
+logging.Formatter.converter = time.localtime  # Python logging도 KST 사용
 logging.basicConfig(
-    level=logging.INFO, 
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger("AI-Worker-Core")
 
@@ -53,8 +64,8 @@ app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    timezone='Asia/Seoul',
-    enable_utc=False,
+    timezone='Asia/Seoul',   # ✅ Celery 내부 시간대
+    enable_utc=False,        # ✅ UTC 비활성화 → 로컬 시간(KST) 사용
     task_track_started=True,
     task_time_limit=600,
     result_expires=3600,
