@@ -45,7 +45,7 @@ class User(SQLModel, table=True):
     role: UserRole = Field(default=UserRole.CANDIDATE)
     password_hash: str
     full_name: Optional[str] = None
-    birth_date: Optional[str] = None
+    birth_date: Optional[str] = None  # 형식: YYYY-MM-DD, 오늘 이전 날짜만 허용 (API 레이어에서 검증)
     phone_number: Optional[str] = None
     profile_image: Optional[str] = None
     desired_company_types: Optional[List[str]] = Field(
@@ -226,7 +226,7 @@ class Transcript(SQLModel, table=True):
         default=None,
         sa_column=Column(JSONB)
     )
-    
+
     # 메타데이터
     question_id: Optional[int] = Field(default=None, foreign_key="questions.id")
     order: Optional[int] = None  # 대화 순서
