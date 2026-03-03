@@ -45,58 +45,59 @@ except ImportError:
 # -----------------------------------------------------------
 def store_embeddings(resume_id, embedded_chunks):
     """
-    [함수의 역할] 임베딩된 데이터 조각들을 Document 객체로 변환하여 DB에 저장합니다.
+    [함수의 역할] 이미 계산된 임베딩(숫자) 데이터를 사용하여 DB에 직접 주입합니다.
+    [개선 사항] from_documents 대신 add_embeddings를 사용하여 중복 AI 연산을 제거했습니다.
     """
     if not embedded_chunks:
         print("❌ 저장할 임베딩 데이터가 없습니다.")
         return
 
-    print(f"\n[STEP6] DB 저장 시작 (Resume ID: {resume_id})...")
+    print(f"\n[STEP6] DB 저장 시작 (Resume ID: {resume_id})... (중복 연산 제거 모드)")
 
-    # -------------------------------------------------------
-    # 3-1. 문서화 (Document 객체 생성)
-    # [존재 이유] LangChain DB 도구를 쓰려면 데이터를 'Document'라는 표준 형식으로 포장해야 합니다.
-    # -------------------------------------------------------
-    documents = []
+    # 1. 속도 향상을 위해 이미 계산된 텍스트, 벡터, 메타데이터를 각각 분리합니다.
+    texts = []
+    vectors = []
+    metadatas = []
+
     for item in embedded_chunks:
-        # [해석] 메타데이터(Metadata)는 데이터의 '견출지'입니다.
-        # 나중에 수천 명의 이력서가 섞여 있어도 resume_id로 내 것만 쏙 골라낼 수 있습니다.
-        metadata = item.get("metadata", {})
-        metadata["resume_id"] = resume_id # 누구의 이력서인지 기록
-        metadata["chunk_type"] = item.get("type", "unknown") # 이게 학력인지 경력인지 기록
+        texts.append(item["text"])
+        vectors.append(item["vector"])
         
-        doc = Document(
-            page_content=item["text"], # 실제 텍스트 내용
-            metadata=metadata          # 부가 정보(견출지)
-        )
-        documents.append(doc)
+        # 메타데이터 정리 (견출지 붙이기)
+        m = item.get("metadata", {}).copy()
+        m["resume_id"] = resume_id
+        m["chunk_type"] = item.get("type", "unknown")
+        metadatas.append(m)
 
-    # -------------------------------------------------------
-    # 3-2. DB 연결 및 저장
-    # -------------------------------------------------------
-    # [문법] os.getenv: 환경 변수에서 DB 접속 정보를 가져옵니다. 보안을 위해 아이디/비번을 코드에 직접 적지 않습니다.
+    # 2. DB 연결 정보 및 임베딩 모델 준비 
+    # (add_embeddings를 써도 객체 생성을 위해 embedding_function 인자는 필요합니다.)
     connection_string = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
     
     import torch
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    embeddings = get_embedder(device) # 저장할 때도 텍스트를 숫자로 바꿀 똑같은 모델이 필요합니다.
+    embeddings_model = get_embedder(device)
 
     try:
-        # [개선] connection_string과 함께 engine을 전달하여 커넥션 풀 공유 보장
         from db import engine
-        vector_store = PGVector.from_documents(
-            documents,              # 1. 위치 인자
-            embeddings,             # 2. 위치 인자
-            collection_name="resume_all_embeddings",
+        # 3. PGVector 객체 생성 (기존 collection에 연결)
+        vector_store = PGVector(
             connection_string=connection_string,
-            connection=engine,      # engine 객체 전달로 세션 꼬임 방지
-            pre_delete_collection=False
+            connection=engine,
+            collection_name="resume_all_embeddings",
+            embedding_function=embeddings_model
         )
         
-        print(f"[STEP6] ✅ 총 {len(documents)}개의 조각이 DB에 저장되었습니다.")
+        # 4. 핵심: 다시 계산하지 않고 '이미 만든 숫자(vectors)'를 바로 저장!
+        vector_store.add_embeddings(
+            texts=texts,
+            embeddings=vectors,
+            metadatas=metadatas
+        )
+        
+        print(f"[STEP6] ✅ 고효율 모드로 {len(texts)}개의 조각을 DB에 저장 완료!")
 
     except Exception as e:
-        print(f"\n❌ DB 저장 실패: {e}")
+        print(f"\n❌ 고효율 DB 저장 실패: {e}")
 
 # -----------------------------------------------------------
 # [4. 메인 실행부] 
