@@ -7,7 +7,7 @@ import os
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 from langchain_core.output_parsers import JsonOutputParser
-from celery import shared_task
+from celery import shared_task, group, chain
 
 # DB Helper Functions
 from db import (
@@ -18,6 +18,7 @@ from db import (
     Company,
     Resume,
     Question,
+    Speaker,
     update_transcript_sentiment,
     update_transcript_scores,
     update_question_avg_score,
@@ -232,9 +233,58 @@ def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rub
 @shared_task(name="tasks.evaluator.generate_final_report")
 def generate_final_report(interview_id: int):
     """
-    최종 평가 보고서 생성 (시니어 면접관 페르소나 적용)
+    최종 평가 보고서 생성 프로세스 시작 (병렬화 적용)
+    1. 평가 안 된 답변들 취합
+    2. Celery group을 통해 병렬 평가 실행
+    3. 평가 완료 후 finalize_report_task 호출
     """
-    logger.info(f"Generating Final Report for Interview {interview_id}")
+    logger.info(f"🚀 Starting Final Report pipeline for Interview {interview_id}")
+    
+    try:
+        # 모든 답변 조회
+        transcripts = get_user_answers(interview_id) # API에 정의된 명칭 또는 DB 헬퍼 사용
+        if not transcripts:
+            # 답변이 하나도 없으면 바로 최종 단계로 (혹은 오류 처리)
+            return finalize_report_task.delay(None, interview_id)
+
+        subtasks = []
+        for t in transcripts:
+            # 점수가 없는 답변만 평가 대상으로 등록
+            if t.total_score is None or t.total_score == 0:
+                with Session(engine) as session:
+                    q = session.get(Question, t.question_id) if t.question_id else None
+                
+                if q:
+                    subtasks.append(
+                        analyze_answer.s(
+                            transcript_id=t.id,
+                            question_text=q.content,
+                            answer_text=t.text,
+                            rubric=q.rubric_json,
+                            question_id=t.id,
+                            question_type=q.question_type
+                        )
+                    )
+        
+        if subtasks:
+            logger.info(f"⛓️  Parallelizing {len(subtasks)} answer evaluations...")
+            # 병렬 실행 후 마지막에 리포트 마무리 태스크 연결 (Chain)
+            workflow = chain(group(subtasks), finalize_report_task.s(interview_id))
+            return workflow.apply_async()
+        else:
+            logger.info("✅ All answers already evaluated. Going straight to final report.")
+            return finalize_report_task.delay(None, interview_id)
+
+    except Exception as e:
+        logger.error(f"❌ Error initiating report pipeline: {e}")
+        return {"status": "error", "message": str(e)}
+
+@shared_task(name="tasks.evaluator.finalize_report_task")
+def finalize_report_task(prev_results, interview_id: int):
+    """
+    개별 답변 평가가 완료된 후 실행되는 최종 리포트 생성 로직 (시니어 면접관 페르소나)
+    """
+    logger.info(f"📝 Generating Final Report for Interview {interview_id}")
     from db import (
         Interview, 
         create_or_update_evaluation_report, 
@@ -243,39 +293,10 @@ def generate_final_report(interview_id: int):
     )
     
     try:
-        # [추가] 1. 개별 답변 선제적 평가 (평가 데이터가 없는 경우 한꺼번에 처리)
+        # [구조 개편으로 인해 기존 동기 루프 삭제 및 데이터 동기화]
         transcripts = get_interview_transcripts(interview_id)
-        user_transcripts = [t for t in transcripts if str(t.speaker).lower() in ('user', 'speaker.user')]
-        logger.info(f"🧐 Evaluating {len(user_transcripts)} individual answers before final report...")
-        
-        for t in user_transcripts:
-            # 이미 점수가 있는 경우는 스킵 (혹시나 중복 처리 방지용)
-            if t.sentiment_score is not None and t.sentiment_score != 0.0:
-                continue
-            
-            try:
-                # 질문 정보를 가져와서 루브릭과 함께 평가
-                with Session(engine) as session:
-                    q = session.get(Question, t.question_id) if t.question_id else None
-                    q_content = q.content if q else "관련 질문을 찾을 수 없습니다."
-                    q_rubric = q.rubric_json if q else None
-                    q_type = q.question_type if q else "unknown"
-                
-                logger.info(f"   - Evaluating Transcript {t.id} (Stage: {q_type})")
-                _analyze_answer_logic(
-                    transcript_id=t.id,
-                    question_text=q_content,
-                    answer_text=t.text,
-                    rubric=q_rubric,
-                    question_id=t.question_id,
-                    question_type=q_type
-                )
-            except Exception as e:
-                logger.error(f"   - Failed to evaluate transcript {t.id}: {e}")
+        logger.info(f"📊 Found {len(transcripts)} transcripts for Interview {interview_id}")
 
-        # 개별 평가 후 데이터 최신화를 위해 transcripts 다시 조회
-        transcripts = get_interview_transcripts(interview_id)
-        
         # 🧹 메모리 청소 (리포트 분석 전 공간 확보)
         import gc
         import torch

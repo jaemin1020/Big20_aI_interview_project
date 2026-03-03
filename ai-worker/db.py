@@ -19,13 +19,25 @@ import logging
 logger = logging.getLogger("AI-Worker-DB")
 
 
-# Database Connection
+# Database Connection (Optimized Pool)
 # ==========================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@db:5432/interview_db")
-# db ➔ localhost
-# 5432 ➔ 1543 (Main branch uses 15432, but keeping local default 5432)
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
 
-engine = create_engine(DATABASE_URL)
+# Connection Pool 설정 (백엔드 대용량 요청 대응과 일치시킴)
+# 60~120초씩 걸리는 AI 태스크 동안 연결이 끊기지 않도록 관리
+POOL_SIZE = int(os.getenv("DB_POOL_SIZE", 20))
+MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", 10))
+POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", 3600))
+
+engine = create_engine(
+    DATABASE_URL,
+    echo=DEBUG_MODE,
+    pool_pre_ping=True,      # 💡 Broken Pipe 방지 (연결 전 점검)
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
+    pool_recycle=POOL_RECYCLE
+)
 
 # Enums & Models (Imported from Backend Core)
 import sys

@@ -138,6 +138,8 @@ const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTrigge
     const [isSaving, setIsSaving] = useState(false);
     const [errors, setErrors] = useState({});
 
+    const today = new Date().toISOString().split('T')[0];
+
     const validate = () => {
         const newErrors = {};
         if (!name.trim()) newErrors.name = '이름은 필수 입력 항목입니다.';
@@ -145,6 +147,8 @@ const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTrigge
             newErrors.birthDate = '생년월일은 필수 입력 항목입니다.';
         } else if (birthDate.length < 10) {
             newErrors.birthDate = '생년월일을 올바르게 입력해주세요. (예: 1990-01-01)';
+        } else if (birthDate > today) {
+            newErrors.birthDate = '생년월일은 오늘 날짜 이전이어야 합니다.';
         }
         if (!email.trim()) {
             newErrors.email = '이메일은 필수 입력 항목입니다.';
@@ -397,19 +401,13 @@ const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTrigge
                             생년월일 <span style={{ color: '#ef4444' }}>*</span>
                         </label>
                         <input
-                            type="text"
+                            type="date"
+                            max={today}
                             value={birthDate}
                             onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, '');
-                                let result = '';
-                                if (val.length <= 4) result = val;
-                                else if (val.length <= 6) result = `${val.slice(0, 4)}-${val.slice(4)}`;
-                                else result = `${val.slice(0, 4)}-${val.slice(4, 6)}-${val.slice(6, 8)}`;
-                                setBirthDate(result);
+                                setBirthDate(e.target.value);
                                 if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: '' }));
                             }}
-                            placeholder="0000-00-00"
-                            maxLength={10}
                             style={{
                                 width: '100%',
                                 padding: '12px',
@@ -418,7 +416,8 @@ const ProfileManagementPage = ({ onBack, user, onSave, onDirtyChange, saveTrigge
                                 background: errors.birthDate ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.05)',
                                 color: 'var(--text-main)',
                                 outline: 'none',
-                                transition: 'border-color 0.2s'
+                                transition: 'border-color 0.2s',
+                                colorScheme: 'dark'
                             }}
                         />
                         {errors.birthDate && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '6px' }}>⚠ {errors.birthDate}</p>}

@@ -129,6 +129,10 @@ function App() {
   const isAcceptingSTTRef = useRef(false);
   const isLoadingRef = useRef(isLoading);
 
+  const ttsAbortControllerRef = useRef(null);
+  const nextQAbortControllerRef = useRef(null);
+  const reportAbortControllerRef = useRef(null);
+
   useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
@@ -401,8 +405,8 @@ function App() {
           break; // 질문이 있고 음성 주소도 준비됨
         }
 
-        console.log(`Questions or Audio not ready (attempt ${retryCount + 1}), retrying in 2s...`);
-        await new Promise(r => setTimeout(r, 2000));
+        console.log(`Questions or Audio not ready (attempt ${retryCount + 1}), retrying in 5s...`);
+        await new Promise(r => setTimeout(r, 5000));
         data = await getInterviewQuestions(newInterview.id);
         qs = data.questions || [];
         retryCount++;
@@ -661,7 +665,7 @@ function App() {
       setIsSttProcessing(false);            // 타임아웃 종료 시 처리 상태도 강제 해제
 
       if (!liveTranscriptRef.current.trim()) {
-        // [수정] 정말로 답변이 없는지 최종 확인 (서버 분석 중이면 더 기다림)
+        // [수정] 정말로 답변이 없는지 최종 확인 (답변 분석 중이면 더 기다림)
         if (isSttProcessingRef.current) {
           console.log('[STT Lock Delayed] Server is still processing. Skipping "No Content" lock.');
           resetFinalizeTimer();
@@ -749,8 +753,11 @@ function App() {
     let retries = 0;
 
     const interval = setInterval(async () => {
+      if (reportAbortControllerRef.current) reportAbortControllerRef.current.abort();
+      reportAbortControllerRef.current = new AbortController();
+
       try {
-        const finalReport = await getEvaluationReport(interviewId);
+        const finalReport = await getEvaluationReport(interviewId, reportAbortControllerRef.current.signal);
         // [버그1 수정] id=0은 백엔드가 "아직 생성 중"일 때 반환하는 임시 응답.
         // id가 1 이상인 경우에만 실제 DB에 저장된 리포트로 인식
         if (finalReport && finalReport.id > 0) {
@@ -762,6 +769,7 @@ function App() {
           console.log(`🔄 [pollReport] 아직 생성 중... (retry: ${retries + 1}/${maxRetries})`);
         }
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.warn("[pollReport] API 오류, 재시도 중...", err?.response?.status);
       }
 
@@ -771,7 +779,7 @@ function App() {
         clearInterval(interval);
         console.warn('[pollReport] 최대 재시도 횟수 초과. 폴링 종료.');
       }
-    }, 3000);
+    }, 5000); // 5초 간격으로 상향 (서버 부하 감소)
   };
 
   const finishInterview = async () => {
@@ -815,9 +823,12 @@ function App() {
     if (step !== 'interview' || !interview || !currentQuestion || currentQuestion.audio_url) return;
 
     const interval = setInterval(async () => {
+      if (ttsAbortControllerRef.current) ttsAbortControllerRef.current.abort();
+      ttsAbortControllerRef.current = new AbortController();
+
       console.log(`🔄 [TTS Polling] Fetching audio URL for Question index ${currentIdx + 1}...`);
       try {
-        const data = await getInterviewQuestions(interview.id);
+        const data = await getInterviewQuestions(interview.id, ttsAbortControllerRef.current.signal);
         const updatedQs = data.questions || [];
 
         // 현재 인덱스의 질문에 오디오 URL이 생겼는지 확인
@@ -827,11 +838,15 @@ function App() {
           clearInterval(interval);
         }
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error("[TTS Polling] Failed to fetch questions:", err);
       }
-    }, 2000); // 2초 간격으로 확인
+    }, 5000); // 5초 간격으로 상향 (서버 부하 감소)
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (ttsAbortControllerRef.current) ttsAbortControllerRef.current.abort();
+    };
   }, [step, currentIdx, interview]); // questions 제거: 타임스탬프 변경에 의한 불필요한 재실행 방지
 
   const nextQuestion = async () => {
@@ -891,43 +906,51 @@ function App() {
         console.log('[nextQuestion] Polling for next AI-generated question...');
         let foundNew = false;
         for (let i = 0; i < 60; i++) { // 2초 간격으로 60번 시도 (최대 2분으로 단축)
-          await new Promise(r => setTimeout(r, 2000));
-          const data = await getInterviewQuestions(interview.id);
-          const updatedQs = data.questions || [];
-          const currentStatus = data.status;
+          if (nextQAbortControllerRef.current) nextQAbortControllerRef.current.abort();
+          nextQAbortControllerRef.current = new AbortController();
 
-          // [핵심] 서버에서 면접이 종료되었다고 알려주면 즉시 루프 탈출
-          if (currentStatus === 'COMPLETED') {
-            console.log('[nextQuestion] Server signaled COMPLETED status. Finalizing.');
-            setQuestions(updatedQs);
-            foundNew = false; // 더 이상의 질문은 없음
-            break;
-          }
+          await new Promise(r => setTimeout(r, 5000)); // 5초 간격 (서버 부하 감소)
+          try {
+            const data = await getInterviewQuestions(interview.id, nextQAbortControllerRef.current.signal);
+            const updatedQs = data.questions || [];
+            const currentStatus = data.status;
 
-          const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
-          const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
-
-          if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
-            const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
-
-            // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
-            console.log("✅ [Next Question] New question ready. Showing immediately.");
-            setQuestions(updatedQs);
-            setCurrentIdx(prev => prev + 1);
-            setTranscript('');
-            liveTranscriptRef.current = '';
-            setIsAnswerFinished(false);
-            isAnswerFinishedRef.current = false;
-            setIsTranscriptLocked(false);
-            isTranscriptLockedRef.current = false; // 잠금 해제
-            isTranscriptSavedRef.current = false; // 저장 상태 초기화
-            foundNew = true;
-
-            // WebSocket으로 신규 질문 전환 알림
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+            // [핵심] 서버에서 면접이 종료되었다고 알려주면 즉시 루프 탈출
+            if (currentStatus === 'COMPLETED') {
+              console.log('[nextQuestion] Server signaled COMPLETED status. Finalizing.');
+              setQuestions(updatedQs);
+              foundNew = false; // 더 이상의 질문은 없음
+              break;
             }
-            break;
+
+            const lastQId = questions.length > 0 ? questions[questions.length - 1].id : null;
+            const newLastQId = updatedQs.length > 0 ? updatedQs[updatedQs.length - 1].id : null;
+
+            if (updatedQs.length > questions.length || (newLastQId !== null && newLastQId !== lastQId)) {
+              const nextIdx = questions.length; // 새로 추가된 질문의 인덱스
+
+              // [수정] audio_url 기다리지 않고 질문 텍스트 즉시 표시 (TTS는 백그라운드에서 생성됨)
+              console.log("✅ [Next Question] New question ready. Showing immediately.");
+              setQuestions(updatedQs);
+              setCurrentIdx(prev => prev + 1);
+              setTranscript('');
+              liveTranscriptRef.current = '';
+              setIsAnswerFinished(false);
+              isAnswerFinishedRef.current = false;
+              setIsTranscriptLocked(false);
+              isTranscriptLockedRef.current = false; // 잠금 해제
+              isTranscriptSavedRef.current = false; // 저장 상태 초기화
+              foundNew = true;
+
+              // WebSocket으로 신규 질문 전환 알림
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'next_question', index: nextIdx }));
+              }
+              break;
+            }
+          } catch (err) {
+            if (err.name === 'AbortError') continue;
+            console.error('Next question polling error:', err);
           }
         } // end for loop
 

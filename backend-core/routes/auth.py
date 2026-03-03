@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
-from datetime import datetime
+from datetime import datetime, date
 import logging
 
 from database import get_session
@@ -32,6 +32,21 @@ async def register(user_data: UserCreate, db: Session = Depends(get_session)):
 
     if not validate_email(user_data.email):
         raise HTTPException(status_code=400, detail="유효하지 않은 이메일 형식입니다.")
+
+    # 3. 생년월일 유효성 검사 (형식 + 미래 날짜 차단)
+    if user_data.birth_date:
+        try:
+            birth = date.fromisoformat(user_data.birth_date)
+            if birth > date.today():
+                raise HTTPException(
+                    status_code=400,
+                    detail="생년월일은 오늘 날짜 이전이어야 합니다."
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="생년월일 형식이 올바르지 않습니다. (YYYY-MM-DD)"
+            )
 
     # 2. 중복 확인 - 활성(비탈퇴) 계정만 대상으로 검사
     stmt = select(User).where(

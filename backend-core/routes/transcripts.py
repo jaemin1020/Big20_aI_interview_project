@@ -89,21 +89,28 @@ async def create_transcript(
             question = db.get(Question, transcript.question_id)
             if question:
                 # 1. 다음 질문 생성 태스크 즉시 트리거 (실시간성 확보가 최우선)
-                try:
-                    celery_app.send_task(
-                        "tasks.question_generation.generate_next_question",
-                        args=[transcript.interview_id],
-                        queue="gpu_queue"
-                    )
-                    logger.info(f"Celery task 'generate_next_question' sent for Interview {transcript.interview_id}")
-                except Exception as celery_err:
-                    # Celery 태스크 실패는 DB 저장 성공에 영향 주지 않음
-                    logger.warning(f"Celery task failed (non-critical): {celery_err}")
-            else:
-                logger.warning(f"No associated question found for transcript {transcript.id} (question_id={transcript.question_id})")
+                celery_app.send_task(
+                    "tasks.question_generation.generate_next_question",
+                    args=[transcript.interview_id],
+                    queue="gpu_queue"
+                )
 
-        return {"id": transcript.id, "status": "saved"}
-
+                # 2. [변경] 답변 분석 및 평가 요청은 전체 면접 종료 시점으로 미룹니다.
+                # (기존에는 실시간으로 analyze_answer를 호출했으나, 성능 최적화를 위해 generate_final_report에서 일괄 처리함)
+                # celery_app.send_task(
+                #     "tasks.evaluator.analyze_answer",
+                #     args=[
+                #         transcript.id,
+                #         question.content,
+                #         transcript.text,
+                #         question.rubric_json,
+                #         question.id,
+                #         question.question_type 
+                #     ],
+                #     queue="gpu_queue",
+                #     countdown=10
+                # )
+                logger.info(f"Triggered Next Question. Evaluation for transcript {transcript.id} is deferred to interview end.")
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Failed to save transcript: {str(e)}", exc_info=True)
