@@ -222,6 +222,11 @@ class VideoAnalysisTrack(MediaStreamTrack):
             score = self._score_question(self.current_q_data, self.current_q_index)
             if score:
                 self.questions_scores.append(score)
+                # [개선] 질문 전환 시 즉시 DB에 저장 (실시간성 확보)
+                try:
+                    self._send_behavior_scores(self.questions_scores)
+                except Exception as e:
+                    print(f"⚠️ [{self.session_id}] 실시간 점수 저장 실패: {e}", flush=True)
         
         self.current_q_index = new_index
         self.current_q_data = self._get_empty_q_data()
@@ -340,39 +345,60 @@ class VideoAnalysisTrack(MediaStreamTrack):
             print(f"   📊 시선(30%): {avg_gaze:.1f} | 음성(30%): {avg_audio:.1f} | 미소(15%): {avg_smile:.1f}")
             print(f"   📊 자세(15%): {avg_posture:.1f} | 정서(10%): {avg_emotion:.1f}")
             
-            # ── DB 저장 (backend-core로 HTTP 전송) ──
+            # [개선] 공용 전송 메서드 호출
             try:
-                import urllib.request
-                import json as json_lib
-                db_payload = {
-                    "per_question": self.questions_scores,
-                    "averages": {
-                        "gaze": round(avg_gaze, 1),
-                        "audio": round(avg_audio, 1),
-                        "smile": round(avg_smile, 1),
-                        "posture": round(avg_posture, 1),
-                        "emotion": round(avg_emotion, 1),
-                        "total": round(avg_total, 1)
-                    },
-                    "interview_duration_sec": int(time.time() - self.session_started_at),
-                    "total_questions": len(self.questions_scores)
-                }
-                backend_url = os.getenv("BACKEND_URL", "http://backend:8000")
-                req = urllib.request.Request(
-                    f"{backend_url}/interviews/{self.session_id}/behavior-scores",
-                    data=json_lib.dumps(db_payload).encode('utf-8'),
-                    headers={'Content-Type': 'application/json'},
-                    method='PATCH'
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    if resp.status == 200:
-                        print(f"   💾 DB 저장 완료! (interview_id={self.session_id})", flush=True)
-                    else:
-                        print(f"   ⚠️ DB 저장 실패: HTTP {resp.status}", flush=True)
+                self._send_behavior_scores(self.questions_scores)
+                print(f"   💾 최종 면접 리포트 DB 저장 시도 완료.", flush=True)
             except Exception as e:
                 print(f"   ⚠️ DB 저장 요청 실패: {e}", flush=True)
         else:
             print("   ⚠️ 채점된 질문이 없습니다.")
+
+    def _send_behavior_scores(self, scores_list):
+        """백엔드로 행동 분석 점수 전송 (실시간/최종 공용)"""
+        if not scores_list:
+            return
+        
+        try:
+            import urllib.request
+            import json as json_lib
+            
+            # 평균 계산
+            avg_gaze = sum(qs['gaze'] for qs in scores_list) / len(scores_list)
+            avg_audio = sum(qs['audio'] for qs in scores_list) / len(scores_list)
+            avg_smile = sum(qs['smile'] for qs in scores_list) / len(scores_list)
+            avg_posture = sum(qs['posture'] for qs in scores_list) / len(scores_list)
+            avg_emotion = sum(qs['emotion'] for qs in scores_list) / len(scores_list)
+            avg_total = sum(qs['total'] for qs in scores_list) / len(scores_list)
+
+            db_payload = {
+                "per_question": scores_list,
+                "averages": {
+                    "gaze": round(avg_gaze, 1),
+                    "audio": round(avg_audio, 1),
+                    "smile": round(avg_smile, 1),
+                    "posture": round(avg_posture, 1),
+                    "emotion": round(avg_emotion, 1),
+                    "total": round(avg_total, 1)
+                },
+                "interview_duration_sec": int(time.time() - self.session_started_at),
+                "total_questions": len(scores_list),
+                "is_final": False # 실시간 전송임을 알림 (백엔드 로깅용)
+            }
+            backend_url = os.getenv("BACKEND_URL", "http://backend:8000")
+            req = urllib.request.Request(
+                f"{backend_url}/interviews/{self.session_id}/behavior-scores",
+                data=json_lib.dumps(db_payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'},
+                method='PATCH'
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    print(f"   💾 [실시간] 질문 {scores_list[-1]['q_idx']} 점수 DB 저장 성공", flush=True)
+                else:
+                    print(f"   ⚠️ [실시간] DB 저장 실패: HTTP {resp.status}", flush=True)
+        except Exception as e:
+            print(f"   ⚠️ [실시간] DB 저장 요청 실패: {e}", flush=True)
         
         print("=" * 60 + "\n")
 

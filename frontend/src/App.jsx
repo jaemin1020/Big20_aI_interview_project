@@ -490,7 +490,7 @@ function App() {
 
               if (currentInterview && targetQuestion) {
                 console.log("[STT Background Save] Final transcript arrived. Saving to DB...");
-                createTranscript(currentInterview.id, 'User', updated, targetQuestion.id)
+                createTranscript(currentInterview.id, 'USER', updated, targetQuestion.id)
                   .then(() => {
                     isTranscriptSavedRef.current = true;
                     console.log("[STT Background Save] Success for Index:", currentIdxRef.current);
@@ -870,7 +870,7 @@ function App() {
       // [Fix] 이미 자동 저장되지 않은 경우에만 저장 시도
       if (!isTranscriptSavedRef.current) {
         console.log('[nextQuestion] Manual saving transcript for question ID:', targetQuestion.id);
-        await createTranscript(currentInterview.id, 'User', answerText || '답변 내용 없음', targetQuestion.id);
+        await createTranscript(currentInterview.id, 'USER', answerText || '답변 내용 없음', targetQuestion.id);
         isTranscriptSavedRef.current = true;
         console.log('[nextQuestion] Transcript saved successfully');
       } else {
