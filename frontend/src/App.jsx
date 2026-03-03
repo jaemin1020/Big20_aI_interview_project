@@ -665,7 +665,7 @@ function App() {
       setIsSttProcessing(false);            // 타임아웃 종료 시 처리 상태도 강제 해제
 
       if (!liveTranscriptRef.current.trim()) {
-        // [수정] 정말로 답변이 없는지 최종 확인 (서버 분석 중이면 더 기다림)
+        // [수정] 정말로 답변이 없는지 최종 확인 (답변 분석 중이면 더 기다림)
         if (isSttProcessingRef.current) {
           console.log('[STT Lock Delayed] Server is still processing. Skipping "No Content" lock.');
           resetFinalizeTimer();
