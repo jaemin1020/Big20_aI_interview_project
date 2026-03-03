@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlmodel import Session
 from sqlalchemy.orm import attributes
 from typing import Optional
+from datetime import date
 import base64
 import os
 import json
@@ -47,6 +48,19 @@ async def update_users_me(
     if full_name is not None:
         db_user.full_name = full_name
     if birth_date is not None:
+        # 미래 날짜 차단
+        try:
+            birth = date.fromisoformat(birth_date)
+            if birth > date.today():
+                raise HTTPException(
+                    status_code=400,
+                    detail="생년월일은 오늘 날짜 이전이어야 합니다."
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="생년월일 형식이 올바르지 않습니다. (YYYY-MM-DD)"
+            )
         db_user.birth_date = birth_date
     if email is not None:
         db_user.email = email
