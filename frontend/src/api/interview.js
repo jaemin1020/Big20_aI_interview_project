@@ -72,8 +72,8 @@ export const createInterview = async (position, jobPostingId = null, resumeId = 
     return response.data;
 };
 
-export const getInterviewQuestions = async (interviewId) => {
-    const response = await api.get(`/interviews/${interviewId}/questions`);
+export const getInterviewQuestions = async (interviewId, signal) => {
+    const response = await api.get(`/interviews/${interviewId}/questions`, { signal });
     return response.data;
 };
 
@@ -114,8 +114,8 @@ export const getInterviewTranscripts = async (interviewId) => {
 
 // ==================== Evaluation ====================
 
-export const getEvaluationReport = async (interviewId) => {
-    const response = await api.get(`/interviews/${interviewId}/report`);
+export const getEvaluationReport = async (interviewId, signal) => {
+    const response = await api.get(`/interviews/${interviewId}/report`, { signal });
     return response.data;
 };
 
@@ -125,7 +125,8 @@ export const uploadResume = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await api.post('/resumes/upload', formData, {
+    // ✅ Add /api prefix to match backend router prefix
+    const response = await api.post('/api/resumes/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data'
         }
@@ -134,7 +135,8 @@ export const uploadResume = async (file) => {
 };
 
 export const getResume = async (resumeId) => {
-    const response = await api.get(`/resumes/${resumeId}`);
+    // ✅ Add /api prefix to match backend router prefix
+    const response = await api.get(`/api/resumes/${resumeId}`);
     return response.data;
 };
 

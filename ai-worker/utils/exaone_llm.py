@@ -56,8 +56,8 @@ class ExaoneLLM(LLM):
         else:
             target_path = MODEL_PATH
 
-        # Context window 설정 (기본 16384로 상향 - 대규모 면접 리포트 대응)
-        n_ctx = int(os.getenv("N_CTX", "16384"))
+        # Context window 설정 (32768로 확장 - EXAONE 3.5 학습 설정과 일치시켜 기억력 극대화)
+        n_ctx = int(os.getenv("N_CTX", "32768"))
         
         try:
             # 🚨 CPU 환경에서 CUDA 빌드된 llama-cpp 로딩 시 발생하는 크래시 방지를 위해 지연 임포트

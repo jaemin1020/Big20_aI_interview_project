@@ -90,7 +90,7 @@ async def upload_resume(
     # 비동기 파싱 및 처리 파이프라인 전송 (Celery)
     try:
         celery_app.send_task(
-            "parse_resume_pdf",
+            "tasks.resume_pipeline.parse_pdf",
             args=[resume.id, file_path],
             queue='cpu_queue'
         )
@@ -239,7 +239,7 @@ async def reprocess_resume(
     # 재처리 작업 전송
     try:
         celery_app.send_task(
-            "parse_resume_pdf",
+            "tasks.resume_pipeline.parse_pdf",
             args=[resume_id, resume.file_path],
             queue='gpu_queue'
         )

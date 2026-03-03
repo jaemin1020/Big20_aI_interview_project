@@ -27,7 +27,7 @@ logger.info("✅ Task Module 'tasks.resume_pipeline' is being loaded.")
 
 # [문법] bind=True: 이 함수가 Celery 작업 자체의 속성(예: 재시도 횟수 등)에 접근할 수 있게 'self'를 첫 번째 인자로 받습니다.
 # [문법] queue='cpu_queue': 이 작업은 연산량이 많으므로 'CPU 전용 일꾼'에게만 시키겠다는 명시적인 지정입니다.
-@shared_task(bind=True, name="parse_resume_pdf", queue='cpu_queue')
+@shared_task(bind=True, name="tasks.resume_pipeline.parse_pdf", queue='cpu_queue')
 def parse_resume_pdf(self, resume_id: int, file_path: str):
     """
     이력서 PDF를 읽어 DB에 저장하고, 다음 AI 단계로 넘기는 '공장장' 함수
@@ -97,9 +97,9 @@ def parse_resume_pdf(self, resume_id: int, file_path: str):
         # [해석] 파싱이 끝났으니, 이제 이걸 벡터 데이터로 바꿀 'GPU 전용 일꾼'에게 일을 넘깁니다.
         # [문법] send_task: 다른 파일에 정의된 Celery 작업을 이름만으로 호출할 수 있습니다.
         current_app.send_task(
-            "tasks.resume_embedding.generate_resume_embeddings",
+            "tasks.resume_pipeline.generate_embeddings",
             args=[resume_id],
-            queue='gpu_queue' # 이건 연산이 빡세니 GPU 서버가 처리해! 라고 지정함
+            queue='gpu_queue' # 임베딩은 GPU 서버가 처리
         )
         logger.info(f"➡️ [NEXT] Sent embedding task for Resume {resume_id}")
 
