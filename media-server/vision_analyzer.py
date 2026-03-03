@@ -12,7 +12,7 @@ logger = logging.getLogger("Vision-Analyzer")
 # [설정] PoC와 동일한 분석 민감도 (상수)
 GAZE_TOLERANCE_X = 0.08  # 시선 좌우 허용치
 GAZE_TOLERANCE_Y = 0.08  # 시선 상하 허용치
-HEAD_SENSITIVITY = 0.008 # 고개 끄덕임 민감도
+HEAD_SENSITIVITY = 0.04 # 고개 끄덕임 민감도 (기존 0.008에서 완화)
 
 class VisionAnalyzer:
     _instance = None
@@ -115,9 +115,9 @@ class VisionAnalyzer:
             chin = landmarks[152]
             pitch_val = chin.z - nose_tip.z 
             
-            # 영점 대비 오차 확인 (PoC 임계값 적용)
-            is_posture_stable = abs(eye_diff - self.calibrated_eye_diff) < 0.04 and \
-                               abs(tilt_diff - self.calibrated_tilt_diff) < 0.03
+            # 영점 대비 오차 확인 (PoC 임계값 적용 - 기준 완화)
+            is_posture_stable = abs(eye_diff - self.calibrated_eye_diff) < 0.08 and \
+                               abs(tilt_diff - self.calibrated_tilt_diff) < 0.06
             is_head_straight = abs(pitch_val - self.calibrated_pitch) < HEAD_SENSITIVITY
             
             posture_label = "안정"
@@ -127,6 +127,7 @@ class VisionAnalyzer:
             # 3. 감정 분석 (Blendshapes)
             bs_map = {b.category_name: b.score for b in blendshapes_list}
             smile_score = (bs_map.get('mouthSmileLeft', 0) + bs_map.get('mouthSmileRight', 0)) / 2
+            frown_score = (bs_map.get('mouthFrownLeft', 0) + bs_map.get('mouthFrownRight', 0)) / 2
             brow_down_score = (bs_map.get('browDownLeft', 0) + bs_map.get('browDownRight', 0)) / 2
             
             emotion_label = "평온"
@@ -142,6 +143,7 @@ class VisionAnalyzer:
                 },
                 "scores": {
                     "smile": round(smile_score, 3),
+                    "frown": round(frown_score, 3),
                     "anxiety": round(brow_down_score, 3),
                     "pitch": round(pitch_val, 4),
                     "eye_diff": round(eye_diff, 4),
