@@ -178,17 +178,18 @@ class VideoAnalysisTrack(MediaStreamTrack):
         if not v:
             return None
         
-        # 영상 점수 (보정된 40~100 스케일)
+        # [보정] _calculate_scores에서 계산된 60점 베이스 점수들을 그대로 사용
         val_smile = v['avg_smile']
         val_gaze = v['gaze_ratio']
         val_posture = v['posture_ratio']
-        val_emotion = ((100 - v['avg_anxiety']) * 0.6) + 40
+        # _calculate_scores 내부의 adj_emotion 값 추출 (v['score_emotion']는 가중치 0.2가 곱해진 상태)
+        val_emotion = v['score_emotion'] / 0.2 if v['score_emotion'] else 60.0
         
         # 음성 점수 (해당 질문 동안의 평균)
         q_audio = q_data.get("audio_scores", [])
         val_audio = sum(q_audio) / len(q_audio) if q_audio else 0
         
-        # 가중합 (시선30, 음성30, 미소15, 자세15, 정서10)
+        # 가중합 (시선30, 음성30, 미소15, 자세15, 정서10) - POC 가중치 준수
         q_total = (
             (val_gaze * 0.30) +
             (val_audio * 0.30) +
@@ -261,23 +262,26 @@ class VideoAnalysisTrack(MediaStreamTrack):
         gaze_ratio = (total_gaze_center / total_frames) * 100
         posture_ratio = (total_posture_stable / total_frames) * 100
 
-        # [보정] POC 수식은 너무 엄격함 (미소가 0이면 자신감 0점 처리됨)
-        # 면접 문맥에 맞게 보정: (평균 점수 * 0.6) + 40 (기본 40점 베이스)
-        
-        # 1. 자신감 (미소): 무표정(0%)일 때 40점, 활짝(100%)일 때 100점
-        adj_smile = (avg_smile * 0.6) + 40
+        # [보정] 사용자의 "평균 60점" 및 "중심 60점" 요청 반영
+        # 1. 자신감 (미소): 무표정(0%)일 때 60점, 활짝(100%)일 때 100점
+        adj_smile = (avg_smile * 0.4) + 60
         score_conf = adj_smile * 0.3
         
-        # 2. 시선집중: 정면 응시 비율에 따라 40~100점
-        adj_focus = (gaze_ratio * 0.6) + 40
+        # 2. 시선집중: 0% -> 60점, 100% -> 100점
+        adj_focus = (gaze_ratio * 0.4) + 60
         score_focus = adj_focus * 0.3
         
-        # 3. 자세안정: 40~100점
-        adj_posture = (posture_ratio * 0.6) + 40
+        # 3. 자세안정: 0% -> 60점, 100% -> 100점
+        adj_posture = (posture_ratio * 0.4) + 60
         score_posture = adj_posture * 0.2
         
-        # 4. 정서안정: 긴장도(anxiety)가 0일 때 100점, 100일 때 40점
-        adj_emotion = ((100 - avg_anxiety) * 0.6) + 40
+        # 4. 정서안정 (중심 60점 체계): 
+        # 무표정/평온(smile/anxiety 0) -> 60점
+        # 미소(+) 가점, 찡그림(-) 감점
+        # (smile * 0.4) + (100 - anxiety) * 0.4 -> 0,0 일때 40이 됨.
+        # 따라서 base 60에서 smile은 더하고 anxiety는 뺌
+        raw_emotion = 60 + (avg_smile * 0.4) - (avg_anxiety * 0.4)
+        adj_emotion = min(max(raw_emotion, 20), 100) # 20~100 제한
         score_emotion = adj_emotion * 0.2
         
         overall_score = score_conf + score_focus + score_posture + score_emotion
@@ -580,28 +584,62 @@ async def start_remote_stt(track, session_id):
             duration_s = len(frames) * 20 / 1000
             logger.info(f"[{sid}] 📤 STT 전송: {duration_s:.1f}초 오디오 ({len(wav_bytes)} bytes)")
 
-            # 2. 오디오 자신감 점수 계산
+            # 2. 오디오 자신감 점수 계산 (dB 스케일 반영)
             try:
-                audio_np = np.frombuffer(wav_bytes[44:], dtype=np.int16).astype(np.float32) / 32768.0  # 44바이트 WAV 헤더 skip
+                import math
+                audio_np = np.frombuffer(wav_bytes[44:], dtype=np.int16).astype(np.float32) / 32768.0
                 if len(audio_np) > 0:
-                    volume_rms = np.sqrt(np.mean(audio_np**2))
-                    if volume_rms > 0.02:
-                        volume_score = min(max((volume_rms - 0.02) / (0.15 - 0.02) * 60 + 40, 40), 100)
-                        speaking_ratio = np.count_nonzero(np.abs(audio_np) > 0.02) / len(audio_np)
-                        speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
-                        confidence_score = (volume_score * 0.5) + (speed_score * 0.5)
-                        feedback_msg = (
-                            "👍 아주 좋습니다! (자신감 넘침)" if confidence_score >= 70 else
-                            "👌 안정적입니다. (무난함)" if confidence_score >= 60 else
-                            "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
-                        )
-                        logger.info(
-                            f"[{sid}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
-                            f"(🔊RMS:{volume_rms:.4f}, 🐇발화율:{speaking_ratio:.2f})"
-                        )
-                        if sid in active_video_tracks:
-                            active_video_tracks[sid].audio_scores.append(confidence_score)
-                            active_video_tracks[sid].current_q_data["audio_scores"].append(confidence_score)
+                    # [최종 고도화] 윈도우 기반 정밀 에너지 측정 (Spike 및 Noise 내성 확보)
+                    # 20ms 단위로 에너지를 계산하고, 상위 에너지를 추출하여 평균 산출
+                    window_size = 320 # 20ms at 16kHz
+                    num_windows = len(audio_np) // window_size
+                    if num_windows > 0:
+                        # 윈도우별 RMS 계산
+                        windows = audio_np[:num_windows * window_size].reshape(-1, window_size)
+                        window_rms = np.sqrt(np.mean(windows**2, axis=1))
+                        
+                        # 상위 30%의 에너지만 추출 (실제 발화 구간의 대표 에너지)
+                        top_n = max(1, int(num_windows * 0.3))
+                        top_rms_values = np.sort(window_rms)[-top_n:]
+                        volume_rms = np.mean(top_rms_values)
+                        
+                        # 발화 비율 (실제 발화라 판단되는 윈도우 비율 : -45dB 이상)
+                        # -45dB = 10^(-45/20) approx 0.0056
+                        active_windows = np.count_nonzero(window_rms > 0.0056)
+                        speaking_ratio = active_windows / num_windows
+                    else:
+                        volume_rms = 1e-6
+                        speaking_ratio = 0.0
+
+                    # dB 계산
+                    volume_db = 20 * math.log10(max(volume_rms, 1e-6))
+                    
+                    # [변별력 강화] -50dB ~ -15dB 범위를 40 ~ 100점으로 매핑
+                    db_score = (volume_db + 50) / 35 * 60 + 40
+                    volume_score = min(max(db_score, 20), 100)
+                    
+                    # 발화 비율 점수 (0% -> 40점, 20% 이상 -> 100점)
+                    speed_score = min(max(speaking_ratio / 0.20 * 60 + 40, 40), 100)
+                    
+                    # 신뢰도 보정: 발화 비율이 너무 낮으면(잡음만 있는 경우) 볼륨 점수 강제 무효화
+                    if speaking_ratio < 0.02: # 2% 미만 발화
+                        volume_score = min(volume_score, 40)
+                        confidence_score = 30
+                    else:
+                        confidence_score = (volume_score * 0.6) + (speed_score * 0.4)
+                        
+                    feedback_msg = (
+                        "👍 아주 좋습니다! (자신감 넘침)" if confidence_score >= 80 else
+                        "👌 안정적입니다. (무난함)" if confidence_score >= 65 else
+                        "⚠️ 조금 더 크게 말씀해 보세요. (소극적)"
+                    )
+                    logger.info(
+                        f"[{sid}] 🎙️ 자신감 {confidence_score:4.1f}점 | {feedback_msg} "
+                        f"(🔊dB:{volume_db:.1f}, 🐇발화율:{speaking_ratio:.2f})"
+                    )
+                    if sid in active_video_tracks:
+                        active_video_tracks[sid].audio_scores.append(confidence_score)
+                        active_video_tracks[sid].current_q_data["audio_scores"].append(confidence_score)
             except Exception as e:
                 logger.warning(f"[{sid}] 오디오 자신감 분석 실패 (무시됨): {e}")
 

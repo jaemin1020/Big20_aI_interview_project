@@ -220,7 +220,7 @@ class Transcript(SQLModel, table=True):
     text: str
     timestamp: datetime = Field(default_factory=datetime.now)
     # 감정 분석 결과
-    sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
+    sentiment_score: Optional[float] = None  # 0-100 (행동/자신감 점수)
     # JSONB는 키 순서를 보장하지 않으므로 순서 보존이 중요한 경우 JSON 사용
     emotion: Optional[Dict[str, Any]] = Field(
         default=None,

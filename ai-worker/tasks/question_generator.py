@@ -420,7 +420,7 @@ def generate_next_question_task(self, interview_id: int):
                     .where(
                         Transcript.interview_id == interview_id,
                         Transcript.speaker != Speaker.AI,
-                        Transcript.total_score.isnot(None),
+                        Transcript.sentiment_score.isnot(None),
                     )
                     .order_by(Transcript.id.desc())
                     .limit(LOW_SCORE_CONSECUTIVE)
@@ -429,7 +429,7 @@ def generate_next_question_task(self, interview_id: int):
                 is_low_score_streak = (
                     len(user_transcripts_scored) >= LOW_SCORE_CONSECUTIVE
                     and all(
-                        (t.total_score or 0) < LOW_SCORE_THRESHOLD
+                        (t.sentiment_score or 0) < LOW_SCORE_THRESHOLD
                         for t in user_transcripts_scored
                     )
                 )
@@ -470,7 +470,7 @@ def generate_next_question_task(self, interview_id: int):
                         " [지원자 지원 모드] 지원자가 여러 차례 답변에 어려움을 겪고 있습니다."
                         " 이번 질문은 난이도를 한 단계 낮추어 생성하십시오."
                         " 반드시 질문 문장 앞에 '천천히 답변하셔도 괜찮습니다, 너무 긴장하지 마세요.' 와 같은"
-                        " 자연스러운 격려 문장을 먼저 포함하고, 그 뒤에 쉽고 간결한 질문을 이어가십시오."
+                        " 자연스러운 격려 문장을 먼저 포함하고, 그 뒤에 답변하기 쉬운 간결한 질문을 이어가십시오."
                     )
                     logger.info(
                         f"🧊 [ICE-BREAK] {LOW_SCORE_CONSECUTIVE}회 연속 저점수 감지 "

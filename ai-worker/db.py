@@ -153,8 +153,8 @@ def update_transcript_sentiment(
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
-            # [수정] 행동 분석 데이터(media-server)가 이미 저장된 경우 덮어쓰지 않음
-            # media-server는 0-100점대를 저장하고, ai-worker는 -0.5~0.5를 저장하므로 구분 필요
+            # [수정] 행동 분석 데이터(media-server) 저장 필드 (0-100점대 고정)
+            # 이전의 -0.5~0.5 감성 분석 로직은 폐기됨
             if transcript.sentiment_score is None:
                 transcript.sentiment_score = sentiment_score
             
