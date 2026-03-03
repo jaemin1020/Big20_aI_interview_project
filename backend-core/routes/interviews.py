@@ -561,7 +561,7 @@ async def save_behavior_scores(
             q_idx = q_score.get("q_idx", -1)
             # q_idx는 0부터 시작하는 질문 순번 → user_transcripts 리스트의 인덱스와 대응
             if 0 <= q_idx < len(user_transcripts):
-                user_transcripts[q_idx].emotion = json_lib.dumps(q_score, ensure_ascii=False)
+                user_transcripts[q_idx].emotion = q_score
                 user_transcripts[q_idx].sentiment_score = q_score.get("total")
                 db.add(user_transcripts[q_idx])
                 logger.info(f"  📝 Q{q_idx} → transcript[{user_transcripts[q_idx].id}].emotion 저장")

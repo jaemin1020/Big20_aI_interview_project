@@ -117,8 +117,8 @@ def update_question_avg_score(question_id: int, new_score: float):
 
 def update_transcript_sentiment(
     transcript_id: int,
-    sentiment_score: float,
-    emotion: str,
+    sentiment_score: Optional[float] = None,
+    emotion: Optional[Any] = None,
     total_score: Optional[float] = None,
     rubric_score: Optional[Dict[str, Any]] = None
 ):
@@ -141,8 +141,10 @@ def update_transcript_sentiment(
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
-            transcript.sentiment_score = sentiment_score
-            transcript.emotion = emotion
+            if sentiment_score is not None:
+                transcript.sentiment_score = sentiment_score
+            if emotion is not None:
+                transcript.emotion = emotion
             if total_score is not None:
                 transcript.total_score = total_score
             if rubric_score is not None:
