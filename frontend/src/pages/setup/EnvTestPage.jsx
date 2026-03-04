@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import PremiumButton from '../../components/ui/PremiumButton';
 import { recognizeAudio } from '../../api/interview';
+import * as faceapi from 'face-api.js';
 
 const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const step = envTestStep;
@@ -19,8 +20,31 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
   const [videoStream, setVideoStream] = useState(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
 
+  const isModelLoadedRef = useRef(false);
+  const detectAnimationFrameRef = useRef(null);
+
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+
+  // Load face-api models on mount
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights');
+        isModelLoadedRef.current = true;
+        console.log("face-api models loaded.");
+      } catch (err) {
+        console.error("Face-api model load failed:", err);
+      }
+    };
+    loadModels();
+
+    return () => {
+      if (detectAnimationFrameRef.current) {
+        cancelAnimationFrame(detectAnimationFrameRef.current);
+      }
+    };
+  }, []);
 
   // 1. Audio Stream & Visualization Setup
   useEffect(() => {
@@ -167,10 +191,28 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
       setVideoStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
 
-      // Simulate Face Detection
-      setTimeout(() => {
-        setIsFaceDetected(true);
-      }, 2000);
+      const detectFace = async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2 || !isModelLoadedRef.current) {
+          detectAnimationFrameRef.current = requestAnimationFrame(detectFace);
+          return;
+        }
+
+        try {
+          const detections = await faceapi.detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions());
+          if (detections.length > 0) {
+            // 얼굴이 인식되면 루프 종료 및 상태 변경
+            setIsFaceDetected(true);
+          } else {
+            // 얼굴이 없으면 다음 프레임에서 계속 확인
+            detectAnimationFrameRef.current = requestAnimationFrame(detectFace);
+          }
+        } catch (err) {
+          console.warn("Face-api detection error:", err);
+          detectAnimationFrameRef.current = requestAnimationFrame(detectFace);
+        }
+      };
+
+      detectFace(); // 감지 시작
     } catch (err) {
       console.error("Camera access failed:", err);
       sessionStorage.setItem('env_video_ok', 'false'); // 카메라 접근 실패 시 명시적 실패 저장
@@ -184,6 +226,9 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
     return () => {
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
+      }
+      if (detectAnimationFrameRef.current) {
+        cancelAnimationFrame(detectAnimationFrameRef.current);
       }
     };
   }, [step]);
@@ -307,39 +352,6 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             </PremiumButton>
           </div>
 
-          {/* 원격 환경 등 특수 상황을 위한 건너뛰기 버튼 */}
-          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-            <button
-              onClick={() => {
-                sessionStorage.setItem('env_audio_ok', 'true');
-                sessionStorage.setItem('env_video_ok', 'true');
-                if (audioStream) audioStream.getTracks().forEach(track => track.stop());
-                onNext();
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '8px',
-                color: 'var(--text-muted)',
-                padding: '8px 20px',
-                fontSize: '0.82rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                letterSpacing: '0.03em',
-                transition: 'all 0.3s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                e.currentTarget.style.color = 'var(--text-main)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.color = 'var(--text-muted)';
-              }}
-            >
-              ⚠️ 장비 테스트 없이 시작하기 (원격/바이패스)
-            </button>
-          </div>
         </GlassCard>
       </div>
     );
@@ -369,8 +381,8 @@ const EnvTestPage = ({ onNext, envTestStep, setEnvTestStep }) => {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: '200px',
-            height: '250px',
+            width: '300px',
+            height: '380px',
             border: isFaceDetected ? '3px solid #10b981' : '2px solid var(--secondary)', // Green if detected
             borderRadius: '50%',
             pointerEvents: 'none',
