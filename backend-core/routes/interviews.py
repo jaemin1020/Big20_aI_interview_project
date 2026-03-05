@@ -405,16 +405,17 @@ async def save_behavior_scores(
         user_transcripts = db.exec(
             select(Transcript).where(
                 Transcript.interview_id == interview_id,
-                Transcript.speaker == SpeakerEnum.USER
+                Transcript.speaker == Speaker.USER
             ).order_by(Transcript.id)
         ).all()
 
-        for i, q_score in enumerate(per_question):
-            if i < len(user_transcripts):
-                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
-                user_transcripts[i].sentiment_score = q_score.get("total")
-                db.add(user_transcripts[i])
-                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+        for q_score in per_question:
+            q_idx = q_score.get("q_idx")
+            if q_idx is not None and 0 <= q_idx < len(user_transcripts):
+                user_transcripts[q_idx].emotion = q_score
+                user_transcripts[q_idx].sentiment_score = q_score.get("total")
+                db.add(user_transcripts[q_idx])
+                logger.info(f"  📝 Q{q_idx} → transcript[{user_transcripts[q_idx].id}].emotion 저장")
 
     db.commit()
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
