@@ -153,13 +153,18 @@ def update_transcript_sentiment(
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
-            # [삭제] AI 전용 감정/감성 점수 저장을 중단하여 영상 분석 결과(behavior scoring)가 덮어씌워지는 현상 방지
-            # transcript.sentiment_score = sentiment_score
-            # transcript.emotion = emotion
+            # [수정] 행동 분석 데이터(media-server) 저장 필드 (0-100점대 고정)
+            # 이전의 -0.5~0.5 감성 분석 로직은 폐기됨
+            if transcript.sentiment_score is None:
+                transcript.sentiment_score = sentiment_score
             
-            if total_score is not None:
+            if transcript.emotion is None:
+                # JSONB 컬럼이므로 딕셔너리로 저장 권장
+                transcript.emotion = {"label": emotion} if isinstance(emotion, str) else emotion
+                
+            if total_score is not None and transcript.total_score is None:
                 transcript.total_score = total_score
-            if rubric_score is not None:
+            if rubric_score is not None and transcript.rubric_score is None:
                 transcript.rubric_score = rubric_score
             session.add(transcript)
             session.commit()

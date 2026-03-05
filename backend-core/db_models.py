@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Column, Relationship
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT, JSON
 from pgvector.sqlalchemy import Vector  # pgvector 지원
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -31,7 +31,7 @@ class QuestionDifficulty(str, Enum):
 
 class Speaker(str, Enum):
     AI = "AI"
-    USER = "User"
+    USER = "USER"
 
 # ==================== Tables ====================
 
@@ -219,12 +219,12 @@ class Transcript(SQLModel, table=True):
     speaker: Speaker
     text: str
     timestamp: datetime = Field(default_factory=datetime.now)
-
     # 감정 분석 결과
-    sentiment_score: Optional[float] = None  # -1.0 ~ 1.0
+    sentiment_score: Optional[float] = None  # 0-100 (행동/자신감 점수)
+    # JSONB는 키 순서를 보장하지 않으므로 순서 보존이 중요한 경우 JSON 사용
     emotion: Optional[Dict[str, Any]] = Field(
         default=None,
-        sa_column=Column(JSONB)
+        sa_column=Column(JSON)
     )
 
     # 메타데이터

@@ -400,24 +400,59 @@ async def save_behavior_scores(
     interview.overall_score = averages.get("total")
     db.add(interview)
 
-    per_question = request.get("per_question", [])
-    if per_question:
-        user_transcripts = db.exec(
-            select(Transcript).where(
-                Transcript.interview_id == interview_id,
-                Transcript.speaker == Speaker.USER
-            ).order_by(Transcript.id)
-        ).all()
+    # 해당 인터뷰의 모든 AI 발화 기록을 가져와 q_idx와 question_id 매핑 생성
+    ai_transcripts = db.exec(
+        select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.speaker == Speaker.AI
+        ).order_by(Transcript.id)
+    ).all()
+    
+    # AI 발화의 순서(order)를 기준으로 q_idx 매핑 (AI 발화는 보통 0부터 시작하거나 시나리오 순서를 따름)
+    q_id_map = {i: t.question_id for i, t in enumerate(ai_transcripts)}
+    logger.info(f"📍 q_id_map generated: {q_id_map}")
 
-        for q_score in per_question:
-            q_idx = q_score.get("q_idx")
-            if q_idx is not None and 0 <= q_idx < len(user_transcripts):
-                user_transcripts[q_idx].emotion = q_score
-                user_transcripts[q_idx].sentiment_score = q_score.get("total")
-                db.add(user_transcripts[q_idx])
-                logger.info(f"  📝 Q{q_idx} → transcript[{user_transcripts[q_idx].id}].emotion 저장")
+    per_question = request.get("per_question", [])
+    updated_count = 0
+
+    for q_score in per_question:
+        q_idx = q_score.get("q_idx")
+        target_q_id = q_id_map.get(q_idx)
+        
+        if target_q_id is None:
+            logger.warning(f"⚠️ q_idx {q_idx}에 해당하는 AI 질문을 찾을 수 없습니다. (매핑 실패)")
+            continue
+
+        # 해당 question_id를 가진 사용자 발화 기록 조회
+        # DB Enum이 'USER'이므로 정확히 매칭됩니다.
+        user_ts_stmt = select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.question_id == target_q_id,
+            Transcript.speaker == Speaker.USER
+        )
+        user_ts = db.exec(user_ts_stmt).first()
+
+        if user_ts:
+            # 사용자가 요청한 순서와 필드를 그대로 유지하여 저장
+            user_ts.emotion = {
+                "q_idx": q_idx,
+                "gaze": q_score.get("gaze"),
+                "audio": q_score.get("audio"),
+                "smile": q_score.get("smile"),
+                "posture": q_score.get("posture"),
+                "emotion": q_score.get("emotion"),
+                "total": q_score.get("total"),
+                "frames": q_score.get("frames")
+            }
+            user_ts.sentiment_score = q_score.get("total")
+            db.add(user_ts)
+            updated_count += 1
+            logger.info(f"✅ Q{q_idx} (PID:{target_q_id}) → Transcript ID {user_ts.id} 점수 저장 성공")
+        else:
+            logger.warning(f"⚠️ Q{q_idx} (PID:{target_q_id})에 해당하는 사용자(USER) 답변 기록을 찾지 못했습니다.")
 
     db.commit()
+    logger.info(f"🏁 [behavior-scores] {updated_count}개의 대화 기록 업데이트 완료 (Interview: {interview_id})")
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
     return {"status": "saved", "interview_id": interview_id}
 
@@ -510,6 +545,10 @@ async def get_evaluation_report(
 
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
+
+    # 행동 분석(영상) 요약 필드 - details_json에서 최상위 레벨로 노출
+    report_dict["major_emotion"] = details.get("major_emotion", "안정적")
+    report_dict["avg_behavior_score"] = details.get("avg_behavior_score", 0)
 
     return report_dict
 
