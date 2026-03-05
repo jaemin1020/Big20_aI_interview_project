@@ -480,6 +480,14 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
                     # 사용자 요청 문구 반영
                     result["strengths"].append("자신감이 좋고 시선 처리가 안정적입니다. 자세가 반듯하고 안정감 있게 유지되어 면접관에게 신뢰감을 줍니다.")
 
+            elif 60 <= avg_behavior < 70:
+                major_emotion = "안정적"
+                if "strengths" in result and isinstance(result["strengths"], list):
+                    result["strengths"].append(
+                        "전반적으로 안정된 태도를 유지하였습니다. 긴장 없이 차분하게 답변하는 모습이 "
+                        "면접관에게 성실하고 신뢰감 있는 인상을 주었습니다."
+                    )
+
             overall = ensure_int(result.get("overall_score"), int((tech + comm + cult) / 3))
 
             # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
