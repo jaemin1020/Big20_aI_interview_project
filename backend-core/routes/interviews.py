@@ -546,6 +546,10 @@ async def get_evaluation_report(
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
 
+    # 행동 분석(영상) 요약 필드 - details_json에서 최상위 레벨로 노출
+    report_dict["major_emotion"] = details.get("major_emotion", "안정적")
+    report_dict["avg_behavior_score"] = details.get("avg_behavior_score", 0)
+
     return report_dict
 
 # 실시간 대화형 면접 API
