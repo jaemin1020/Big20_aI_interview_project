@@ -153,8 +153,10 @@ def update_transcript_sentiment(
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
         if transcript:
-            transcript.sentiment_score = sentiment_score
-            transcript.emotion = emotion
+            # [삭제] AI 전용 감정/감성 점수 저장을 중단하여 영상 분석 결과(behavior scoring)가 덮어씌워지는 현상 방지
+            # transcript.sentiment_score = sentiment_score
+            # transcript.emotion = emotion
+            
             if total_score is not None:
                 transcript.total_score = total_score
             if rubric_score is not None:
