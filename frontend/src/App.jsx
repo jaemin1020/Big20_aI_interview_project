@@ -686,11 +686,11 @@ function App() {
           console.log('[STT Auto-Save] Saving transcript for Index:', currentIdxRef.current);
           console.log('[STT Auto-Save] Payload:', {
             interviewId: currentInterview.id,
-            speaker: 'User',
+            speaker: 'USER',
             text: liveTranscriptRef.current,
             questionId: targetQuestion.id
           });
-          await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current, targetQuestion.id);
+          await createTranscript(currentInterview.id, 'USER', liveTranscriptRef.current, targetQuestion.id);
           isTranscriptSavedRef.current = true;
           console.log('[STT Auto-Save] Transcript saved successfully');
         } catch (e) {
@@ -791,7 +791,7 @@ function App() {
     if (!isTranscriptSavedRef.current && liveTranscriptRef.current.trim() && currentInterview && targetQuestion) {
       try {
         console.log('[finishInterview] Saving final transcript before finish.');
-        await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current.trim(), targetQuestion.id);
+        await createTranscript(currentInterview.id, 'USER', liveTranscriptRef.current.trim(), targetQuestion.id);
         isTranscriptSavedRef.current = true;
         console.log('[finishInterview] Final transcript saved.');
       } catch (e) {
