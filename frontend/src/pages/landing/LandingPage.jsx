@@ -54,7 +54,7 @@ const LandingPage = ({
           marginBottom: '1rem'
         }}>
           {[
-            { label: '소요 시간', value: '약 20분', icon: '⏱️' },
+            { label: '소요 시간', value: '약 30분', icon: '⏱️' },
             { label: '진행 방식', value: '영상/음성', icon: '🎥' },
             { label: '참고 사항', value: '중간 종료 가능', icon: '💡' }
           ].map((item, idx) => (
