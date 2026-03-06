@@ -12,6 +12,18 @@ from db_models import Question, QuestionCategory, QuestionDifficulty
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:1234@localhost:15432/interview_db")
 
 def import_questions(json_path: str):
+    """설명:
+        JSON 파일에서 질문 데이터를 읽어 DB의 questions 테이블에 중복 제외하고 일괄 삽입.
+
+    Args:
+        json_path (str): 질문 데이터가 담긴 JSON 파일 경로.
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     if not os.path.exists(json_path):
         print(f"Error: {json_path} not found.")
         return

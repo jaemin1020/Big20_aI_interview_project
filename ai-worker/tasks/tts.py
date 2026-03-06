@@ -68,11 +68,28 @@ class SupertonicTTS(TTSBase):
     _instance = None
     
     def __new__(cls):
+        """설명:
+            싱글톤 패턴을 구현하는 인스턴스 생성 메서드.
+            이미 인스턴스가 존재하면 기존 인스턴스를 반환하여 TTS 모델 중복 로드를 방지.
+
+        Returns:
+            SupertonicTTS: 싱글톤 인스턴스.
+
+        생성자: CYJ
+        생성일자: 2026-02-10
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self):
+        """설명:
+            SupertonicTTS 인스턴스를 초기화.
+            비학 초기화 플래그를 활용하여 싱글톤 객체의 중복 초기화를 방지.
+
+        생성자: CYJ
+        생성일자: 2026-02-10
+        """
         if hasattr(self, '_initialized') and self._initialized:
             return
         self._initialized = True

@@ -79,11 +79,42 @@ def get_rubric_for_stage(stage_name: str) -> dict:
 # [Schema] 평가 데이터 구조 정의 (Pydantic)
 # -----------------------------------------------------------
 class AnswerEvalSchema(BaseModel):
+    """설명:
+        개별 답변 평가 결과를 담는 Pydantic 스키마.
+        LLM 출력을 JSON 보템스로 바인딩할 때 사용.
+
+    Attributes:
+        total_score (int): 루브릭 세부 항목 점수들의 합계 (0-100).
+        rubric_scores (Dict[str, int]): 루브릭 세부 항목별 점수.
+        feedback (str): 답변에 대한 피드백 (평문).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     total_score: int = Field(description="루브릭 세부 항목 점수들의 합계 (0-100)")
     rubric_scores: Dict[str, int] = Field(description="루브릭 세부 항목별 점수 (예: {'논리적 구조': 35, '핵심 전달력': 30, ...})")
     feedback: str = Field(description="답변에 대한 구체적이고 건설적인 피드백 (마크다운 없이 평문으로 작성)")
 
 class FinalReportSchema(BaseModel):
+    """설명:
+        최종 면접 리포트 데이터를 담는 Pydantic 스키마.
+        LLM이 생성한 종합 평가 데이터를 DB 저장 전 바인딩할 때 사용.
+
+    Attributes:
+        overall_score (int): 전체 평균 점수 (0-100).
+        technical_score (int): 기술 이해도 점수.
+        experience_score (int): 직무 경험 점수.
+        problem_solving_score (int): 문제 해결 점수.
+        communication_score (int): 의사소통 점수.
+        responsibility_score (int): 책임감 점수.
+        growth_score (int): 성장 의지 점수.
+        strengths (List[str]): 주요 강점 목록.
+        improvements (List[str]): 보완점 목록.
+        summary_text (str): 시니어 면접관의 최종 한마디.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     overall_score: int = Field(description="전체 평균 점수 (0-100)")
     technical_score: int = Field(description="기술 이해도 (0-100)")
     experience_score: int = Field(description="직무 경험 (0-100)")
@@ -450,6 +481,20 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
 
         try:
             def ensure_int(val, default=0):
+                """설명:
+                    입력값을 안전하게 int로 변환.
+                    None, 스트링, float 등 다양한 입력을 허용하며, 변환 실패 시 default 반환.
+
+                Args:
+                    val: 변환할 값 (int, float, str, None 등).
+                    default (int): 변환 실패 시 반환할 기본값 (default: 0).
+
+                Returns:
+                    int: 변환된 정수값.
+
+                생성자: ejm
+                생성일자: 2026-02-04
+                """
                 try:
                     if val is None: return default
                     return int(float(str(val)))

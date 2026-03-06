@@ -30,6 +30,19 @@ def is_date(text):
 # ==========================================
 
 def parse_resume_final(input_source):
+    """설명:
+        이력서 PDF 파일 경로 또는 텍스트를 입력받아 학력, 경력, 프로젝트, 자기소개 등
+        구조화된 딕셔너리로 파싱하여 반환.
+
+    Args:
+        input_source (str): PDF 파일 경로 또는 이력서 원문 텍스트.
+
+    Returns:
+        dict: header, education, activities, awards, projects, certifications, self_intro 키를 포함한 구조화 데이터.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     # 최종 데이터를 담을 그릇 (구조화된 딕셔너리)
     data = {
         "header": { "name": "", "target_company": "", "target_role": "" },

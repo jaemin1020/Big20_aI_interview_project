@@ -205,6 +205,18 @@ INTERVIEW_STAGES = [
 
 
 def get_stage_by_name(stage_name: str):
+    """설명:
+        stage 이름으로 INTERVIEW_STAGES 목록에서 해당 단계 딕셔너리를 반환.
+
+    Args:
+        stage_name (str): 조회할 스테이지 이름 (e.g. "intro", "skill").
+
+    Returns:
+        dict: 해당 스테이지 정보 딕셔너리. 없으면 None.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     for stage in INTERVIEW_STAGES:
         if stage["stage"] == stage_name:
             return stage
@@ -212,6 +224,18 @@ def get_stage_by_name(stage_name: str):
 
 
 def get_next_stage(current_stage: str):
+    """설명:
+        현재 스테이지 이름으로 다음 순서(order+1)의 스테이지를 반환.
+
+    Args:
+        current_stage (str): 현재 스테이지 이름.
+
+    Returns:
+        dict: 다음 스테이지 정보 딕셔너리. 다음 단계가 없으면 None.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     current_order = None
     for stage in INTERVIEW_STAGES:
         if stage["stage"] == current_stage:

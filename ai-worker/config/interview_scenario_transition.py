@@ -1,30 +1,37 @@
-# -*- coding: utf-8 -*-
-"""
-[단일 소스 관리] 실제 시나리오 정의는 backend-core/config/interview_scenario_transition.py 에서 관리합니다.
-이 파일은 backend-core의 파일을 그대로 재사용하기 위한 브릿지입니다.
-"""
-import sys
+from .interview_scenario import *  # 기존 인터페이스 유지 (필요 시)
 import os
-import importlib.util
+import sys
 import logging
+from importlib import import_module
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ScenarioTransition")
 
-# 경로 동적 로드 (Docker vs Local)
-docker_path = "/backend-core/config/interview_scenario_transition.py"
-local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend-core", "config", "interview_scenario_transition.py"))
-scenario_path = docker_path if os.path.exists(docker_path) else local_path
+# backend-core의 시나리오 정의를 임포트하기 위한 설정
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+scenario_path = os.path.abspath(os.path.join(BASE_DIR, "../../backend-core/config"))
+sys.path.append(scenario_path)
 
-# backend-core 버전에서 모든 심볼 임포트 (단일 소스)
+# 기본값 선언 (항상 정의되어 있어야 함)
+INTERVIEW_STAGES = []
+
+def get_stage_by_name(stage_name):
+    """설명: 시나리오 단계 정보를 조회하는 함수 (기본값: None)"""
+    return None
+
+def get_next_stage(current_stage):
+    """설명: 다음 단계를 조회하는 함수 (기본값: None)"""
+    return None
+
+def get_initial_stages():
+    """설명: 초기 단계를 조회하는 함수 (기본값: [])"""
+    return []
+
 try:
-    if not os.path.exists(scenario_path):
-        raise FileNotFoundError(f"Transition scenario file not found at {scenario_path}")
-        
-    _spec = importlib.util.spec_from_file_location("backend_interview_scenario_transition", scenario_path)
-    _mod = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_mod)
-
-    INTERVIEW_STAGES = _mod.INTERVIEW_STAGES
+    # backend-core의 로직을 동적으로 로드 시도
+    _mod = import_module("interview_scenario_transition")
+    
+    # 로드 성공 시 함수 교체
+    INTERVIEW_STAGES = getattr(_mod, "INTERVIEW_STAGES", [])
     get_stage_by_name = _mod.get_stage_by_name
     get_next_stage = _mod.get_next_stage
     get_initial_stages = _mod.get_initial_stages
@@ -33,7 +40,3 @@ try:
 
 except Exception as e:
     logger.error(f"backend-core transition 시나리오 로드 실패 ({scenario_path}), fallback 사용: {e}")
-    INTERVIEW_STAGES = []
-    def get_stage_by_name(stage_name): return None
-    def get_next_stage(current_stage): return None
-    def get_initial_stages(): return []

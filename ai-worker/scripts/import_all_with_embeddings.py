@@ -403,6 +403,16 @@ def import_companies(session, file_path, generator):
 
 
 def main():
+    """설명:
+        전체 임베딩 데이터 임포트 스크립트의 진입점.
+        KURE-v1 모델 로드, DB 연결 확인 후 질문 및 회사 데이터를 순차적으로 처리.
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     print("🚀 Starting Data Import with Embeddings...")
     
     # Init Embedding Generator

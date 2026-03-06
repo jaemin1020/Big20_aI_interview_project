@@ -20,6 +20,12 @@ class ResumeEmbedder:
     """
     
     def __init__(self):
+        """설명:
+            ResumeEmbedder 인스턴스를 초기화하고 임베딩 생성기를 로드.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         self.generator = get_embedding_generator()
     
     # =========================

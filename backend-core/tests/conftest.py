@@ -28,6 +28,15 @@ def session_fixture():
 def client_fixture(session: Session):
     """Create a test client with dependency override"""
     def get_session_override():
+        """설명:
+            FastAPI 의존성 주입을 위한 테스트용 세션 오버라이드 함수.
+
+        Returns:
+            Session: 테스트 전용 DB 세션.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         return session
 
     app.dependency_overrides[get_session] = get_session_override

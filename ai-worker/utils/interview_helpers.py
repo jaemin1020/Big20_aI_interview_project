@@ -45,6 +45,15 @@ def get_candidate_info(db_or_data, resume_id: Optional[int] = None) -> Dict[str,
     return _extract_from_dict(db_or_data)
 
 def _get_default_info():
+    """설명:
+        지원자 정보 조회 실패 시 반환할 기본값 딕셔너리를 반환.
+
+    Returns:
+        dict: 기본 지원자 정보가 담긴 딕셔너리.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return {
         "candidate_name": "지원자",
         "target_role": "해당 직무",
@@ -59,6 +68,18 @@ def _get_default_info():
     }
 
 def _extract_from_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+    """설명:
+        파싱된 이력서 딕셔너리에서 핵심 지원자 정보를 추출.
+
+    Args:
+        data (Dict[str, Any]): 이력서 구조화 데이터.
+
+    Returns:
+        Dict[str, Any]: 지원자명, 지원직무, 전공, 이메일, 연락처, 자격증, 활동, 프로젝트 정보를 담은 딕셔너리.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     if not isinstance(data, dict):
         return _get_default_info()
         

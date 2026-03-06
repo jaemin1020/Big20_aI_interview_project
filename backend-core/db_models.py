@@ -8,28 +8,58 @@ from enum import Enum
 # ==================== Enums ====================
 
 class UserRole(str, Enum):
+    """설명:
+        사용자 역할 구분 Enum (candidate/recruiter/admin).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     CANDIDATE = "candidate"
     RECRUITER = "recruiter"
     ADMIN = "admin"
 
 class InterviewStatus(str, Enum):
+    """설명:
+        면접 세션 상태 구분 Enum (SCHEDULED/LIVE/COMPLETED/CANCELLED).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     SCHEDULED = "SCHEDULED"
     LIVE = "LIVE"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
 class QuestionCategory(str, Enum):
+    """설명:
+        질문 카테고리 구분 Enum (technical/behavioral/situational/cultural_fit).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     TECHNICAL = "technical"
     BEHAVIORAL = "behavioral"
     SITUATIONAL = "situational"
     CULTURAL_FIT = "cultural_fit"
 
 class QuestionDifficulty(str, Enum):
+    """설명:
+        질문 난이도 구분 Enum (easy/medium/hard).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
 
 class Speaker(str, Enum):
+    """설명:
+        대화 발화자 구분 Enum (AI/USER).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     AI = "AI"
     USER = "USER"
 

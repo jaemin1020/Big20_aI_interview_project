@@ -10,6 +10,21 @@ logger = logging.getLogger("AI-Worker-Vision")
 
 @shared_task(name="tasks.vision.analyze_emotion")
 def analyze_emotion(session_id, base64_img):
+    """설명:
+        Base64 인코딩된 이미지를 DeepFace로 분석하여 지배적 감정과 점수를 반환하고,
+        DB의 면접 세션 감정 이력을 업데이트.
+
+    Args:
+        session_id (int): 분석 대상 면접 세션 ID.
+        base64_img (str): Base64 인코딩된 이미지 데이터.
+
+    Returns:
+        dict: {"session_id": ..., "type": "emotion", "dominant_emotion": ..., "score": ...}
+              또는 {"error": "에러 메시지"}.
+
+    생성자: CYJ
+    생성일자: 2026-02-10
+    """
     try:
         try:
             session_id = int(session_id)

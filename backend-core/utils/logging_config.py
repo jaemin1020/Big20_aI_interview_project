@@ -97,6 +97,15 @@ class StructuredLogger:
     """구조화된 로깅을 위한 래퍼 클래스"""
     
     def __init__(self, logger: logging.Logger):
+        """설명:
+            StructuredLogger 인스턴스를 초기화하고 내부 로거를 저장.
+
+        Args:
+            logger (logging.Logger): 래핑할 Python 기반 로거.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         self.logger = logger
     
     def log(self, level: str, message: str, **kwargs):

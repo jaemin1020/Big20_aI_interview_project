@@ -62,6 +62,20 @@ def load_stt_model():
 # [문법] @데코레이터: 함수 위에 @가 붙은 것은 "이 함수를 Celery라는 도구의 작업(task)으로 등록하겠다"는 선언입니다.
 @shared_task(name="tasks.stt.recognize")
 def recognize_audio_task(audio_b64: str):
+    """설명:
+        Base64로 인코딩된 오디오 데이터를 받아 Faster-Whisper로 한국어 STT 수행.
+        메모리 내 처리를 우선 시도하고, 실패 시 임시 파일 방식으로 전환.
+
+    Args:
+        audio_b64 (str): Base64 인코딩된 WAV/WebM 오디오 데이터.
+
+    Returns:
+        dict: 처리 결과. {"status": "success", "text": "인식된 텍스트"} 또는
+              {"status": "error", "message": "에러 내용"}.
+
+    생성자: CYJ
+    생성일자: 2026-02-10
+    """
     global stt_model
     
     # 1. 모델이 없으면 로드 시도 (지연 로딩)

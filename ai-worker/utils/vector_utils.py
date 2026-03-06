@@ -19,11 +19,28 @@ class EmbeddingGenerator:
     _model = None
     
     def __new__(cls):
+        """설명:
+            싱글톤 패턴으로 EmbeddingGenerator 인스턴스를 생성.
+            이미 인스턴스가 있으면 기존 것을 반환하여 모델 중복 로드를 방지.
+
+        Returns:
+            EmbeddingGenerator: 싱글톤 인스턴스.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self):
+        """설명:
+            KURE-v1 임베딩 모델을 로드하고 캐시 디렉토리를 설정.
+            싱글톤 패턴으로 한 번만 실행되며 모델이 이미 로드된 경우 초기화를 건너뜀.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         if self._model is None:
             cache_dir = "/app/models/embeddings" if os.path.exists("/app/models") else "./models/embeddings"
             os.makedirs(cache_dir, exist_ok=True)

@@ -51,6 +51,12 @@ class ResumeStructurer:
     생성일자: 2026-02-04
     """
     def __init__(self):
+        """설명:
+            ResumeStructurer 인스턴스를 초기화하고 EXAONE LLM 엔진과 JSON 파서를 준비.
+
+        생성자: lyn
+        생성일자: 2026-02-04
+        """
         # EXAONE 엔진 초기화
         self.llm = get_exaone_llm()
         self.parser = JsonOutputParser(pydantic_object=StructuredResume)

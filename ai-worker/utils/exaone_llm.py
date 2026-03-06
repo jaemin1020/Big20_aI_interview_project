@@ -26,11 +26,31 @@ class ExaoneLLM(LLM):
     _initialized: ClassVar[bool] = False
     
     def __new__(cls, **kwargs):
+        """설명:
+            싱글톤 패턴으로 ExaoneLLM 인스턴스를 생성.
+            이미 인스턴스가 있으면 기존 것을 반환하여 LLM 모델 중복 로드를 방지.
+
+        Returns:
+            ExaoneLLM: 싱글톤 인스턴스.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self, **kwargs):
+        """설명:
+            ExaoneLLM 인스턴스 초기화 및 GGUF 모델 로드.
+            싱글톤 패턴을 위해 한 번만 실행되며, GPU/CPU 환경에 따라 llama-cpp를 통해 모델을 로드.
+
+        Raises:
+            FileNotFoundError: 모델 GGUF 파일이 존재하지 않을 때.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         super().__init__(**kwargs)
         if hasattr(self, "_initialized") and self._initialized:
             return
@@ -141,6 +161,15 @@ class ExaoneLLM(LLM):
 
     @property
     def _llm_type(self) -> str:
+        """설명:
+            LangChain LLM 식별자 문자열 반환 (필수 추상 프로퍼티).
+
+        Returns:
+            str: LLM 유형 식별자 ("exaone_gguf").
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         return "exaone_gguf"
 
     def _create_prompt(self, system_msg: str, user_msg: str) -> str:

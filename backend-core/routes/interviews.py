@@ -6,6 +6,15 @@ from datetime import datetime, timezone, timedelta
 KST = timezone(timedelta(hours=9))
 
 def get_kst_now():
+    """설명:
+        현재 한국 표준시(KST, UTC+9) 기준 datetime 반환.
+
+    Returns:
+        datetime: tzinfo가 없는 KST 현재 시각.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return datetime.now(KST).replace(tzinfo=None)
 
 from typing import List
@@ -233,6 +242,19 @@ async def get_all_interviews(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        로그인 사용자의 권한에 따라 전체 또는 본인 면접 목록을 내림차순으로 반환.
+
+    Args:
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        list: 면접 담당자명, 회사명, 상태 등이 포함된 딕셔너리 리스트.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     if current_user.role not in ["recruiter", "admin"]:
         stmt = select(Interview).where(
             Interview.candidate_id == current_user.id
@@ -337,6 +359,20 @@ async def get_interview_transcripts(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        해당 면접의 전체 대화 기록을 시간 순으로 반환.
+
+    Args:
+        interview_id (int): 대화 기록을 조회할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        list: speaker, text, timestamp, emotion 등이 포함된 대화록 리스트.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id
     ).order_by(Transcript.timestamp)
@@ -362,6 +398,20 @@ async def complete_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        면접 세션을 COMPLETED 상태로 변경하고 종료 시각을 기록한 후 워커에 면접 평가 태스크를 요청.
+
+    Args:
+        interview_id (int): 종료할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        dict: {"status": "completed", "interview_id": interview_id}.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -385,6 +435,20 @@ async def save_behavior_scores(
     request: dict,
     db: Session = Depends(get_session),
 ):
+    """설명:
+        면접 세션별 행동 분석 점수(눈시선, 철학, 미소, 자세, 감정 등)를 DB에 저장.
+
+    Args:
+        interview_id (int): 점수를 저장할 면접 ID.
+        request (dict): 행동 분석 점수 컨테이너 (averages, per_question 등).
+        db (Session): DB 세션.
+
+    Returns:
+        dict: {"status": "saved", "interview_id": interview_id}.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     import json as json_lib
 
     interview = db.get(Interview, interview_id)
@@ -463,6 +527,24 @@ async def get_evaluation_report(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        면접 평가 리포트를 조회하여 세부 피드백, 점수, 강점/암점 등 데이터를 반환.
+        리포트가 없으면 분석 진행 중 예상 응답을 반환.
+
+    Args:
+        interview_id (int): 리포트를 조회할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        dict: 평가 점수, 피드백 텍스트, 강점/보완점이 포함된 리포트 딕셔너리.
+
+    Raises:
+        HTTPException: interview_id에 해당하는 면접이 없으면 404.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     stmt = select(EvaluationReport).where(
         EvaluationReport.interview_id == interview_id
     )
@@ -559,6 +641,24 @@ async def create_realtime_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        실시간 면접 세션을 생성하는 엔드포인트. 일반 면접 생성과 동일하게 시나리오를 로드하고
+        융합 질문을 사전 생성한 후 면접 세션을 반환.
+
+    Args:
+        interview_data (InterviewCreate): 면접 생성 요청 데이터.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        InterviewResponse: 생성된 면접 세션 응답 모델.
+
+    Raises:
+        HTTPException: 예상치 못한 오류 시 500.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
 
     from utils.interview_helpers import get_candidate_info

@@ -18,6 +18,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("BatchEmbed")
 
 def batch_embed_questions(batch_size: int = 128):
+    """설명:
+        임베딩이 없는 질문들을 배치 단위로 읽어 벡터 임베딩을 생성하고 DB에 저장.
+        전체 처리 진행률 및 남은 예상 시간을 로그로 출력.
+
+    Args:
+        batch_size (int): 한 번에 처리할 질문 수 (기본값: 128).
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     generator = get_embedding_generator()
     
     with Session(engine) as session:

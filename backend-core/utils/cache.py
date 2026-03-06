@@ -79,8 +79,33 @@ def cache(ttl: int = 3600, key_prefix: str = ""):
             return db.query(User).filter(User.id == user_id).first()
     """
     def decorator(func: Callable) -> Callable:
+        """설명:
+            대상 함수를 래핑하여 캐싱 로직을 적용하는 데코레이터 함수.
+
+        Args:
+            func (Callable): 캐싱을 적용할 원본 함수.
+
+        Returns:
+            Callable: 캐싱 로직이 포함된 래퍼 함수.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         @wraps(func)
         def wrapper(*args, **kwargs):
+            """설명:
+                실제 함수 실행 전 캐시를 확인하고 결과가 없으면 실행 후 저장하는 래퍼.
+
+            Args:
+                *args: 위치 인자.
+                **kwargs: 키워드 인자.
+
+            Returns:
+                Any: 캐시된 결과 또는 함수 실행 결과값.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+            """
             # 캐시 키 생성
             cache_key = _generate_cache_key(func, args, kwargs, key_prefix)
             
@@ -170,6 +195,19 @@ if __name__ == "__main__":
     # 간단한 캐싱
     @cache(ttl=60)
     def expensive_function(x: int, y: int) -> int:
+        """설명:
+            캐싱 효과를 테스트하기 위한 시뮬레이션용 고비용 함수.
+
+        Args:
+            x (int): 첫 번째 정수.
+            y (int): 두 번째 정수.
+
+        Returns:
+            int: 두 정수의 합.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         print(f"Computing {x} + {y}...")
         time.sleep(1)  # 시뮬레이션
         return x + y

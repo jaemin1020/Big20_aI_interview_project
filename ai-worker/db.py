@@ -9,6 +9,16 @@ from datetime import datetime, timezone, timedelta
 KST = timezone(timedelta(hours=9))
 
 def get_kst_now():
+    """설명:
+        현재 한국 표준시(KST, UTC+9) 기준 datetime 객체를 반환.
+        tzinfo를 제거하여 DB 저장 시 타임존 충돌을 방지.
+
+    Returns:
+        datetime: tzinfo가 없는 KST 현재 시각.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return datetime.now(KST).replace(tzinfo=None)
 
 from enum import Enum
@@ -412,6 +422,25 @@ def save_generated_question(interview_id: int, content: str, category: str, stag
         return _save_generated_question_logic(session, interview_id, content, category, stage, guide, rubric_json)
 
 def _save_generated_question_logic(session: Session, interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None):
+    """설명:
+        생성된 질문을 Question 및 Transcript 테이블에 저장하는 핵심 로직.
+        session 객체를 직접 받아 트랜잭션 일관성을 유지.
+
+    Args:
+        session (Session): 활성 DB 세션.
+        interview_id (int): 대상 면접 ID.
+        content (str): 질문 텍스트.
+        category (str): 질문 카테고리.
+        stage (str): 시나리오 단계명.
+        guide (str): 질문 생성 가이드 (선택).
+        rubric_json (dict): 평가 루브릭 JSON (선택).
+
+    Returns:
+        int: 생성된 Question 의 ID.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     # 1. Question 테이블 저장
     # [수정] guide는 질문 생성용 가이드이며 평가 기준(rubric)이 아님
     # rubric_json이 없는 경우 표준 평가 기준을 사용 (guide를 rubric으로 오용 방지)

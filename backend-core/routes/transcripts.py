@@ -12,6 +12,15 @@ from datetime import datetime, timezone, timedelta
 KST = timezone(timedelta(hours=9))
 
 def get_kst_now():
+    """설명:
+        현재 한국 표준시(KST, UTC+9) 기준 datetime 반환.
+
+    Returns:
+        datetime: tzinfo가 없는 KST 현재 시각.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return datetime.now(KST).replace(tzinfo=None)
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
