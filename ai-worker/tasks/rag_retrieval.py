@@ -31,7 +31,15 @@ except ImportError:
 from .embedding import get_embedder as _get_central_embedder
 
 def get_embedder():
-    """중앙화된 임베딩 모델 인스턴스 반환 (싱글톤)"""
+    """설명:
+        중앙화된 임베딩 모델 인스턴스 반환 (싱글톤)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     import torch
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return _get_central_embedder(device)
@@ -44,7 +52,18 @@ from langchain_community.vectorstores import PGVector
 _vector_stores = {}
 
 def get_vector_store(collection_name):
-    """지정된 컬렉션에 대한 PGVector 인스턴스 싱글톤 반환 (engine 공유)"""
+    """설명:
+        지정된 컬렉션에 대한 PGVector 인스턴스 싱글톤 반환 (engine 공유)
+
+        Args:
+        collection_name: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     global _vector_stores
     if collection_name not in _vector_stores:
         embedder = get_embedder()
@@ -71,8 +90,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
-    """
-    LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
+    """설명:
+        LangChain PGVector를 사용하여 관련 문맥을 검색합니다.
+
+        Args:
+        query: 파라미터 설명.
+        resume_id: 파라미터 설명.
+        top_k: 파라미터 설명.
+        filter_type: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     logger.info(f"🔍 [RAG 검색 시작] Query: '{query}' | ResumeID: {resume_id} | Filter: {filter_type}")
     
@@ -131,8 +162,19 @@ def retrieve_context(query, resume_id=1, top_k=10, filter_type=None):
 # [핵심] Retriever 생성 함수 (LangChain LCEL용)
 # -----------------------------------------------------------
 def get_retriever(resume_id=1, top_k=10, filter_type=None):
-    """
-    LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
+    """설명:
+        LangChain LCEL에서 사용할 수 있는 Retriever 객체를 반환합니다.
+
+        Args:
+        resume_id: 파라미터 설명.
+        top_k: 파라미터 설명.
+        filter_type: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     embedder = get_embedder()
     # 2. 인스턴스 가져오기
@@ -157,8 +199,18 @@ def get_retriever(resume_id=1, top_k=10, filter_type=None):
 # [변경 완료] 질문 은행(questions 테이블) 검색 함수 (All LangChain 방식)
 # -----------------------------------------------------------
 def retrieve_similar_questions(query, top_k=5):
-    """
-    LangChain PGVector를 사용하여 질문 은행에서 쿼리와 유사한 질문들을 검색합니다.
+    """설명:
+        LangChain PGVector를 사용하여 질문 은행에서 쿼리와 유사한 질문들을 검색합니다.
+
+        Args:
+        query: 파라미터 설명.
+        top_k: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     logger.info(f"🔍 [질문 은행 검색 시작] Query: '{query[:50]}...' (Framework: LangChain)")
     

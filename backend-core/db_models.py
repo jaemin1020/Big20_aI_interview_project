@@ -66,7 +66,12 @@ class Speaker(str, Enum):
 # ==================== Tables ====================
 
 class User(SQLModel, table=True):
-    """사용자 테이블 (지원자/채용담당자)"""
+    """설명:
+        사용자 테이블 (지원자/채용담당자)
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "users"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -98,7 +103,12 @@ class User(SQLModel, table=True):
 
 
 class Resume(SQLModel, table=True):
-    """이력서 테이블"""
+    """설명:
+        이력서 테이블
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "resumes"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -141,7 +151,12 @@ class Resume(SQLModel, table=True):
 
 
 class Company(SQLModel, table=True):
-    """회사 정보 테이블 (벡터 검색 지원)"""
+    """설명:
+        회사 정보 테이블 (벡터 검색 지원)
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "companies"
 
     # Primary Key (문자열 - 직접 삽입)
@@ -170,7 +185,12 @@ class Company(SQLModel, table=True):
 
 
 class Interview(SQLModel, table=True):
-    """면접 세션 테이블"""
+    """설명:
+        면접 세션 테이블
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "interviews"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -205,7 +225,12 @@ class Interview(SQLModel, table=True):
     evaluation_report: Optional["EvaluationReport"] = Relationship(back_populates="interview")
 
 class Question(SQLModel, table=True):
-    """질문 은행 테이블"""
+    """설명:
+        질문 은행 테이블
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "questions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -239,7 +264,12 @@ class Question(SQLModel, table=True):
     avg_score: Optional[float] = None
 
 class Transcript(SQLModel, table=True):
-    """대화 기록 테이블 (실시간 STT 결과 저장)"""
+    """설명:
+        대화 기록 테이블 (실시간 STT 결과 저장)
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "transcripts"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -270,7 +300,12 @@ class Transcript(SQLModel, table=True):
     interview: Interview = Relationship(back_populates="transcripts")
 
 class EvaluationReport(SQLModel, table=True):
-    """평가 리포트 테이블"""
+    """설명:
+        평가 리포트 테이블
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "evaluation_reports"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -301,7 +336,12 @@ class EvaluationReport(SQLModel, table=True):
     interview: Interview = Relationship(back_populates="evaluation_report")
 
 class AnswerBank(SQLModel, table=True):
-    """우수 답변 은행 (벡터 검색용)"""
+    """설명:
+        우수 답변 은행 (벡터 검색용)
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     __tablename__ = "answer_bank"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -335,7 +375,12 @@ class AnswerBank(SQLModel, table=True):
 # ==================== Request/Response Models ====================
 
 class UserCreate(SQLModel):
-    """회원가입 요청 모델"""
+    """설명:
+        회원가입 요청 모델
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     email: str
     username: str
     password: str
@@ -345,19 +390,34 @@ class UserCreate(SQLModel):
     role: UserRole = UserRole.CANDIDATE
 
 class UserLogin(SQLModel):
-    """로그인 요청 모델"""
+    """설명:
+        로그인 요청 모델
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     username: str
     password: str
 
 class InterviewCreate(SQLModel):
-    """면접 생성 요청 모델"""
+    """설명:
+        면접 생성 요청 모델
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     position: str
     company_id: Optional[str] = None
     resume_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
 
 class InterviewResponse(SQLModel):
-    """면접 응답 모델"""
+    """설명:
+        면접 응답 모델
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     id: int
     candidate_id: int
     position: str
@@ -369,14 +429,24 @@ class InterviewResponse(SQLModel):
     resume_id: Optional[int] = None
 
 class TranscriptCreate(SQLModel):
-    """대화 기록 생성 요청"""
+    """설명:
+        대화 기록 생성 요청
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     interview_id: int
     speaker: Speaker
     text: str
     question_id: Optional[int] = None
 
 class EvaluationReportResponse(SQLModel):
-    """평가 리포트 응답 모델"""
+    """설명:
+        평가 리포트 응답 모델
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     id: int
     interview_id: int
     technical_score: Optional[float]

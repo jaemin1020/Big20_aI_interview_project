@@ -174,8 +174,17 @@ INTERVIEW_STAGES = [
 
 
 def get_stage_by_name(stage_name: str):
-    """
-    단계 이름으로 설정 조회
+    """설명:
+        단계 이름으로 설정 조회
+
+        Args:
+        stage_name: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     for stage in INTERVIEW_STAGES:
         if stage["stage"] == stage_name:
@@ -184,8 +193,17 @@ def get_stage_by_name(stage_name: str):
 
 
 def get_next_stage(current_stage: str):
-    """
-    현재 단계의 다음 단계 반환
+    """설명:
+        현재 단계의 다음 단계 반환
+
+        Args:
+        current_stage: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     current_order = None
     for stage in INTERVIEW_STAGES:
@@ -204,7 +222,13 @@ def get_next_stage(current_stage: str):
 
 
 def get_initial_stages():
-    """
-    면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기, 직무지식)
+    """설명:
+        면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기, 직무지식)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] <= 3]

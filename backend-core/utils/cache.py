@@ -12,22 +12,57 @@ logger = logging.getLogger("CacheUtils")
 
 
 class SimpleCache:
-    """간단한 인메모리 캐시"""
+    """설명:
+        간단한 인메모리 캐시
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     
     def __init__(self, ttl: int = 3600):
-        """
-        Args:
+        """설명:
+            Args:
+
+            Args:
             ttl: Time To Live (초)
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         self.cache = {}
         self.ttl = ttl
     
     def _is_expired(self, timestamp: float) -> bool:
-        """캐시 만료 확인"""
+        """설명:
+            캐시 만료 확인
+
+            Args:
+            timestamp: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         return time.time() - timestamp > self.ttl
     
     def get(self, key: str) -> Optional[Any]:
-        """캐시에서 값 가져오기"""
+        """설명:
+            캐시에서 값 가져오기
+
+            Args:
+            key: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         if key in self.cache:
             value, timestamp = self.cache[key]
             if not self._is_expired(timestamp):
@@ -41,23 +76,62 @@ class SimpleCache:
         return None
     
     def set(self, key: str, value: Any):
-        """캐시에 값 저장"""
+        """설명:
+            캐시에 값 저장
+
+            Args:
+            key: 파라미터 설명.
+            value: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.cache[key] = (value, time.time())
         logger.debug(f"Cache set: {key}")
     
     def delete(self, key: str):
-        """캐시에서 값 삭제"""
+        """설명:
+            캐시에서 값 삭제
+
+            Args:
+            key: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         if key in self.cache:
             del self.cache[key]
             logger.debug(f"Cache deleted: {key}")
     
     def clear(self):
-        """캐시 전체 삭제"""
+        """설명:
+            캐시 전체 삭제
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.cache.clear()
         logger.debug("Cache cleared")
     
     def size(self) -> int:
-        """캐시 크기"""
+        """설명:
+            캐시 크기
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         return len(self.cache)
 
 
@@ -66,17 +140,18 @@ _global_cache = SimpleCache(ttl=3600)
 
 
 def cache(ttl: int = 3600, key_prefix: str = ""):
-    """
-    함수 결과 캐싱 데코레이터
-    
-    Args:
+    """설명:
+        함수 결과 캐싱 데코레이터
+
+        Args:
         ttl: Time To Live (초)
         key_prefix: 캐시 키 접두사
-        
-    Example:
-        @cache(ttl=300)
-        def get_user(user_id: int):
-            return db.query(User).filter(User.id == user_id).first()
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     def decorator(func: Callable) -> Callable:
         """설명:
@@ -127,17 +202,20 @@ def cache(ttl: int = 3600, key_prefix: str = ""):
 
 
 def _generate_cache_key(func: Callable, args: tuple, kwargs: dict, prefix: str = "") -> str:
-    """
-    캐시 키 생성
-    
-    Args:
+    """설명:
+        캐시 키 생성
+
+        Args:
         func: 함수
         args: 위치 인자
         kwargs: 키워드 인자
         prefix: 접두사
+
+        Returns:
         
-    Returns:
-        str: 캐시 키
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     # 함수명
     func_name = f"{func.__module__}.{func.__name__}"
@@ -159,11 +237,17 @@ def _generate_cache_key(func: Callable, args: tuple, kwargs: dict, prefix: str =
 
 
 def invalidate_cache(pattern: str = None):
-    """
-    캐시 무효화
-    
-    Args:
+    """설명:
+        캐시 무효화
+
+        Args:
         pattern: 패턴 (None이면 전체 삭제)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if pattern is None:
         _global_cache.clear()
@@ -178,11 +262,14 @@ def invalidate_cache(pattern: str = None):
 
 
 def get_cache_stats() -> dict:
-    """
-    캐시 통계
-    
-    Returns:
-        dict: 캐시 통계
+    """설명:
+        캐시 통계
+
+        Returns:
+        
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     return {
         "size": _global_cache.size(),

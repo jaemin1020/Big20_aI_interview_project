@@ -21,8 +21,14 @@ stt_model = None
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3-turbo")
 
 def load_stt_model():
-    """
-    Faster-Whisper 모델을 메모리에 올리는 함수입니다.
+    """설명:
+        Faster-Whisper 모델을 메모리에 올리는 함수입니다.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     # [문법] global 키워드: 함수 안에서 함수 밖(전역)에 있는 변수(stt_model)를 
     # 수정하고 싶을 때 반드시 선언해야 합니다. 안 쓰면 함수 안의 '지역 변수'로 취급됩니다.

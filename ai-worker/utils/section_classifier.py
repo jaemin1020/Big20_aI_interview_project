@@ -10,16 +10,11 @@ logger = logging.getLogger("SectionClassifier")
 
 
 class ResumeSectionClassifier:
-    """
-    이력서 텍스트를 섹션별로 분류하는 클래스
-    
-    Attributes:
-    - SKILL_CERT: 기술 스택, 자격증
-    - CAREER_PROJECT: 경력, 프로젝트
-    - COVER_LETTER: 자기소개서 (지원동기, 성격, 포부 등)
+    """설명:
+        이력서 텍스트를 섹션별로 분류하는 클래스
 
-    생성자: lyn
-    생성일자: 2026-02-07
+        생성자: lyn
+        생성일자: 2026-02-07
     """
     
     # 키워드 기반 분류 규칙
@@ -43,18 +38,19 @@ class ResumeSectionClassifier:
     
     @classmethod
     def classify_chunk(cls, text: str, chunk_index: int = 0) -> str:
-        """
-        텍스트 청크를 분석하여 섹션 타입 반환
-        
-        Args:
+        """설명:
+            텍스트 청크를 분석하여 섹션 타입 반환
+
+            Args:
+            cls: 파라미터 설명.
             text: 분류할 텍스트
             chunk_index: 청크 인덱스 (순서 정보)
+
+            Returns:
             
-        Returns:
-            str: 'skill_cert', 'career_project', 'cover_letter'
-        
-        생성자: lyn
-        생성일자: 2026-02-07
+
+            생성자: lyn
+            생성일자: 2026-02-07
         """
         text_lower = text.lower()
         
@@ -86,17 +82,18 @@ class ResumeSectionClassifier:
     
     @classmethod
     def classify_full_resume(cls, chunks: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """
-        전체 이력서 청크들을 분류
-        
-        Args:
+        """설명:
+            전체 이력서 청크들을 분류
+
+            Args:
+            cls: 파라미터 설명.
             chunks: [{"content": "...", "chunk_index": 0}, ...]
+
+            Returns:
             
-        Returns:
-            List[Dict]: [{"content": "...", "chunk_index": 0, "section_type": "skill_cert"}, ...]
-        
-        생성자: lyn
-        생성일자: 2026-02-07
+
+            생성자: lyn
+            생성일자: 2026-02-07
         """
         classified_chunks = []
         

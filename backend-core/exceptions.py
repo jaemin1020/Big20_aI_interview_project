@@ -4,17 +4,11 @@
 
 
 class BaseAPIException(Exception):
-    """기본 API 예외 클래스
-    
-    Args:
-        message (str): 예외 메시지
-        status_code (int): HTTP 상태 코드
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        기본 API 예외 클래스
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, message: str, status_code: int = 500):
         """설명:
@@ -34,16 +28,11 @@ class BaseAPIException(Exception):
 
 # Resume 관련 예외
 class ResumeNotFoundError(BaseAPIException):
-    """이력서를 찾을 수 없음
-    
-    Args:
-        resume_id (int): 이력서 ID
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        이력서를 찾을 수 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, resume_id: int):
         """설명:
@@ -62,17 +51,11 @@ class ResumeNotFoundError(BaseAPIException):
 
 
 class ResumeProcessingError(BaseAPIException):
-    """이력서 처리 오류
-    
-    Args:
-        resume_id (int): 이력서 ID
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        이력서 처리 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, resume_id: int, detail: str = ""):
         """설명:
@@ -92,16 +75,11 @@ class ResumeProcessingError(BaseAPIException):
 
 
 class ResumeUploadError(BaseAPIException):
-    """이력서 업로드 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        이력서 업로드 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:
@@ -121,16 +99,11 @@ class ResumeUploadError(BaseAPIException):
 
 # Interview 관련 예외
 class InterviewNotFoundError(BaseAPIException):
-    """면접을 찾을 수 없음
-    
-    Args:
-        interview_id (int): 면접 ID
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        면접을 찾을 수 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, interview_id: int):
         """설명:
@@ -149,16 +122,11 @@ class InterviewNotFoundError(BaseAPIException):
 
 
 class InterviewCreationError(BaseAPIException):
-    """면접 생성 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        면접 생성 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:
@@ -178,16 +146,11 @@ class InterviewCreationError(BaseAPIException):
 
 # Question 관련 예외
 class QuestionGenerationError(BaseAPIException):
-    """질문 생성 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        질문 생성 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:
@@ -206,16 +169,11 @@ class QuestionGenerationError(BaseAPIException):
 
 
 class QuestionNotFoundError(BaseAPIException):
-    """질문을 찾을 수 없음
-    
-    Args:
-        question_id (int): 질문 ID
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        질문을 찾을 수 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, question_id: int):
         """설명:
@@ -235,16 +193,11 @@ class QuestionNotFoundError(BaseAPIException):
 
 # Company 관련 예외
 class CompanyNotFoundError(BaseAPIException):
-    """회사를 찾을 수 없음
-    
-    Args:
-        company_id (str): 회사 ID
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        회사를 찾을 수 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, company_id: str):
         """설명:
@@ -264,16 +217,11 @@ class CompanyNotFoundError(BaseAPIException):
 
 # User 관련 예외
 class UserNotFoundError(BaseAPIException):
-    """사용자를 찾을 수 없음
-    
-    Args:
-        user_id (int): 사용자 ID
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        사용자를 찾을 수 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, user_id: int):
         """설명:
@@ -292,16 +240,11 @@ class UserNotFoundError(BaseAPIException):
 
 
 class UnauthorizedError(BaseAPIException):
-    """권한 없음
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        권한 없음
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str = "권한이 없습니다."):
         """설명:
@@ -320,16 +263,11 @@ class UnauthorizedError(BaseAPIException):
 
 
 class AuthenticationError(BaseAPIException):
-    """인증 실패
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        인증 실패
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str = "인증에 실패했습니다."):
         """설명:
@@ -349,17 +287,11 @@ class AuthenticationError(BaseAPIException):
 
 # Validation 관련 예외
 class ValidationError(BaseAPIException):
-    """유효성 검증 오류
-    
-    Args:
-        field (str): 유효성 검증 필드
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        유효성 검증 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, field: str, detail: str):
         """설명:
@@ -379,16 +311,11 @@ class ValidationError(BaseAPIException):
 
 
 class FileSizeExceededError(BaseAPIException):
-    """파일 크기 초과
-    
-    Args:
-        max_size (int): 최대 파일 크기
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        파일 크기 초과
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, max_size: int):
         """설명:
@@ -407,16 +334,11 @@ class FileSizeExceededError(BaseAPIException):
 
 
 class InvalidFileTypeError(BaseAPIException):
-    """잘못된 파일 형식
-    
-    Args:
-        allowed_types (list): 허용된 파일 형식
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        잘못된 파일 형식
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, allowed_types: list):
         """설명:
@@ -436,16 +358,11 @@ class InvalidFileTypeError(BaseAPIException):
 
 # Database 관련 예외
 class DatabaseError(BaseAPIException):
-    """데이터베이스 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        데이터베이스 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:
@@ -464,17 +381,11 @@ class DatabaseError(BaseAPIException):
 
 
 class DuplicateEntryError(BaseAPIException):
-    """중복 항목
-    
-    Args:
-        field (str): 중복 필드
-        value (str): 중복 값
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        중복 항목
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, field: str, value: str):
         """설명:
@@ -495,17 +406,11 @@ class DuplicateEntryError(BaseAPIException):
 
 # External Service 관련 예외
 class ExternalServiceError(BaseAPIException):
-    """외부 서비스 오류
-    
-    Args:
-        service_name (str): 외부 서비스 이름
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        외부 서비스 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, service_name: str, detail: str):
         """설명:
@@ -525,16 +430,11 @@ class ExternalServiceError(BaseAPIException):
 
 
 class LLMServiceError(ExternalServiceError):
-    """LLM 서비스 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        LLM 서비스 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:
@@ -553,16 +453,11 @@ class LLMServiceError(ExternalServiceError):
 
 
 class STTServiceError(ExternalServiceError):
-    """STT 서비스 오류
-    
-    Args:
-        detail (str): 오류 상세 내용
-        
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+    """설명:
+        STT 서비스 오류
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     def __init__(self, detail: str):
         """설명:

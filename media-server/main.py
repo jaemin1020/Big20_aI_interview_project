@@ -29,6 +29,15 @@ import numpy as np # [NEW] 오디오 분석을 위한 NumPy (가벼운 연산용
 original_socket_bind = socket.socket.bind
 
 def restricted_socket_bind(self, address):
+    """설명:
+        Docker NAT 환경 대응을 위해 UDP 포트를 지정 범위(50000-50050) 내에서만 바인딩하도록 강제하는 몽키 패치 함수.
+
+    Args:
+        address (tuple): 바인딩할 소켓 주소 (IP, Port).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     # UDP 소켓이고, 포트가 0(랜덤)일 경우에만 개입
     if self.type == socket.SOCK_DGRAM and address[1] == 0:
         min_port = 50000
@@ -87,6 +96,15 @@ relay = MediaRelay()
 analyzer_instance = None
 
 def get_analyzer():
+    """설명:
+        비전 분석 엔진(VisionAnalyzer) 인스턴스를 반환. 인스턴스가 없으면 새로 생성하여 캐싱함 (지연 로딩).
+
+    Returns:
+        VisionAnalyzer: 비전 분석 엔진 클래스 인스턴스.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     global analyzer_instance
     if analyzer_instance is None:
         print("🚀 [미디어 서버] 분석 엔진(VisionAnalyzer) 첫 접근 - 초기화 중 (지연 로딩)...", flush=True)

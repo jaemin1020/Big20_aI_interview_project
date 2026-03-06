@@ -15,18 +15,21 @@ def setup_logging(
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5
 ) -> logging.Logger:
-    """
-    로깅 설정
-    
-    Args:
+    """설명:
+        로깅 설정
+
+        Args:
         name: 로거 이름
         level: 로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_dir: 로그 디렉토리
         max_bytes: 최대 파일 크기
         backup_count: 백업 파일 개수
+
+        Returns:
         
-    Returns:
-        logging.Logger: 설정된 로거
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     # 로거 생성
     logger = logging.getLogger(name)
@@ -81,20 +84,28 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    로거 가져오기 (이미 설정된 경우)
-    
-    Args:
+    """설명:
+        로거 가져오기 (이미 설정된 경우)
+
+        Args:
         name: 로거 이름
+
+        Returns:
         
-    Returns:
-        logging.Logger: 로거
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     return logging.getLogger(name)
 
 
 class StructuredLogger:
-    """구조화된 로깅을 위한 래퍼 클래스"""
+    """설명:
+        구조화된 로깅을 위한 래퍼 클래스
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     
     def __init__(self, logger: logging.Logger):
         """설명:
@@ -109,13 +120,18 @@ class StructuredLogger:
         self.logger = logger
     
     def log(self, level: str, message: str, **kwargs):
-        """
-        구조화된 로그 출력
-        
-        Args:
+        """설명:
+            구조화된 로그 출력
+
+            Args:
             level: 로그 레벨
             message: 메시지
-            **kwargs: 추가 컨텍스트
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         # 추가 컨텍스트를 문자열로 변환
         context = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
@@ -125,23 +141,78 @@ class StructuredLogger:
         log_method(full_message)
     
     def info(self, message: str, **kwargs):
-        """INFO 레벨 로그"""
+        """설명:
+            INFO 레벨 로그
+
+            Args:
+            message: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.log("INFO", message, **kwargs)
     
     def debug(self, message: str, **kwargs):
-        """DEBUG 레벨 로그"""
+        """설명:
+            DEBUG 레벨 로그
+
+            Args:
+            message: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.log("DEBUG", message, **kwargs)
     
     def warning(self, message: str, **kwargs):
-        """WARNING 레벨 로그"""
+        """설명:
+            WARNING 레벨 로그
+
+            Args:
+            message: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.log("WARNING", message, **kwargs)
     
     def error(self, message: str, **kwargs):
-        """ERROR 레벨 로그"""
+        """설명:
+            ERROR 레벨 로그
+
+            Args:
+            message: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.log("ERROR", message, **kwargs)
     
     def critical(self, message: str, **kwargs):
-        """CRITICAL 레벨 로그"""
+        """설명:
+            CRITICAL 레벨 로그
+
+            Args:
+            message: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         self.log("CRITICAL", message, **kwargs)
 
 

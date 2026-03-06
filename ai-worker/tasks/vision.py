@@ -65,9 +65,18 @@ def analyze_emotion(session_id, base64_img):
 
 @shared_task(name="tasks.vision.track_eyes")
 def track_eyes(session_id, base64_img):
-    """
-    눈 추적 및 시선 집중도 분석 Task (시각화 포함)
-    OpenCV Haar Cascade를 사용하여 얼굴 ROI 내에서 눈을 감지하고 마킹
+    """설명:
+        눈 추적 및 시선 집중도 분석 Task (시각화 포함)
+
+        Args:
+        session_id: 파라미터 설명.
+        base64_img: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     try:
         try:

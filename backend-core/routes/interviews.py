@@ -50,8 +50,17 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
 def _fire_tts_for_question(question_id: int, question_text: str) -> None:
     """설명:
-        질문에 대한 TTS 태스크를 실행하고 생성된 WAV 파일을 공유 볼륨(uploads/tts/)에 저장합니다.
-        문장 내의 [단계] 태그를 자동으로 제거하여 합성하며, 이미 파일이 존재하는 경우 중복 생성을 방지합니다.
+        
+
+        Args:
+        question_id: 파라미터 설명.
+        question_text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     filename = f"q_{question_id}.wav"
     filepath = TTS_UPLOAD_DIR / filename

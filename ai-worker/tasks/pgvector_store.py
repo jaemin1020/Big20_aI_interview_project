@@ -44,8 +44,18 @@ except ImportError:
 # 나중에 면접관 AI가 이 데이터를 보고 질문을 던질 수 있습니다.
 # -----------------------------------------------------------
 def store_embeddings(resume_id, embedded_chunks):
-    """
-    [함수의 역할] 임베딩된 데이터 조각들을 Document 객체로 변환하여 DB에 저장합니다.
+    """설명:
+        [함수의 역할] 임베딩된 데이터 조각들을 Document 객체로 변환하여 DB에 저장합니다.
+
+        Args:
+        resume_id: 파라미터 설명.
+        embedded_chunks: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if not embedded_chunks:
         print("❌ 저장할 임베딩 데이터가 없습니다.")

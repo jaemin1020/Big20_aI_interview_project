@@ -11,8 +11,18 @@ from typing import Dict, Optional, Any
 logger = logging.getLogger(__name__)
 
 def get_candidate_info(db_or_data, resume_id: Optional[int] = None) -> Dict[str, Any]:
-    """
-    지원자 정보 추출 (DB 세션 또는 구조화된 JSON 데이터 대응)
+    """설명:
+        지원자 정보 추출 (DB 세션 또는 구조화된 JSON 데이터 대응)
+
+        Args:
+        db_or_data: 파라미터 설명.
+        resume_id: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if resume_id is not None:
         # DB에서 조회하는 방식 (Backend-Core용)
@@ -133,9 +143,18 @@ def _extract_from_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def check_if_transition(major: str, target_role: str) -> bool:
-    """
-    지원자의 전공과 지원 직무를 비교하여 '직무 전환(비전공자)' 여부를 판별합니다.
-    기준: 지원 직무의 핵심 카테고리에 해당하는 관련 전공 키워드가 전공명에 포함되어 있지 않으면 전환자로 간주합니다.
+    """설명:
+        지원자의 전공과 지원 직무를 비교하여 '직무 전환(비전공자)' 여부를 판별합니다.
+
+        Args:
+        major: 파라미터 설명.
+        target_role: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if not major or not target_role:
         return False
@@ -180,8 +199,18 @@ def check_if_transition(major: str, target_role: str) -> bool:
     return True # 매칭되는 관련 전공 키워드가 없으면 전환자로 판단
 
 def generate_template_question(template: str, variables: Dict[str, Any]) -> str:
-    """
-    템플릿 문자열에 변수 삽입
+    """설명:
+        템플릿 문자열에 변수 삽입
+
+        Args:
+        template: 파라미터 설명.
+        variables: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     try:
         return template.format(**variables)
@@ -193,8 +222,18 @@ def generate_template_question(template: str, variables: Dict[str, Any]) -> str:
         return template
 
 def get_next_stage_name(current_stage: str, is_transition: bool = False) -> Optional[str]:
-    """
-    현재 단계의 다음 단계 이름 반환
+    """설명:
+        현재 단계의 다음 단계 이름 반환
+
+        Args:
+        current_stage: 파라미터 설명.
+        is_transition: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     try:
         # 시나리오 파일 경로 동적 파악

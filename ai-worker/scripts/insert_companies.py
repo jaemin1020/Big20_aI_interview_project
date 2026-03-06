@@ -60,11 +60,30 @@ COMPANIES = [
 ]
 
 def generate_embedding(text: str):
-    """텍스트를 벡터로 변환"""
+    """설명:
+        텍스트를 벡터로 변환
+
+        Args:
+        text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return embedding_model.encode(text).tolist()
 
 def insert_companies():
-    """회사 데이터를 DB에 삽입"""
+    """설명:
+        회사 데이터를 DB에 삽입
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     engine = create_engine(DATABASE_URL)
     
     with Session(engine) as session:

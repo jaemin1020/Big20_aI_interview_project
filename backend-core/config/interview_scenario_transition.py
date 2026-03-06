@@ -252,5 +252,13 @@ def get_next_stage(current_stage: str):
 
 
 def get_initial_stages():
-    """면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기, 직무지식)"""
+    """설명:
+        면접 시작 시 즉시 제공할 템플릿 질문들 (자기소개, 지원동기, 직무지식)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return [stage for stage in INTERVIEW_STAGES if stage["type"] == "template" and stage["order"] <= 3]

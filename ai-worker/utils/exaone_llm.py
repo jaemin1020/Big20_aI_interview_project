@@ -17,9 +17,11 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 # from llama_cpp import Llama (Moved inside ExaoneLLM.__init__)
 
 class ExaoneLLM(LLM):
-    """
-    EXAONE-3.5-7.8B-Instruct (GGUF) 싱글톤 LLM 엔진
-    LangChain LLM 인터페이스를 상속받아 LCEL 호환성을 제공합니다.
+    """설명:
+        EXAONE-3.5-7.8B-Instruct (GGUF) 싱글톤 LLM 엔진
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     _instance: ClassVar[Optional["ExaoneLLM"]] = None
     llm: ClassVar[Any] = None
@@ -105,7 +107,20 @@ class ExaoneLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> str:
-        """LLM 실행 핵심 메서드 (LangChain 표준)"""
+        """설명:
+            LLM 실행 핵심 메서드 (LangChain 표준)
+
+            Args:
+            prompt: 파라미터 설명.
+            stop: 파라미터 설명.
+            run_manager: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         if ExaoneLLM.llm is None:
             logger.error("❌ EXAONE 모델이 로드되지 않았습니다. (CPU 모드이거나 로딩 실패)")
             raise RuntimeError("EXAONE engine is not initialized. Check if this is a GPU worker.")
@@ -133,7 +148,20 @@ class ExaoneLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ):
-        """실시간 스트리밍 출력을 위한 메서드"""
+        """설명:
+            실시간 스트리밍 출력을 위한 메서드
+
+            Args:
+            prompt: 파라미터 설명.
+            stop: 파라미터 설명.
+            run_manager: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         if ExaoneLLM.llm is None:
             raise RuntimeError("EXAONE engine is not initialized.")
 
@@ -173,10 +201,30 @@ class ExaoneLLM(LLM):
         return "exaone_gguf"
 
     def _create_prompt(self, system_msg: str, user_msg: str) -> str:
-        """EXAONE 3.5 전용 Chat Template 포맷팅 (하위 호환성 유지)"""
+        """설명:
+            EXAONE 3.5 전용 Chat Template 포맷팅 (하위 호환성 유지)
+
+            Args:
+            system_msg: 파라미터 설명.
+            user_msg: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         return f"[|system|]{system_msg}[|endofturn|]\n[|user|]{user_msg}[|endofturn|]\n[|assistant|]"
 
 
 def get_exaone_llm() -> ExaoneLLM:
-    """엔진 싱글톤 인스턴스 반환"""
+    """설명:
+        엔진 싱글톤 인스턴스 반환
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return ExaoneLLM()

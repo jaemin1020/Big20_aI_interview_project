@@ -8,19 +8,52 @@ import os
 # ==========================================
 
 def clean_text(text):
-    """글자 사이의 불필요한 공백을 제거합니다."""
+    """설명:
+        글자 사이의 불필요한 공백을 제거합니다.
+
+        Args:
+        text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     if not text: return ""
     # [문법] re.sub(패턴, 바꿀글자, 원본): \s+는 '하나 이상의 공백'을 의미합니다.
     # 즉, 줄바꿈이나 여러 개의 스페이스를 딱 한 칸의 공백으로 합쳐버립니다.
     return re.sub(r'\s+', ' ', text).strip()
 
 def get_row_text(row):
-    """표의 한 줄(row)을 통째로 붙여서 하나의 문자열로 만듭니다."""
+    """설명:
+        표의 한 줄(row)을 통째로 붙여서 하나의 문자열로 만듭니다.
+
+        Args:
+        row: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     # [문법] [str(c) for c in row if c]: 리스트 컴프리헨션. row 안에 내용(c)이 있는 것만 골라 문자열로 바꿉니다.
     return "".join([str(c) for c in row if c]).replace(" ", "")
 
 def is_date(text):
-    """해당 글자가 날짜(연도)를 포함하고 있는지 확인합니다."""
+    """설명:
+        해당 글자가 날짜(연도)를 포함하고 있는지 확인합니다.
+
+        Args:
+        text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     if not text: return False
     # [문법] re.search: 패턴이 문자열 안에 있는지 확인. \d{4}는 '숫자 4개'가 연속되는지(예: 2024) 확인합니다.
     return bool(re.search(r'\d{4}', text))

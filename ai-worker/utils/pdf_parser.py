@@ -17,28 +17,26 @@ except ImportError:
 
 
 class ResumePDFParser:
-    """이력서 PDF 파싱 클래스
-    
-    Attributes:
-        PDF_AVAILABLE (bool): PDF 파싱 라이브러리 설치 여부
-    
-    생성자: ejm
-    생성일자: 2026-02-07
+    """설명:
+        이력서 PDF 파싱 클래스
+
+        생성자: ejm
+        생성일자: 2026-02-07
     """
     
     @staticmethod
     def extract_text_pypdf2(pdf_path: str) -> str:
-        """
-        PyPDF2를 사용한 텍스트 추출 (기본)
-        
-        Args:
+        """설명:
+            PyPDF2를 사용한 텍스트 추출 (기본)
+
+            Args:
             pdf_path: PDF 파일 경로
+
+            Returns:
             
-        Returns:
-            str: 추출된 텍스트
-        
-        생성자: ejm
-        생성일자: 2026-02-07
+
+            생성자: ejm
+            생성일자: 2026-02-07
         """
         if not PDF_AVAILABLE:
             raise ImportError("PyPDF2 not installed")
@@ -67,17 +65,17 @@ class ResumePDFParser:
     
     @staticmethod
     def extract_text_pdfplumber(pdf_path: str) -> str:
-        """
-        pdfplumber를 사용한 텍스트 추출 (더 정확함)
-        
-        Args:
+        """설명:
+            pdfplumber를 사용한 텍스트 추출 (더 정확함)
+
+            Args:
             pdf_path: PDF 파일 경로
+
+            Returns:
             
-        Returns:
-            str: 추출된 텍스트
-        
-        생성자: lyn
-        생성일자: 2026-02-07
+
+            생성자: lyn
+            생성일자: 2026-02-07
         """
         if not PDF_AVAILABLE:
             raise ImportError("pdfplumber not installed")
@@ -104,18 +102,18 @@ class ResumePDFParser:
     
     @staticmethod
     def extract_text(pdf_path: str, method: str = "pdfplumber") -> str:
-        """
-        PDF에서 텍스트 추출 (자동 fallback)
-        
-        Args:
+        """설명:
+            PDF에서 텍스트 추출 (자동 fallback)
+
+            Args:
             pdf_path: PDF 파일 경로
             method: 추출 방법 ("pdfplumber" 또는 "pypdf2")
+
+            Returns:
             
-        Returns:
-            str: 추출된 텍스트
-        
-        생성자: lyn
-        생성일자: 2026-02-04
+
+            생성자: lyn
+            생성일자: 2026-02-04
         """
         try:
             if method == "pdfplumber":
@@ -132,17 +130,17 @@ class ResumePDFParser:
     
     @staticmethod
     def extract_metadata(pdf_path: str) -> Dict:
-        """
-        PDF 메타데이터 추출
-        
-        Args:
+        """설명:
+            PDF 메타데이터 추출
+
+            Args:
             pdf_path: PDF 파일 경로
+
+            Returns:
             
-        Returns:
-            dict: 메타데이터 정보
-        
-        생성자: lyn
-        생성일자: 2026-02-04
+
+            생성자: lyn
+            생성일자: 2026-02-04
         """
         try:
             with open(pdf_path, 'rb') as file:
@@ -165,17 +163,17 @@ class ResumePDFParser:
     
     @staticmethod
     def clean_text(text: str) -> str:
-        """
-        추출된 텍스트 정제
-        
-        Args:
+        """설명:
+            추출된 텍스트 정제
+
+            Args:
             text: 원본 텍스트
+
+            Returns:
             
-        Returns:
-            str: 정제된 텍스트
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         # 여러 개의 공백을 하나로
         text = re.sub(r'\s+', ' ', text)

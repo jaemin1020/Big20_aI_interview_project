@@ -72,20 +72,17 @@ DATA_FILE_NAME_OLD = "preprocessed_data.json"
 DATA_FILE_NAME_CORP = "corp_data.json"
 
 def find_file(filename):
-    """
-    주어진 파일명을 가능한 데이터 디렉토리에서 찾음
-    
-    Args:
-        filename (str): 찾을 파일명
-    
-    Returns:
-        str: 파일의 절대 경로 또는 None
-    
-    Raises:
-        ValueError: 파일이 발견되지 않을 경우
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+    """설명:
+        주어진 파일명을 가능한 데이터 디렉토리에서 찾음
+
+        Args:
+        filename: 찾을 파일명
+
+        Returns:
+        
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     for directory in POSSIBLE_DATA_DIRS:
         filepath = os.path.join(directory, filename)
@@ -102,17 +99,14 @@ DATA_FILE_CORP = find_file(DATA_FILE_NAME_CORP) or "corp_data.json"
 # ==========================================
 
 def get_engine():
-    """
-    데이터베이스 엔진을 생성하고 테스트
-    
-    Returns:
-        engine: 데이터베이스 엔진
-    
-    Raises:
-        Exception: 데이터베이스 연결 실패
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+    """설명:
+        데이터베이스 엔진을 생성하고 테스트
+
+        Returns:
+        
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     try:
         engine = create_engine(DATABASE_URL)
@@ -124,23 +118,20 @@ def get_engine():
         return None
 
 def import_questions(session, file_path, source_name, generator):
-    """
-    JSON 파일에서 질문을 읽고 데이터베이스에 저장
-    
-    Args:
-        session (_type_): 데이터베이스세션
-        file_path (_type_): 파일위치
-        source_name (_type_): 데이터소스명
-        generator (_type_): 임베딩 생성기
+    """설명:
+        JSON 파일에서 질문을 읽고 데이터베이스에 저장
 
-    Raises:
-        Exception: 파일이 발견되지 않을 경우
+        Args:
+        session: 데이터베이스세션
+        file_path: 파일위치
+        source_name: 데이터소스명
+        generator: 임베딩 생성기
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if not os.path.exists(file_path):
         print(f"⚠️ Warning: File not found at {file_path}. Skipping {source_name}.")
@@ -324,19 +315,19 @@ def import_questions(session, file_path, source_name, generator):
         print(f"❌ Failed to commit {source_name}: {e}")
 
 def import_companies(session, file_path, generator):
-    """
-    회사정보를 DB에 저장하는 함수
+    """설명:
+        회사정보를 DB에 저장하는 함수
 
-    Args:
-        session (Session): DB 세션
-        file_path (str): JSON 파일 경로
-        generator (EmbeddingGenerator): 임베딩 생성기
-    
-    Raises:
-        Exception: 파일이 발견되지 않을 경우
+        Args:
+        session: DB 세션
+        file_path: JSON 파일 경로
+        generator: 임베딩 생성기
 
-    Returns:
-        None
+        Returns:
+        
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     if not os.path.exists(file_path):
         print(f"⚠️ Warning: File not found at {file_path}. Skipping Companies.")

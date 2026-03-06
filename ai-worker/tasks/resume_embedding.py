@@ -14,8 +14,17 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, name="tasks.resume_pipeline.generate_embeddings", queue='gpu_queue')
 def generate_resume_embeddings(self, resume_id: int):
-    """
-    구조화된 이력서 데이터를 기반으로 청킹 및 임베딩을 생성하여 DB에 저장합니다.
+    """설명:
+        구조화된 이력서 데이터를 기반으로 청킹 및 임베딩을 생성하여 DB에 저장합니다.
+
+        Args:
+        resume_id: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     logger.info(f"Starting resume embedding generation for ID: {resume_id}")
     

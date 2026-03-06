@@ -15,15 +15,45 @@ sys.path.append(scenario_path)
 INTERVIEW_STAGES = []
 
 def get_stage_by_name(stage_name):
-    """설명: 시나리오 단계 정보를 조회하는 함수 (기본값: None)"""
+    """설명:
+        시나리오 단계 정보를 조회하는 함수 (기본값: None)
+
+        Args:
+        stage_name: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return None
 
 def get_next_stage(current_stage):
-    """설명: 다음 단계를 조회하는 함수 (기본값: None)"""
+    """설명:
+        다음 단계를 조회하는 함수 (기본값: None)
+
+        Args:
+        current_stage: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return None
 
 def get_initial_stages():
-    """설명: 초기 단계를 조회하는 함수 (기본값: [])"""
+    """설명:
+        초기 단계를 조회하는 함수 (기본값: [])
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return []
 
 try:

@@ -71,18 +71,18 @@ except ImportError as e:
 
 # Helper Functions
 def get_best_questions_by_position(position: str, limit: int = 10):
-    """
-    직무별로 가장 좋은 질문을 가져옴
-    
-    Args:
+    """설명:
+        직무별로 가장 좋은 질문을 가져옴
+
+        Args:
         position: 직무
         limit: 가져올 질문 수
+
+        Returns:
         
-    Returns:
-        List[Question]: 직무별로 가장 좋은 질문
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Question).where(
@@ -93,17 +93,17 @@ def get_best_questions_by_position(position: str, limit: int = 10):
         return session.exec(stmt).all()
 
 def increment_question_usage(question_id: int):
-    """
-    질문 사용 횟수 증가
-    
-    Args:
+    """설명:
+        질문 사용 횟수 증가
+
+        Args:
         question_id: 질문 ID
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         question = session.get(Question, question_id)
@@ -113,18 +113,18 @@ def increment_question_usage(question_id: int):
             session.commit()
 
 def update_question_avg_score(question_id: int, new_score: float):
-    """
-    질문 평균 점수 업데이트
-    
-    Args:
+    """설명:
+        질문 평균 점수 업데이트
+
+        Args:
         question_id: 질문 ID
         new_score: 새로운 점수
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         question = session.get(Question, question_id)
@@ -144,21 +144,21 @@ def update_transcript_sentiment(
     total_score: Optional[float] = None,
     rubric_score: Optional[Dict[str, Any]] = None
 ):
-    """
-    면접 스크립트 감성 분석 업데이트
-    
-    Args:
+    """설명:
+        면접 스크립트 감성 분석 업데이트
+
+        Args:
         transcript_id: 면접 스크립트 ID
         sentiment_score: 감성 점수
         emotion: 감정
         total_score: 총 평가 점수 (0-100, optional)
         rubric_score: 루브릭별 상세 점수 JSON (optional)
+
+        Returns:
         
-    Returns:
-        None
-        
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
@@ -180,8 +180,19 @@ def update_transcript_sentiment(
             session.commit()
 
 def update_transcript_scores(transcript_id: int, total_score: float, rubric_score: Dict[str, Any]):
-    """
-    면접 답변의 상세 루브릭 점수 및 총점 업데이트
+    """설명:
+        면접 답변의 상세 루브릭 점수 및 총점 업데이트
+
+        Args:
+        transcript_id: 파라미터 설명.
+        total_score: 파라미터 설명.
+        rubric_score: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         transcript = session.get(Transcript, transcript_id)
@@ -193,18 +204,17 @@ def update_transcript_scores(transcript_id: int, total_score: float, rubric_scor
             logger.info(f"✅ [DB_UPDATE] Transcript(id={transcript_id}) scores updated: total={total_score}")
 
 def create_or_update_evaluation_report(interview_id: int, **kwargs):
-    """
-    면접 평가 보고서 생성 또는 업데이트
-    
-    Args:
+    """설명:
+        면접 평가 보고서 생성 또는 업데이트
+
+        Args:
         interview_id: 면접 ID
-        **kwargs: 평가 보고서 데이터
+
+        Returns:
         
-    Returns:
-        EvaluationReport: 평가 보고서
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(EvaluationReport).where(EvaluationReport.interview_id == interview_id)
@@ -225,17 +235,17 @@ def create_or_update_evaluation_report(interview_id: int, **kwargs):
         return report
 
 def get_interview_transcripts(interview_id: int):
-    """
-    면접 스크립트 가져오기
-    
-    Args:
+    """설명:
+        면접 스크립트 가져오기
+
+        Args:
         interview_id: 면접 ID
+
+        Returns:
         
-    Returns:
-        List[Transcript]: 면접 스크립트
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         # [버그3 수정] User transcript는 order=NULL로 저장되어 order 정렬 시 순서 뒤섞임
@@ -244,17 +254,17 @@ def get_interview_transcripts(interview_id: int):
         return session.exec(stmt).all()
 
 def get_user_answers(interview_id: int):
-    """
-    사용자 답변 가져오기
-    
-    Args:
+    """설명:
+        사용자 답변 가져오기
+
+        Args:
         interview_id: 면접 ID
+
+        Returns:
         
-    Returns:
-        List[Transcript]: 사용자 답변
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Transcript).where(
@@ -264,18 +274,18 @@ def get_user_answers(interview_id: int):
         return session.exec(stmt).all()
 
 def update_interview_overall_score(interview_id: int, score: float):
-    """
-    면접 전체 점수 업데이트
-    
-    Args:
+    """설명:
+        면접 전체 점수 업데이트
+
+        Args:
         interview_id: 면접 ID
         score: 전체 점수
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -287,21 +297,21 @@ def update_interview_overall_score(interview_id: int, score: float):
 # ==================== Company Helper Functions ====================
 
 def create_company(company_id: str, company_name: str, ideal: str = None, description: str = None, embedding: List[float] = None):
-    """
-    회사 정보 생성
-    
-    Args:
+    """설명:
+        회사 정보 생성
+
+        Args:
         company_id: 회사 ID
         company_name: 회사 이름
         ideal: 이상적인 인재상
         description: 회사 설명
         embedding: 회사 특성 벡터
+
+        Returns:
         
-    Returns:
-        Company: 회사 정보
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         company = Company(
@@ -317,34 +327,34 @@ def create_company(company_id: str, company_name: str, ideal: str = None, descri
         return company
 
 def get_company_by_id(company_id: str):
-    """
-    회사 ID로 조회
-    
-    Args:
+    """설명:
+        회사 ID로 조회
+
+        Args:
         company_id: 회사 ID
+
+        Returns:
         
-    Returns:
-        Company: 회사 정보
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         return session.get(Company, company_id)
 
 def update_company_embedding(company_id: str, embedding: List[float]):
-    """
-    회사 특성 벡터 업데이트
-    
-    Args:
+    """설명:
+        회사 특성 벡터 업데이트
+
+        Args:
         company_id: 회사 ID
         embedding: 회사 특성 벡터
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         company = session.get(Company, company_id)
@@ -355,18 +365,18 @@ def update_company_embedding(company_id: str, embedding: List[float]):
             session.commit()
 
 def find_similar_companies(embedding: List[float], limit: int = 5):
-    """
-    벡터 유사도 기반 유사 회사 검색
-    
-    Args:
+    """설명:
+        벡터 유사도 기반 유사 회사 검색
+
+        Args:
         embedding: 회사 특성 벡터
         limit: 가져올 회사 수
+
+        Returns:
         
-    Returns:
-        List[Company]: 유사 회사
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         stmt = select(Company).where(
@@ -378,18 +388,18 @@ def find_similar_companies(embedding: List[float], limit: int = 5):
         return session.exec(stmt).all()
 
 def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
-    """
-    면접 세션의 감정 분석 결과 업데이트
-    
-    Args:
+    """설명:
+        면접 세션의 감정 분석 결과 업데이트
+
+        Args:
         interview_id: 면접 ID
         emotion_data: 감정 분석 데이터
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         interview = session.get(Interview, interview_id)
@@ -414,7 +424,24 @@ def update_session_emotion(interview_id: int, emotion_data: Dict[str, Any]):
             session.commit()
 
 def save_generated_question(interview_id: int, content: str, category: str, stage: str, guide: str = None, rubric_json: dict = None, session: Session = None):
-    """생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함"""
+    """설명:
+        생성된 질문을 Question 및 Transcript 테이블에 저장하여 프론트엔드가 즉시 인식하게 함
+
+        Args:
+        interview_id: 파라미터 설명.
+        content: 파라미터 설명.
+        category: 파라미터 설명.
+        stage: 파라미터 설명.
+        guide: 파라미터 설명.
+        rubric_json: 파라미터 설명.
+        session: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     if session is None:
         with Session(engine) as new_session:
             return _save_generated_question_logic(new_session, interview_id, content, category, stage, guide, rubric_json)
