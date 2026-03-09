@@ -321,6 +321,8 @@ docker-compose exec backend python check_db.py
 
 ### Backend
 
+![Backend Stack](./docs/img/backend_stack.png)
+
 | 구성요소 | 기술 | 버전 |
 |---------|------|------|
 | Framework | FastAPI | 0.109+ |
@@ -332,17 +334,20 @@ docker-compose exec backend python check_db.py
 
 ### AI / ML
 
+![AI Stack](./docs/img/ai_stack_vfinal.png)
+
 | 구성요소 | 기술 | 용도 |
 |---------|------|------|
-| LLM | EXAONE-3.5 / Solar-10.7B | 질문 생성·답변 평가 |
+| LLM | EXAONE-3.5 | 질문 생성·답변 평가 |
 | Embedding | KURE-v1 (1024차원) | 한국어 이력서 임베딩 |
-| STT | Deepgram `nova-2` (실시간) | 브라우저 직접 연동 실시간 전사 |
-| STT (백업) | Faster-Whisper (`large-v3-turbo`) | 미디어 서버 → AI-Worker 위임 |
+| STT | Faster-Whisper (`large-v3-turbo`) | 미디어 서버 → AI-Worker 위임 |
 | TTS | Supertonic-2 | 텍스트→음성 (한국어) |
 | Vision | MediaPipe FaceLandmarker | 시선·자세·감정 실시간 분석 (5FPS) |
 | RAG Framework | LangChain | 질문 생성 파이프라인 |
 
 ### Frontend
+
+![Frontend Stack](./docs/img/frontend_stack.png)
 
 | 구성요소 | 기술 | 버전 |
 |---------|------|------|
@@ -358,6 +363,8 @@ docker-compose exec backend python check_db.py
 | Styling | Vanilla CSS (Glassmorphism) | - |
 
 ### Infrastructure
+
+![Infrastructure Stack](./docs/img/infra_stack.png)
 
 | 구성요소 | 기술 |
 |---------|------|
