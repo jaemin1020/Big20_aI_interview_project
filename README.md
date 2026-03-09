@@ -376,55 +376,6 @@ docker-compose exec backend python check_db.py
 
 ---
 
-## 📚 API 문서
-
-### 주요 엔드포인트
-
-#### 인증 (Authentication)
-
-```http
-POST /auth/register          # 회원가입
-POST /auth/token             # 로그인 (JWT 발급)
-GET  /users/me               # 현재 사용자 정보
-PATCH /auth/password         # 비밀번호 변경
-DELETE /auth/withdraw        # 회원 탈퇴
-```
-
-#### 이력서 (Resumes)
-
-```http
-POST /resumes/upload         # 이력서 업로드 (PDF/DOCX → 자동 파싱·임베딩)
-GET  /resumes/{id}           # 이력서 상태 및 파싱 결과 조회
-GET  /api/resumes/{id}/pdf   # 이력서 PDF 원본 다운로드
-```
-
-#### 면접 (Interviews)
-
-```http
-POST /interviews             # 면접 세션 생성 (질문 자동 생성)
-GET  /interviews/{id}        # 면접 정보 조회
-GET  /interviews             # 전체 면접 목록 (권한별)
-POST /interviews/{id}/complete   # 면접 종료 (평가 리포트 생성 트리거)
-GET  /interviews/{id}/report     # 평가 리포트 조회
-GET  /interviews/{id}/questions  # 면접 질문 목록 (TTS URL 포함)
-GET  /interviews/{id}/transcripts # 전체 대화 기록
-PATCH /interviews/{id}/behavior-scores  # 영상 분석 점수 저장 (media-server 전용)
-WS   /interviews/ws/{id}    # AI 질문 실시간 스트리밍 (Redis Pub/Sub 브릿지)
-```
-
-#### Media Server
-
-```http
-POST /offer                        # WebRTC SDP 협상
-WS   /ws/{session_id}             # WebSocket (실시간 영상 분석 결과 수신)
-GET  /status                       # Vision Analyzer 상태 확인
-POST /stt/recognize                # STT 테스트 (미디어 서버)
-```
-
-> 전체 API 명세: http://localhost:8000/docs (Swagger UI)
-
----
-
 ## 👨‍💻 개발 가이드
 
 ### 로컬 개발 환경 설정
@@ -498,15 +449,14 @@ docker-compose restart ai-worker-cpu
 
 | 테이블 | 설명 |
 |--------|------|
-| `users` | 지원자·채용담당자·관리자 계정 (JWT 인증) |
-| `resumes` | 이력서 파일 및 파싱 결과 (structured_data JSONB) |
-| `resumesectionembedding` | 섹션별 벡터 (pgvector, KURE-v1 1024차원) |
-| `resumechunk` | 텍스트 청크 임베딩 (RAG 검색용) |
-| `interviews` | 면접 세션 (scheduled → live → completed) |
-| `questions` | AI 생성 질문 (재사용 통계 포함) |
-| `transcripts` | 면접 대화 기록 (AI 질문 + 사용자 답변 + 영상 채점) |
-| `evaluationreport` | 종합 평가 리포트 (기술·행동·영상 분석 점수) |
-| `companies` | 회사 정보 |
+| `users` | 지원자·채용담당자·관리자 계정 및 프로필 (JWT 인증) |
+| `resumes` | 이력서 파일 정보, 파싱 결과(JSONB) 및 대표 벡터(1024차원) |
+| `companies` | 기업 정보, 인재상 및 기업 특징 벡터(1024차원) |
+| `interviews` | 면접 세션 정보 및 상태 관리 (SCHEDULED → LIVE → COMPLETED) |
+| `questions` | AI 생성 질문 은행 및 평가 루브릭(JSONB) |
+| `transcripts` | 면접 대화 기록 (STT 전사, 감정 분석, 질문별 점수) |
+| `evaluation_reports` | 종합 평가 리포트 (역량별 점수, 상세 피드백, LLM 요약) |
+| `answer_bank` | 우수 답변 모음 및 전문가 피드백 (벡터 검색용) |
 
 ---
 
