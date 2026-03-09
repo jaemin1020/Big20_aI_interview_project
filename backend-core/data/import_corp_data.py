@@ -16,6 +16,18 @@ with open(LOG_FILE, "w", encoding="utf-8") as f:
 
 
 def log(msg):
+    """설명:
+        로그 파일과 콘솔에 동시에 메시지를 출력하는 핵심 함수.
+
+    Args:
+        msg: 출력할 메시지 (문자열로 변환 후 기록).
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(str(msg) + "\n")
     print(msg)
@@ -76,6 +88,15 @@ try:
                 return None
 
     def import_companies():
+        """설명:
+            corp_data.json 파일을 로드하여 companies 테이블에 UPSERT 가 포함한 복수 회사 데이터를 INSERT.
+
+        Returns:
+            None
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         # JSON 로드
         log(f"\n📂 JSON 로드: {JSON_PATH}")
         if not os.path.exists(JSON_PATH):

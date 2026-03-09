@@ -64,7 +64,18 @@ except ImportError as e:
     logger.warning(f"Could not import from backend-core utils: {e}. Falling back to basics.")
 
 def get_rubric_for_stage(stage_name: str) -> dict:
-    """스테이지 이름에 맞는 루브릭 영역 반환"""
+    """설명:
+        스테이지 이름에 맞는 루브릭 영역 반환
+
+        Args:
+        stage_name: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     try:
         full_rubric = create_evaluation_rubric()
         for area in full_rubric["evaluation_areas"]:
@@ -79,11 +90,42 @@ def get_rubric_for_stage(stage_name: str) -> dict:
 # [Schema] 평가 데이터 구조 정의 (Pydantic)
 # -----------------------------------------------------------
 class AnswerEvalSchema(BaseModel):
+    """설명:
+        개별 답변 평가 결과를 담는 Pydantic 스키마.
+        LLM 출력을 JSON 보템스로 바인딩할 때 사용.
+
+    Attributes:
+        total_score (int): 루브릭 세부 항목 점수들의 합계 (0-100).
+        rubric_scores (Dict[str, int]): 루브릭 세부 항목별 점수.
+        feedback (str): 답변에 대한 피드백 (평문).
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     total_score: int = Field(description="루브릭 세부 항목 점수들의 합계 (0-100)")
     rubric_scores: Dict[str, int] = Field(description="루브릭 세부 항목별 점수 (예: {'논리적 구조': 35, '핵심 전달력': 30, ...})")
     feedback: str = Field(description="답변에 대한 구체적이고 건설적인 피드백 (마크다운 없이 평문으로 작성)")
 
 class FinalReportSchema(BaseModel):
+    """설명:
+        최종 면접 리포트 데이터를 담는 Pydantic 스키마.
+        LLM이 생성한 종합 평가 데이터를 DB 저장 전 바인딩할 때 사용.
+
+    Attributes:
+        overall_score (int): 전체 평균 점수 (0-100).
+        technical_score (int): 기술 이해도 점수.
+        experience_score (int): 직무 경험 점수.
+        problem_solving_score (int): 문제 해결 점수.
+        communication_score (int): 의사소통 점수.
+        responsibility_score (int): 책임감 점수.
+        growth_score (int): 성장 의지 점수.
+        strengths (List[str]): 주요 강점 목록.
+        improvements (List[str]): 보완점 목록.
+        summary_text (str): 시니어 면접관의 최종 한마디.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     overall_score: int = Field(description="전체 평균 점수 (0-100)")
     technical_score: int = Field(description="기술 이해도 (0-100)")
     experience_score: int = Field(description="직무 경험 (0-100)")
@@ -108,7 +150,23 @@ class FinalReportSchema(BaseModel):
     summary_text: str = Field(description="성장을 위한 시니어 위원장의 최종 한마디 (3문장 내외)")
 
 def _analyze_answer_logic(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
-    """개별 답변 평가 핵심 로직 (DB 업데이트 포함)"""
+    """설명:
+        개별 답변 평가 핵심 로직 (DB 업데이트 포함)
+
+        Args:
+        transcript_id: 파라미터 설명.
+        question_text: 파라미터 설명.
+        answer_text: 파라미터 설명.
+        rubric: 파라미터 설명.
+        question_id: 파라미터 설명.
+        question_type: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     
     start_ts = time.time()
     
@@ -211,9 +269,7 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
             "항목별배점": rubric.get("detailed_scoring", {}) if rubric else {}
         }
 
-        sentiment = (tech_score / 100.0) - 0.5 
         try:
-            update_transcript_sentiment(transcript_id, sentiment_score=sentiment, emotion="neutral", total_score=float(tech_score), rubric_score=db_rubric_data)
             update_transcript_scores(transcript_id, total_score=float(tech_score), rubric_score=db_rubric_data)
         except Exception as db_err:
             logger.error(f"❌ DB 저장 오류 (Transcript {transcript_id}): {db_err}")
@@ -228,16 +284,38 @@ LG AI Research가 개발한 EXAONE으로서, 제공된 루브릭을 절대적 �
 
 @shared_task(name="tasks.evaluator.analyze_answer")
 def analyze_answer(transcript_id: int, question_text: str, answer_text: str, rubric: dict = None, question_id: int = None, question_type: str = None):
-    """개별 답변 평가 (상위 호환성 유지)"""
+    """설명:
+        개별 답변 평가 (상위 호환성 유지)
+
+        Args:
+        transcript_id: 파라미터 설명.
+        question_text: 파라미터 설명.
+        answer_text: 파라미터 설명.
+        rubric: 파라미터 설명.
+        question_id: 파라미터 설명.
+        question_type: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return _analyze_answer_logic(transcript_id, question_text, answer_text, rubric, question_id, question_type)
 
 @shared_task(name="tasks.evaluator.generate_final_report")
 def generate_final_report(interview_id: int):
-    """
-    최종 평가 보고서 생성 프로세스 시작 (병렬화 적용)
-    1. 평가 안 된 답변들 취합
-    2. Celery group을 통해 병렬 평가 실행
-    3. 평가 완료 후 finalize_report_task 호출
+    """설명:
+        최종 평가 보고서 생성 프로세스 시작 (병렬화 적용)
+
+        Args:
+        interview_id: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     logger.info(f"🚀 Starting Final Report pipeline for Interview {interview_id}")
     
@@ -262,7 +340,7 @@ def generate_final_report(interview_id: int):
                             question_text=q.content,
                             answer_text=t.text,
                             rubric=q.rubric_json,
-                            question_id=t.id,
+                            question_id=t.question_id,
                             question_type=q.question_type
                         )
                     )
@@ -282,8 +360,18 @@ def generate_final_report(interview_id: int):
 
 @shared_task(name="tasks.evaluator.finalize_report_task")
 def finalize_report_task(prev_results, interview_id: int):
-    """
-    개별 답변 평가가 완료된 후 실행되는 최종 리포트 생성 로직 (시니어 면접관 페르소나)
+    """설명:
+        개별 답변 평가가 완료된 후 실행되는 최종 리포트 생성 로직 (시니어 면접관 페르소나)
+
+        Args:
+        prev_results: 파라미터 설명.
+        interview_id: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     logger.info(f"📝 Generating Final Report for Interview {interview_id}")
     from db import (
@@ -426,12 +514,12 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
                 valid_scores = []
                 for t in user_transcripts:
                     try:
-                        s = float(t.sentiment_score) if t.sentiment_score is not None else 0.0
-                        valid_scores.append(s + 0.5)
+                        s = float(t.sentiment_score) if t.sentiment_score is not None else 70.0
+                        valid_scores.append(s)
                     except:
                         valid_scores.append(0.5) # 기본 점수
                 
-                avg_tech = (sum(valid_scores) / len(valid_scores)) * 100 if valid_scores else 70
+                avg_tech = (sum(valid_scores) / len(valid_scores)) if valid_scores else 70
             except:
                 avg_tech = 70
             
@@ -452,6 +540,20 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
 
         try:
             def ensure_int(val, default=0):
+                """설명:
+                    입력값을 안전하게 int로 변환.
+                    None, 스트링, float 등 다양한 입력을 허용하며, 변환 실패 시 default 반환.
+
+                Args:
+                    val: 변환할 값 (int, float, str, None 등).
+                    default (int): 변환 실패 시 반환할 기본값 (default: 0).
+
+                Returns:
+                    int: 변환된 정수값.
+
+                생성자: ejm
+                생성일자: 2026-02-04
+                """
                 try:
                     if val is None: return default
                     return int(float(str(val)))
@@ -465,6 +567,31 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
             resp = ensure_int(result.get("responsibility_score"), 0)
             grow = ensure_int(result.get("growth_score"), 0)
             cult = int((resp + grow) / 2)
+            # [추가] 행동 분석 기반 피드백 (Rule-based)
+            user_transcripts = [t for t in transcripts if str(t.speaker).lower() in ('user', 'speaker.user')]
+            behavior_scores = [t.sentiment_score for t in user_transcripts if t.sentiment_score is not None]
+            avg_behavior = sum(behavior_scores) / len(behavior_scores) if behavior_scores else 0
+            
+            major_emotion = "안정적"
+            if avg_behavior < 60:
+                major_emotion = "긴장도 높음"
+                if "improvements" in result and isinstance(result["improvements"], list):
+                    # 사용자 요청 문구 반영
+                    result["improvements"].append("자신감을 가질 필요가 있습니다. 시선을 정면을 바라볼 필요가 있으며, 자세가 산만하지 않도록 바른 자세와 안정적인 긴장도 유지가 필요합니다.")
+            elif avg_behavior >= 70:
+                major_emotion = "자신감 있음"
+                if "strengths" in result and isinstance(result["strengths"], list):
+                    # 사용자 요청 문구 반영
+                    result["strengths"].append("자신감이 좋고 시선 처리가 안정적입니다. 자세가 반듯하고 안정감 있게 유지되어 면접관에게 신뢰감을 줍니다.")
+
+            elif 60 <= avg_behavior < 70:
+                major_emotion = "안정적"
+                if "strengths" in result and isinstance(result["strengths"], list):
+                    result["strengths"].append(
+                        "전반적으로 안정된 태도를 유지하였습니다. 긴장 없이 차분하게 답변하는 모습이 "
+                        "면접관에게 성실하고 신뢰감 있는 인상을 주었습니다."
+                    )
+
             overall = ensure_int(result.get("overall_score"), int((tech + comm + cult) / 3))
 
             # 모든 상세 필드를 details_json에 저장 (프론트엔드 연동)
@@ -473,6 +600,8 @@ LG AI Research의 EXAONE으로서, 면접 전체 발화 로그와 [표준 평가
                 "problem_solving_score": ensure_int(result.get("problem_solving_score"), 0),
                 "responsibility_score": resp,
                 "growth_score": grow,
+                "major_emotion": major_emotion, # 주요 감정 추가
+                "avg_behavior_score": round(avg_behavior, 1),
                 "technical_feedback": result.get("technical_feedback", ""),
                 "experience_feedback": result.get("experience_feedback", ""),
                 "problem_solving_feedback": result.get("problem_solving_feedback", ""),

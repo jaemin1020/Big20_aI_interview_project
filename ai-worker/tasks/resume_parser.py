@@ -29,8 +29,18 @@ logger.info("✅ Task Module 'tasks.resume_pipeline' is being loaded.")
 # [문법] queue='cpu_queue': 이 작업은 연산량이 많으므로 'CPU 전용 일꾼'에게만 시키겠다는 명시적인 지정입니다.
 @shared_task(bind=True, name="tasks.resume_pipeline.parse_pdf", queue='cpu_queue')
 def parse_resume_pdf(self, resume_id: int, file_path: str):
-    """
-    이력서 PDF를 읽어 DB에 저장하고, 다음 AI 단계로 넘기는 '공장장' 함수
+    """설명:
+        이력서 PDF를 읽어 DB에 저장하고, 다음 AI 단계로 넘기는 '공장장' 함수
+
+        Args:
+        resume_id: 파라미터 설명.
+        file_path: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     
     # -------------------------------------------------------
@@ -113,9 +123,18 @@ def parse_resume_pdf(self, resume_id: int, file_path: str):
 # ==========================================
 
 def _update_status(resume_id: int, status: str):
-    """
-    이 함수는 코드 중복을 피하기 위해 만든 '상태 업데이트 전용' 함수입니다.
-    함수 이름 앞에 언더바(_)를 붙여서 '이 파일 안에서만 주로 쓰겠다'는 신호를 줍니다.
+    """설명:
+        이 함수는 코드 중복을 피하기 위해 만든 '상태 업데이트 전용' 함수입니다.
+
+        Args:
+        resume_id: 파라미터 설명.
+        status: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     with Session(engine) as session:
         resume = session.get(Resume, resume_id)

@@ -18,19 +18,11 @@ logger = logging.getLogger("ResumeStructurer")
 
 # 데이터 구조 정의용 Pydantic 모델
 class StructuredResume(BaseModel):
-    """이력서 구조화를 위한 Pydantic 모델
-    
-    Attributes:
-        personal_info (Dict): 개인 정보
-        education (List[Dict]): 학력 사항 리스트
-        experience (List[Dict]): 경력 사항 리스트
-        projects (List[Dict]): 프로젝트 리스트
-        skills (Dict): 보유 기술
-        certifications (List[Dict]): 자격증 및 수상 내역
-        cover_letter (Dict): 자기소개서 각 항목별 내용
-    
-    생성자: lyn
-    생성일자: 2026-02-04
+    """설명:
+        이력서 구조화를 위한 Pydantic 모델
+
+        생성자: lyn
+        생성일자: 2026-02-04
     """
     personal_info: Dict = Field(description="이름, 이메일, 연락처 등 개인 정보")
     education: List[Dict] = Field(description="학력 사항 리스트 (학교, 전공, 학위, 졸업일)")
@@ -41,31 +33,35 @@ class StructuredResume(BaseModel):
     cover_letter: Dict = Field(description="자기소개서 각 항목별 내용")
 
 class ResumeStructurer:
-    """LLM 기반 이력서 구조화 엔진
-    
-    Attributes:
-        llm (ExaoneLLM): LLM 엔진 (EXAONE-3.5)
-        parser (JsonOutputParser): JSON 출력 파서
-    
-    생성자: lyn
-    생성일자: 2026-02-04
+    """설명:
+        LLM 기반 이력서 구조화 엔진
+
+        생성자: lyn
+        생성일자: 2026-02-04
     """
     def __init__(self):
+        """설명:
+            ResumeStructurer 인스턴스를 초기화하고 EXAONE LLM 엔진과 JSON 파서를 준비.
+
+        생성자: lyn
+        생성일자: 2026-02-04
+        """
         # EXAONE 엔진 초기화
         self.llm = get_exaone_llm()
         self.parser = JsonOutputParser(pydantic_object=StructuredResume)
 
     def structure_resume(self, text: str) -> Dict:
-        """LLM을 사용하여 이력서 텍스트를 완벽하게 구조화
-        
-        Args:
-            text (str): 구조화할 이력서 텍스트
+        """설명:
+            LLM을 사용하여 이력서 텍스트를 완벽하게 구조화
+
+            Args:
+            text: 구조화할 이력서 텍스트
+
+            Returns:
             
-        Returns:
-            Dict: 구조화된 이력서 데이터
-        
-        생성자: lyn
-        생성일자: 2026-02-04
+
+            생성자: lyn
+            생성일자: 2026-02-04
         """
         logger.info("LLM을 이용한 이력서 구조화 시작...")
         
@@ -98,27 +94,29 @@ LG AI Research의 EXAONE으로서, 제공된 [이력서 텍스트]를 분석하�
             return self._get_fallback_data()
 
     def structure_with_rules(self, text: str) -> Dict:
-        """기존 코드와의 호환성을 위한 별칭
-        
-        Args:
-            text (str): 구조화할 이력서 텍스트
+        """설명:
+            기존 코드와의 호환성을 위한 별칭
+
+            Args:
+            text: 구조화할 이력서 텍스트
+
+            Returns:
             
-        Returns:
-            Dict: 구조화된 이력서 데이터
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         return self.structure_resume(text)
 
     def _get_fallback_data(self) -> Dict:
-        """실패 시 반환할 기본 구조
-        
-        Returns:
-            Dict: 기본 구조 데이터
-        
-        생성자: lyn
-        생성일자: 2026-02-04
+        """설명:
+            실패 시 반환할 기본 구조
+
+            Returns:
+            
+
+            생성자: lyn
+            생성일자: 2026-02-04
         """
         return {
             "personal_info": {},

@@ -10,37 +10,26 @@ logger = logging.getLogger("ResumeTools")
 
 
 class ResumeTool:
-    """이력서 정보 조회 및 처리 도구
-    
-    Attributes:
-        logger (Logger): 로거 인스턴스
-    
-    생성자: ejm
-    생성일자: 2026-02-04
+    """설명:
+        이력서 정보 조회 및 처리 도구
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     
     @staticmethod
     def get_resume_by_interview(interview_id: int) -> Dict:
-        """
-        면접 ID로 이력서 정보 조회
-        
-        Args:
+        """설명:
+            면접 ID로 이력서 정보 조회
+
+            Args:
             interview_id: 면접 ID
+
+            Returns:
             
-        Returns:
-            dict: {
-                "extracted_text": str,
-                "structured_data": dict,
-                "summary": str,
-                "has_resume": bool,
-                "processing_status": str
-            }
-        
-        Raises:
-            ValueError: 면접 ID로 이력서 조회 실패
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         with Session(engine) as session:
             # Interview 조회
@@ -90,20 +79,34 @@ class ResumeTool:
     
     @staticmethod
     def get_resume_by_id(resume_id: int) -> Optional[Resume]:
-        """Resume ID로 직접 조회"""
+        """설명:
+            Resume ID로 직접 조회
+
+            Args:
+            resume_id: 파라미터 설명.
+
+            Returns:
+            반환값 정보.
+
+            생성자: ejm
+            생성일자: 2026-02-04
+        """
         with Session(engine) as session:
             return session.get(Resume, resume_id)
     
     @staticmethod
     def _generate_summary(resume: Resume) -> str:
-        """
-        이력서 요약 생성
-        
-        Args:
+        """설명:
+            이력서 요약 생성
+
+            Args:
             resume: Resume 객체
+
+            Returns:
             
-        Returns:
-            str: 요약 텍스트
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         if not resume.structured_data:
             # 구조화 데이터가 없으면 텍스트 앞부분만 반환
@@ -166,17 +169,17 @@ class ResumeTool:
     
     @staticmethod
     def format_for_llm(resume_info: Dict) -> str:
-        """
-        LLM 프롬프트용 포맷팅
-        
-        Args:
+        """설명:
+            LLM 프롬프트용 포맷팅
+
+            Args:
             resume_info: get_resume_by_interview 반환값
+
+            Returns:
             
-        Returns:
-            str: LLM에 전달할 포맷팅된 텍스트
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         if not resume_info.get("has_resume"):
             return "이력서 정보 없음"

@@ -21,6 +21,19 @@ app = FastAPI(title="AI Interview Backend v2.0")
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """설명:
+        FastAPI 요청 유효성 검증 실패 시 문제가 된 필드와 요청 body를 422 응답으로 반환.
+
+    Args:
+        request (Request): 원본 HTTP 요청.
+        exc (RequestValidationError): FastAPI 유효성 검증 예외.
+
+    Returns:
+        JSONResponse: 422 상태 코드와 오류 상세 정보.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     import json
     try:
         body = await request.json()
@@ -36,6 +49,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # DB 초기화
 @app.on_event("startup")
 def on_startup():
+    """설명:
+        FastAPI 애플리케이션 시작 시 DB를 초기화하는 이벤트 핸들러.
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     init_db()
     logger.info("✅ Database initialized with new schema")
 
@@ -80,6 +102,15 @@ app.include_router(resumes_router) # ✨ 이력서 부서 연결 완료!
 # 서버 상태 확인
 @app.get("/")
 async def root():
+    """설명:
+        서버 상태 확인 엔드포인트. 서비스 정보와 실행 수단 목록을 JSON으로 반환.
+
+    Returns:
+        dict: 서비스 이름, 상태, DB, 기능 목록.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return {
         "service": "AI Interview Backend v2.0",
         "status": "running",

@@ -9,37 +9,26 @@ import logging
 logger = logging.getLogger("CompanyTools")
 
 class CompanyTool:
-    """회사 정보 조회 도구
-    
-    Attributes:
-        logger (Logger): 로거 인스턴스
-    
-    생성자: ejm
-    생성일자: 2026-02-08
+    """설명:
+        회사 정보 조회 도구
+
+        생성자: ejm
+        생성일자: 2026-02-08
     """
     
     @staticmethod
     def get_company_by_interview(interview_id: int) -> Dict:
-        """
-        면접 ID로 회사 정보 조회
-        
-        Args:
+        """설명:
+            면접 ID로 회사 정보 조회
+
+            Args:
             interview_id: 면접 ID
+
+            Returns:
             
-        Returns:
-            dict: {
-                "id": str,
-                "name": str,
-                "ideal": str,
-                "description": str,
-                "has_company": bool
-            }
-        
-        Raises:
-            ValueError: 면접 ID로 회사 조회 실패
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         with Session(engine) as session:
             # Interview 조회
@@ -78,36 +67,34 @@ class CompanyTool:
     
     @staticmethod
     def get_company_by_id(company_id: str) -> Optional[Company]:
-        """Company ID로 직접 조회
-        
-        Args:
+        """설명:
+            Company ID로 직접 조회
+
+            Args:
             company_id: Company ID
+
+            Returns:
             
-        Returns:
-            Optional[Company]: 회사 정보
-        
-        Raises:
-            ValueError: 회사 ID로 조회 실패
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         with Session(engine) as session:
             return session.get(Company, company_id)
     
     @staticmethod
     def format_for_llm(company_info: Dict) -> str:
-        """
-        LLM 프롬프트용 포맷팅
-        
-        Args:
+        """설명:
+            LLM 프롬프트용 포맷팅
+
+            Args:
             company_info: get_company_by_interview 반환값
+
+            Returns:
             
-        Returns:
-            str: LLM에 전달할 포맷팅된 텍스트
-        
-        생성자: ejm
-        생성일자: 2026-02-04
+
+            생성자: ejm
+            생성일자: 2026-02-04
         """
         if not company_info.get("has_company"):
             return "회사 정보 없음"

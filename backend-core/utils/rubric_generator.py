@@ -5,11 +5,14 @@ from typing import Dict, List
 
 
 def create_evaluation_rubric() -> Dict:
-    """
-    AI 모의면접 전체 평가 루브릭 생성
-    
-    Returns:
-        dict: 5개 영역(A~E) 평가 루브릭
+    """설명:
+        AI 모의면접 전체 평가 루브릭 생성
+
+        Returns:
+        
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     return {
         "evaluation_areas": [
@@ -30,7 +33,15 @@ def create_evaluation_rubric() -> Dict:
 
 
 def create_area_a_rubric() -> Dict:
-    """A. 자기 표현 & 기본 커뮤니케이션 (15%)"""
+    """설명:
+        A. 자기 표현 & 기본 커뮤니케이션 (15%)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return {
         "code": "A",
         "name": "자기 표현 & 기본 커뮤니케이션",
@@ -94,7 +105,15 @@ def create_area_a_rubric() -> Dict:
 
 
 def create_area_b_rubric() -> Dict:
-    """B. 지원 동기 & 회사 적합성 (15%)"""
+    """설명:
+        B. 지원 동기 & 회사 적합성 (15%)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return {
         "code": "B",
         "name": "지원 동기 & 회사 적합성",
@@ -158,7 +177,15 @@ def create_area_b_rubric() -> Dict:
 
 
 def create_area_c_rubric() -> Dict:
-    """C. 직무 지식 이해도 (20%)"""
+    """설명:
+        C. 직무 지식 이해도 (20%)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return {
         "code": "C",
         "name": "직무 지식 이해도",
@@ -227,7 +254,15 @@ def create_area_c_rubric() -> Dict:
 
 
 def create_area_d_rubric() -> Dict:
-    """D. 직무 경험 & 문제 해결 (30%)"""
+    """설명:
+        D. 직무 경험 & 문제 해결 (30%)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return {
         "code": "D",
         "name": "직무 경험 & 문제 해결",
@@ -306,7 +341,15 @@ def create_area_d_rubric() -> Dict:
 
 
 def create_area_e_rubric() -> Dict:
-    """E. 인성 & 성장 가능성 (20%)"""
+    """설명:
+        E. 인성 & 성장 가능성 (20%)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return {
         "code": "E",
         "name": "인성 & 성장 가능성",
@@ -388,7 +431,15 @@ def create_area_e_rubric() -> Dict:
 
 
 def get_evaluation_prompt() -> str:
-    """LLM 평가 프롬프트 생성 (EXAONE 3.5 최적화)"""
+    """설명:
+        LLM 평가 프롬프트 생성 (EXAONE 3.5 최적화)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     return """[|system|]당신은 IT 기업의 신입 채용을 담당하는 전문 면접관입니다.
 LG AI Research의 EXAONE으로서, 아래 제공되는 이력서 정보와 답변 로그를 바탕으로 지원자의 역량을 정밀하게 평가하십시오.
 
