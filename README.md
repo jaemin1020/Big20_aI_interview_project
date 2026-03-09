@@ -332,6 +332,19 @@ docker-compose exec backend python check_db.py
 | Authentication | JWT (python-jose) | 3.3+ |
 | Password | bcrypt | 4.0.1 |
 
+### Media-Server
+
+![Media-Server Stack](./docs/img/Gemini_Generated_Image_7pzq797pzq797pzq.png)
+
+| 구성요소 | 기술 | 용도 |
+|---------|------|------|
+| Framework | FastAPI | WebRTC 제어 및 API 엔드포인트 |
+| WebRTC | aiortc | 실시간 미디어 스트리밍 및 WebRTC 피어 연결 |
+| Video Analysis | MediaPipe FaceLandmarker | 시선, 자세, 감정 실시간 추론 (5FPS) |
+| Image Processing| OpenCV (headless) | 프레임 전처리 및 분석 보조 |
+| Real-time | WebSockets | 프론트엔드와 분석 결과 실시간 동기화 |
+| Networking | aiohttp | 내부 서비스 간 비동기 HTTP 통신 |
+
 ### AI / ML
 
 ![AI Stack](./docs/img/ai_stack_vfinal.png)
