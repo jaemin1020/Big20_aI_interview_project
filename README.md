@@ -334,7 +334,7 @@ docker-compose exec backend python check_db.py
 
 ### Media-Server
 
-![Media-Server Stack](./docs/img/Gemini_Generated_Image_7pzq797pzq797pzq.png)
+![Media-Server Stack](./docs/img/media_server_stack.png)
 
 | 구성요소 | 기술 | 용도 |
 |---------|------|------|
