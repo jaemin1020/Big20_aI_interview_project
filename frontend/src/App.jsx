@@ -853,6 +853,11 @@ function App() {
     // [Fix 1] 질문 전환 시작 즉시 이전 답변의 모든 STT 수신을 강제로 차단하여 오염 방지
     isAcceptingSTTRef.current = false;
     isTranscriptLockedRef.current = true;
+    // [Fix] 이전 질문의 finalize 타이머가 남아있다면 즉시 클리어 (다음 질문 오염 방지)
+    if (finalizeTimeoutRef.current) {
+      clearTimeout(finalizeTimeoutRef.current);
+      finalizeTimeoutRef.current = null;
+    }
 
     const answerText = liveTranscriptRef.current.trim();
     const currentInterview = interviewRef.current;
@@ -889,11 +894,15 @@ function App() {
         setCurrentIdx(nextIdx);
         setTranscript('');
         liveTranscriptRef.current = '';
+        setIsRecording(false);              // [Fix] 녹음 상태 초기화
+        isRecordingRef.current = false;     // [Fix] 녹음 Ref 초기화
         setIsAnswerFinished(false);
         isAnswerFinishedRef.current = false;
         setIsTranscriptLocked(false);
         isTranscriptLockedRef.current = false; // 잠금 해제
         isTranscriptSavedRef.current = false; // 저장 상태 초기화
+        setIsSttProcessing(false);          // [Fix] STT 처리 상태 초기화
+        isSttProcessingRef.current = false; // [Fix] STT 처리 Ref 초기화
         recordingIdxRef.current = -1; // 질문 전환 시 녹음 매칭 인덱스 초기화
         setIsLoading(false);
 
@@ -935,11 +944,15 @@ function App() {
               setCurrentIdx(prev => prev + 1);
               setTranscript('');
               liveTranscriptRef.current = '';
+              setIsRecording(false);              // [Fix] 녹음 상태 초기화
+              isRecordingRef.current = false;     // [Fix] 녹음 Ref 초기화
               setIsAnswerFinished(false);
               isAnswerFinishedRef.current = false;
               setIsTranscriptLocked(false);
               isTranscriptLockedRef.current = false; // 잠금 해제
               isTranscriptSavedRef.current = false; // 저장 상태 초기화
+              setIsSttProcessing(false);          // [Fix] STT 처리 상태 초기화
+              isSttProcessingRef.current = false; // [Fix] STT 처리 Ref 초기화
               foundNew = true;
 
               // WebSocket으로 신규 질문 전환 알림
