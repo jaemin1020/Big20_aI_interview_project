@@ -12,7 +12,12 @@ from utils.rubric_generator import (
 
 
 class QuestionType:
-    """질문 유형 정의"""
+    """설명:
+        질문 유형 정의
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     SELF_INTRODUCTION = "자기소개"
     MOTIVATION = "지원 동기"
     KNOWLEDGE = "직무 지식"
@@ -25,14 +30,17 @@ class QuestionType:
 
 
 def get_rubric_for_question_type(question_type: str) -> Dict:
-    """
-    질문 유형에 맞는 평가 루브릭 반환
-    
-    Args:
+    """설명:
+        질문 유형에 맞는 평가 루브릭 반환
+
+        Args:
         question_type: 질문 유형 (QuestionType 참조)
+
+        Returns:
         
-    Returns:
-        dict: 해당 질문에 적용할 평가 루브릭
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     rubric_mapping = {
         QuestionType.SELF_INTRODUCTION: create_area_a_rubric(),
@@ -56,18 +64,21 @@ def create_question_with_rubric(
     difficulty: str = "MEDIUM",
     is_follow_up: bool = False
 ) -> Dict:
-    """
-    평가 루브릭이 포함된 질문 데이터 생성
-    
-    Args:
+    """설명:
+        평가 루브릭이 포함된 질문 데이터 생성
+
+        Args:
         content: 질문 내용
         question_type: 질문 유형 (QuestionType 참조)
         category: 질문 카테고리 (TECHNICAL, BEHAVIORAL 등)
         difficulty: 난이도 (EASY, MEDIUM, HARD)
         is_follow_up: 추가 질문 여부
+
+        Returns:
         
-    Returns:
-        dict: Question 모델에 삽입할 데이터
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     rubric = get_rubric_for_question_type(question_type)
     

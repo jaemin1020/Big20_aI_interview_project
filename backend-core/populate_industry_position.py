@@ -7,6 +7,18 @@ with open(LOG_FILE, "w", encoding="utf-8") as f:
     f.write("Script started...\n")
 
 def log(msg):
+    """설명:
+        로그 파일과 콘솔에 동시에 메시지를 출력.
+
+    Args:
+        msg: 출력할 메시지.
+
+    Returns:
+        None
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(str(msg) + "\n")
     print(msg)
@@ -43,6 +55,15 @@ try:
     JSON_FILE_PATH = os.path.join(BASE_DIR, "data", "preprocessed_data.json")
 
     def update_questions():
+        """설명:
+            preprocessed_data.json 파일을 읽어 DB의 질문 레코드에 industry와 position 컬럼을 업데이트.
+
+        Returns:
+            None
+
+        생성자: ejm
+        생성일자: 2026-02-04
+        """
         # 엔진 생성
         try:
             engine = create_engine(LOCAL_DATABASE_URL)

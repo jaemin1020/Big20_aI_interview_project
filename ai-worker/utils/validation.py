@@ -9,16 +9,11 @@ logger = logging.getLogger("ResumeValidation")
 
 
 class ResumeValidator:
-    """
-    이력서 파싱 결과 품질 검증 클래스
+    """설명:
+        이력서 파싱 결과 품질 검증 클래스
 
-    Attributes:
-    - MIN_TEXT_LENGTH: 최소 텍스트 길이 (글자)
-    - MIN_KOREAN_RATIO: 최소 한글 비율
-    - MIN_SECTION_LENGTH: 섹션별 최소 길이
-
-    생성자: ejm
-    생성일자: 2026-02-08
+        생성자: ejm
+        생성일자: 2026-02-08
     """
     
     # 검증 기준 상수
@@ -28,17 +23,18 @@ class ResumeValidator:
     
     @classmethod
     def validate_extracted_text(cls, text: str) -> Tuple[bool, str]:
-        """
-        추출된 텍스트 품질 검증
-        
-        Args:
+        """설명:
+            추출된 텍스트 품질 검증
+
+            Args:
+            cls: 파라미터 설명.
             text: 추출된 텍스트
+
+            Returns:
             
-        Returns:
-            (is_valid, error_message)
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         if not text or not text.strip():
             return False, "추출된 텍스트가 비어있습니다"
@@ -68,17 +64,18 @@ class ResumeValidator:
     
     @classmethod
     def validate_sections(cls, segments: List[Dict]) -> Tuple[bool, str]:
-        """
-        섹션 분할 결과 검증
-        
-        Args:
+        """설명:
+            섹션 분할 결과 검증
+
+            Args:
+            cls: 파라미터 설명.
             segments: 섹션 리스트 [{"section_type": str, "content": str}, ...]
+
+            Returns:
             
-        Returns:
-            (is_valid, error_message)
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         if not segments:
             return False, "섹션이 비어있습니다"
@@ -106,17 +103,18 @@ class ResumeValidator:
     
     @classmethod
     def validate_structured_data(cls, structured_data: Dict) -> Tuple[bool, str]:
-        """
-        구조화된 데이터 검증
-        
-        Args:
+        """설명:
+            구조화된 데이터 검증
+
+            Args:
+            cls: 파라미터 설명.
             structured_data: 파싱된 구조화 데이터
+
+            Returns:
             
-        Returns:
-            (is_valid, error_message)
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         if not structured_data:
             return False, "구조화된 데이터가 비어있습니다"
@@ -144,17 +142,18 @@ class ResumeValidator:
     
     @classmethod
     def validate_resume_data_for_embedding(cls, resume_data: Dict) -> Tuple[bool, str]:
-        """
-        임베딩 생성용 이력서 데이터 검증
-        
-        Args:
+        """설명:
+            임베딩 생성용 이력서 데이터 검증
+
+            Args:
+            cls: 파라미터 설명.
             resume_data: 임베딩 생성용 데이터
+
+            Returns:
             
-        Returns:
-            (is_valid, error_message)
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         if not resume_data:
             return False, "이력서 데이터가 비어있습니다"
@@ -180,18 +179,19 @@ class ResumeValidator:
     
     @classmethod
     def validate_embedding_vector(cls, vector: List[float], expected_dim: int = 1024) -> Tuple[bool, str]:
-        """
-        임베딩 벡터 검증
-        
-        Args:
+        """설명:
+            임베딩 벡터 검증
+
+            Args:
+            cls: 파라미터 설명.
             vector: 임베딩 벡터
             expected_dim: 예상 차원 (기본값: 1024 for KURE-v1)
+
+            Returns:
             
-        Returns:
-            (is_valid, error_message)
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         if not vector:
             return False, "임베딩 벡터가 비어있습니다"
@@ -213,19 +213,20 @@ class ResumeValidator:
     
     @classmethod
     def get_quality_score(cls, text: str, segments: List[Dict], structured_data: Dict) -> Dict:
-        """
-        전체 품질 점수 계산
-        
-        Args:
+        """설명:
+            전체 품질 점수 계산
+
+            Args:
+            cls: 파라미터 설명.
             text: 추출된 텍스트
             segments: 섹션 리스트
             structured_data: 구조화된 데이터
+
+            Returns:
             
-        Returns:
-            dict: 품질 점수 및 세부 정보
-        
-        생성자: ejm
-        생성일자: 2026-02-08
+
+            생성자: ejm
+            생성일자: 2026-02-08
         """
         score = 100
         issues = []

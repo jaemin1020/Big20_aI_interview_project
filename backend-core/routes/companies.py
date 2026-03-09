@@ -14,16 +14,11 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 # ==================== Request/Response Models ====================
 
 class CompanyResponse(BaseModel):
-    """회사 정보 응답 모델
-    
-    Args:
-        id (str): 회사 ID
-        company_name (str): 회사 이름
-        ideal (str | None): 이상향
-        description (str | None): 설명
-    
-    생성자: ejm
-    생성일자: 2026-02-08
+    """설명:
+        회사 정보 응답 모델
+
+        생성자: ejm
+        생성일자: 2026-02-08
     """
     id: str
     company_name: str

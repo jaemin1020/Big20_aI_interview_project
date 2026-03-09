@@ -490,7 +490,7 @@ function App() {
 
               if (currentInterview && targetQuestion) {
                 console.log("[STT Background Save] Final transcript arrived. Saving to DB...");
-                createTranscript(currentInterview.id, 'User', updated, targetQuestion.id)
+                createTranscript(currentInterview.id, 'USER', updated, targetQuestion.id)
                   .then(() => {
                     isTranscriptSavedRef.current = true;
                     console.log("[STT Background Save] Success for Index:", currentIdxRef.current);
@@ -686,11 +686,11 @@ function App() {
           console.log('[STT Auto-Save] Saving transcript for Index:', currentIdxRef.current);
           console.log('[STT Auto-Save] Payload:', {
             interviewId: currentInterview.id,
-            speaker: 'User',
+            speaker: 'USER',
             text: liveTranscriptRef.current,
             questionId: targetQuestion.id
           });
-          await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current, targetQuestion.id);
+          await createTranscript(currentInterview.id, 'USER', liveTranscriptRef.current, targetQuestion.id);
           isTranscriptSavedRef.current = true;
           console.log('[STT Auto-Save] Transcript saved successfully');
         } catch (e) {
@@ -791,7 +791,7 @@ function App() {
     if (!isTranscriptSavedRef.current && liveTranscriptRef.current.trim() && currentInterview && targetQuestion) {
       try {
         console.log('[finishInterview] Saving final transcript before finish.');
-        await createTranscript(currentInterview.id, 'User', liveTranscriptRef.current.trim(), targetQuestion.id);
+        await createTranscript(currentInterview.id, 'USER', liveTranscriptRef.current.trim(), targetQuestion.id);
         isTranscriptSavedRef.current = true;
         console.log('[finishInterview] Final transcript saved.');
       } catch (e) {
@@ -870,7 +870,7 @@ function App() {
       // [Fix] 이미 자동 저장되지 않은 경우에만 저장 시도
       if (!isTranscriptSavedRef.current) {
         console.log('[nextQuestion] Manual saving transcript for question ID:', targetQuestion.id);
-        await createTranscript(currentInterview.id, 'User', answerText || '답변 내용 없음', targetQuestion.id);
+        await createTranscript(currentInterview.id, 'USER', answerText || '답변 내용 없음', targetQuestion.id);
         isTranscriptSavedRef.current = true;
         console.log('[nextQuestion] Transcript saved successfully');
       } else {

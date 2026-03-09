@@ -3,8 +3,17 @@ import os
 from langchain_text_splitters import RecursiveCharacterTextSplitter # [문법] 긴 글을 똑똑하게 자르는 도구
 
 def chunk_resume(parsed_data):
-    """
-    구조화된 이력서 데이터를 받아서 AI 검색용 조각(Chunk)들로 변환합니다.
+    """설명:
+        구조화된 이력서 데이터를 받아서 AI 검색용 조각(Chunk)들로 변환합니다.
+
+        Args:
+        parsed_data: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     chunks = []
     print("\n[STEP4] 데이터 청킹(Chunking) 시작...")

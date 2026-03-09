@@ -33,17 +33,14 @@ engine = create_engine(
 )
 
 def init_db():
-    """DB 연결 시도 및 테이블 생성 (Robust Retry Logic)
-    
-    Args:
-        max_retries (int): 최대 재시도 횟수
-        retry_interval (int): 재시도 간격
+    """설명:
+        DB 연결 시도 및 테이블 생성 (Robust Retry Logic)
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-01-26
+
+        생성자: ejm
+        생성일자: 2026-01-26
     """
     max_retries = 10
     retry_interval = 2
@@ -73,16 +70,14 @@ def init_db():
                 raise e
 
 def seed_initial_data():
-    """관리자 및 리크루터 초기 계정 생성
-    
-    Args:
-        None
+    """설명:
+        관리자 및 리크루터 초기 계정 생성
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     from db_models import User, UserRole
     from utils.auth_utils import get_password_hash
@@ -117,16 +112,14 @@ def seed_initial_data():
         logger.info("✅ Initial data seeding completed.")
 
 def get_session():
-    """FastAPI Dependency Injection용 세션 생성기
-    
-    Args:
-        None
+    """설명:
+        FastAPI Dependency Injection용 세션 생성기
+
+        Returns:
         
-    Returns:
-        None
-    
-    생성자: ejm
-    생성일자: 2026-02-06
+
+        생성자: ejm
+        생성일자: 2026-02-06
     """
     with Session(engine) as session:
         yield session

@@ -6,6 +6,15 @@ from datetime import datetime, timezone, timedelta
 KST = timezone(timedelta(hours=9))
 
 def get_kst_now():
+    """설명:
+        현재 한국 표준시(KST, UTC+9) 기준 datetime 반환.
+
+    Returns:
+        datetime: tzinfo가 없는 KST 현재 시각.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     return datetime.now(KST).replace(tzinfo=None)
 
 from typing import List
@@ -41,8 +50,17 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
 def _fire_tts_for_question(question_id: int, question_text: str) -> None:
     """설명:
-        질문에 대한 TTS 태스크를 실행하고 생성된 WAV 파일을 공유 볼륨(uploads/tts/)에 저장합니다.
-        문장 내의 [단계] 태그를 자동으로 제거하여 합성하며, 이미 파일이 존재하는 경우 중복 생성을 방지합니다.
+        
+
+        Args:
+        question_id: 파라미터 설명.
+        question_text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     filename = f"q_{question_id}.wav"
     filepath = TTS_UPLOAD_DIR / filename
@@ -233,6 +251,19 @@ async def get_all_interviews(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        로그인 사용자의 권한에 따라 전체 또는 본인 면접 목록을 내림차순으로 반환.
+
+    Args:
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        list: 면접 담당자명, 회사명, 상태 등이 포함된 딕셔너리 리스트.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     if current_user.role not in ["recruiter", "admin"]:
         stmt = select(Interview).where(
             Interview.candidate_id == current_user.id
@@ -337,6 +368,20 @@ async def get_interview_transcripts(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        해당 면접의 전체 대화 기록을 시간 순으로 반환.
+
+    Args:
+        interview_id (int): 대화 기록을 조회할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        list: speaker, text, timestamp, emotion 등이 포함된 대화록 리스트.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     stmt = select(Transcript).where(
         Transcript.interview_id == interview_id
     ).order_by(Transcript.timestamp)
@@ -362,6 +407,20 @@ async def complete_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        면접 세션을 COMPLETED 상태로 변경하고 종료 시각을 기록한 후 워커에 면접 평가 태스크를 요청.
+
+    Args:
+        interview_id (int): 종료할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        dict: {"status": "completed", "interview_id": interview_id}.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     interview = db.get(Interview, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -385,6 +444,20 @@ async def save_behavior_scores(
     request: dict,
     db: Session = Depends(get_session),
 ):
+    """설명:
+        면접 세션별 행동 분석 점수(눈시선, 철학, 미소, 자세, 감정 등)를 DB에 저장.
+
+    Args:
+        interview_id (int): 점수를 저장할 면접 ID.
+        request (dict): 행동 분석 점수 컨테이너 (averages, per_question 등).
+        db (Session): DB 세션.
+
+    Returns:
+        dict: {"status": "saved", "interview_id": interview_id}.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     import json as json_lib
 
     interview = db.get(Interview, interview_id)
@@ -400,23 +473,59 @@ async def save_behavior_scores(
     interview.overall_score = averages.get("total")
     db.add(interview)
 
-    per_question = request.get("per_question", [])
-    if per_question:
-        user_transcripts = db.exec(
-            select(Transcript).where(
-                Transcript.interview_id == interview_id,
-                Transcript.speaker == SpeakerEnum.USER
-            ).order_by(Transcript.id)
-        ).all()
+    # 해당 인터뷰의 모든 AI 발화 기록을 가져와 q_idx와 question_id 매핑 생성
+    ai_transcripts = db.exec(
+        select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.speaker == Speaker.AI
+        ).order_by(Transcript.id)
+    ).all()
+    
+    # AI 발화의 순서(order)를 기준으로 q_idx 매핑 (AI 발화는 보통 0부터 시작하거나 시나리오 순서를 따름)
+    q_id_map = {i: t.question_id for i, t in enumerate(ai_transcripts)}
+    logger.info(f"📍 q_id_map generated: {q_id_map}")
 
-        for i, q_score in enumerate(per_question):
-            if i < len(user_transcripts):
-                user_transcripts[i].emotion = json_lib.dumps(q_score, ensure_ascii=False)
-                user_transcripts[i].sentiment_score = q_score.get("total")
-                db.add(user_transcripts[i])
-                logger.info(f"  📝 Q{q_score['q_idx']} → transcript[{user_transcripts[i].id}].emotion 저장")
+    per_question = request.get("per_question", [])
+    updated_count = 0
+
+    for q_score in per_question:
+        q_idx = q_score.get("q_idx")
+        target_q_id = q_id_map.get(q_idx)
+        
+        if target_q_id is None:
+            logger.warning(f"⚠️ q_idx {q_idx}에 해당하는 AI 질문을 찾을 수 없습니다. (매핑 실패)")
+            continue
+
+        # 해당 question_id를 가진 사용자 발화 기록 조회
+        # DB Enum이 'USER'이므로 정확히 매칭됩니다.
+        user_ts_stmt = select(Transcript).where(
+            Transcript.interview_id == interview_id,
+            Transcript.question_id == target_q_id,
+            Transcript.speaker == Speaker.USER
+        )
+        user_ts = db.exec(user_ts_stmt).first()
+
+        if user_ts:
+            # 사용자가 요청한 순서와 필드를 그대로 유지하여 저장
+            user_ts.emotion = {
+                "q_idx": q_idx,
+                "gaze": q_score.get("gaze"),
+                "audio": q_score.get("audio"),
+                "smile": q_score.get("smile"),
+                "posture": q_score.get("posture"),
+                "emotion": q_score.get("emotion"),
+                "total": q_score.get("total"),
+                "frames": q_score.get("frames")
+            }
+            user_ts.sentiment_score = q_score.get("total")
+            db.add(user_ts)
+            updated_count += 1
+            logger.info(f"✅ Q{q_idx} (PID:{target_q_id}) → Transcript ID {user_ts.id} 점수 저장 성공")
+        else:
+            logger.warning(f"⚠️ Q{q_idx} (PID:{target_q_id})에 해당하는 사용자(USER) 답변 기록을 찾지 못했습니다.")
 
     db.commit()
+    logger.info(f"🏁 [behavior-scores] {updated_count}개의 대화 기록 업데이트 완료 (Interview: {interview_id})")
     logger.info(f"✅ [behavior-scores] Interview {interview_id} 행동 분석 점수 저장 완료")
     return {"status": "saved", "interview_id": interview_id}
 
@@ -427,6 +536,24 @@ async def get_evaluation_report(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        면접 평가 리포트를 조회하여 세부 피드백, 점수, 강점/암점 등 데이터를 반환.
+        리포트가 없으면 분석 진행 중 예상 응답을 반환.
+
+    Args:
+        interview_id (int): 리포트를 조회할 면접 ID.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        dict: 평가 점수, 피드백 텍스트, 강점/보완점이 포함된 리포트 딕셔너리.
+
+    Raises:
+        HTTPException: interview_id에 해당하는 면접이 없으면 404.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     stmt = select(EvaluationReport).where(
         EvaluationReport.interview_id == interview_id
     )
@@ -510,6 +637,10 @@ async def get_evaluation_report(
     report_dict["strengths"] = details.get("strengths") or ["성실한 답변 태도", "직무 기초 역량 보유"]
     report_dict["improvements"] = details.get("improvements") or ["구체적인 사례 보강 필요", "기술적 근거 보완"]
 
+    # 행동 분석(영상) 요약 필드 - details_json에서 최상위 레벨로 노출
+    report_dict["major_emotion"] = details.get("major_emotion", "안정적")
+    report_dict["avg_behavior_score"] = details.get("avg_behavior_score", 0)
+
     return report_dict
 
 # 실시간 대화형 면접 API
@@ -519,6 +650,24 @@ async def create_realtime_interview(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """설명:
+        실시간 면접 세션을 생성하는 엔드포인트. 일반 면접 생성과 동일하게 시나리오를 로드하고
+        융합 질문을 사전 생성한 후 면접 세션을 반환.
+
+    Args:
+        interview_data (InterviewCreate): 면접 생성 요청 데이터.
+        db (Session): DB 세션.
+        current_user (User): 현재 인증 사용자.
+
+    Returns:
+        InterviewResponse: 생성된 면접 세션 응답 모델.
+
+    Raises:
+        HTTPException: 예상치 못한 오류 시 500.
+
+    생성자: ejm
+    생성일자: 2026-02-04
+    """
     logger.info(f"🆕 Creating REALTIME interview session for user {current_user.id} using Resume ID: {interview_data.resume_id}")
 
     from utils.interview_helpers import get_candidate_info

@@ -25,7 +25,18 @@ docker_path = "/app/models/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf"
 model_path = docker_path if os.path.exists(docker_path) else local_path
 
 def is_meaningless(text: str) -> bool:
-    """지원자의 답변이 무의미한지(자음 나열, 너무 짧음 등) 체크합니다."""
+    """설명:
+        지원자의 답변이 무의미한지(자음 나열, 너무 짧음 등) 체크합니다.
+
+        Args:
+        text: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     if not text: return True
     text = text.strip()
     # 1. 너무 짧음 (5자 미만)
@@ -70,8 +81,14 @@ PROMPT_TEMPLATE = """[|user|]당신은 전문적인 지식과 공정한 태도�
 
 @shared_task(name="tasks.question_generation.preload_model")
 def preload_model_task():
-    """
-    EXAONE 모델을 비동기로 미리 로드합니다. (면접 시작 시 호출)
+    """설명:
+        EXAONE 모델을 비동기로 미리 로드합니다. (면접 시작 시 호출)
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     from utils.exaone_llm import get_exaone_llm
     try:
@@ -85,8 +102,17 @@ def preload_model_task():
 
 @shared_task(bind=True, name="tasks.question_generation.generate_next_question")
 def generate_next_question_task(self, interview_id: int):
-    """
-    인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
+    """설명:
+        인터뷰 진행 상황을 파악하고 다음 단계의 AI 질문을 생성합니다.
+
+        Args:
+        interview_id: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     from db import engine, Session, select, Interview, Transcript, Speaker, Question, save_generated_question, Company, get_kst_now
     from utils.exaone_llm import get_exaone_llm
@@ -420,7 +446,7 @@ def generate_next_question_task(self, interview_id: int):
                     .where(
                         Transcript.interview_id == interview_id,
                         Transcript.speaker != Speaker.AI,
-                        Transcript.total_score.isnot(None),
+                        Transcript.sentiment_score.isnot(None),
                     )
                     .order_by(Transcript.id.desc())
                     .limit(LOW_SCORE_CONSECUTIVE)
@@ -429,7 +455,7 @@ def generate_next_question_task(self, interview_id: int):
                 is_low_score_streak = (
                     len(user_transcripts_scored) >= LOW_SCORE_CONSECUTIVE
                     and all(
-                        (t.total_score or 0) < LOW_SCORE_THRESHOLD
+                        (t.sentiment_score or 0) < LOW_SCORE_THRESHOLD
                         for t in user_transcripts_scored
                     )
                 )
@@ -470,7 +496,7 @@ def generate_next_question_task(self, interview_id: int):
                         " [지원자 지원 모드] 지원자가 여러 차례 답변에 어려움을 겪고 있습니다."
                         " 이번 질문은 난이도를 한 단계 낮추어 생성하십시오."
                         " 반드시 질문 문장 앞에 '천천히 답변하셔도 괜찮습니다, 너무 긴장하지 마세요.' 와 같은"
-                        " 자연스러운 격려 문장을 먼저 포함하고, 그 뒤에 쉽고 간결한 질문을 이어가십시오."
+                        " 자연스러운 격려 문장을 먼저 포함하고, 그 뒤에 답변하기 쉬운 간결한 질문을 이어가십시오."
                     )
                     logger.info(
                         f"🧊 [ICE-BREAK] {LOW_SCORE_CONSECUTIVE}회 연속 저점수 감지 "

@@ -22,7 +22,7 @@ const GuidePage = ({ onNext }) => {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <li style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span>
-              예상 소요시간: 20분
+              예상 소요시간: 30분
             </li>
             <li style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span>

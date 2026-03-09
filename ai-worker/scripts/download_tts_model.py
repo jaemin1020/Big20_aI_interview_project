@@ -9,9 +9,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def download_model():
-    """
-    Forces the download of the Supertonic model by initializing the TTS engine
-    with auto_download=True.
+    """설명:
+        Forces the download of the Supertonic model by initializing the TTS engine
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     print("Initializing Supertonic TTS to trigger auto-download...")
     try:

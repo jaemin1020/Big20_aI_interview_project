@@ -17,10 +17,17 @@ EMBEDDING_MODEL = "nlpai-lab/KURE-v1"
 _embedder = None
 
 def get_embedder(device):
-    """
-    [함수의 역할] 임베딩 모델을 메모리에 딱 한 번만 올리는 '관리자' 역할입니다. (싱글톤 패턴)
-    [존재 이유] 모델 로딩은 '비싼 작업'입니다. 이 함수가 없다면 작업이 들어올 때마다 
-               모델을 새로 다운로드하거나 읽어오느라 서비스가 마비될 수 있습니다.
+    """설명:
+        [함수의 역할] 임베딩 모델을 메모리에 딱 한 번만 올리는 '관리자' 역할입니다. (싱글톤 패턴)
+
+        Args:
+        device: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     global _embedder # 함수 밖의 전역 변수 _embedder를 수정하겠다는 선언입니다.
     
@@ -48,15 +55,30 @@ def get_embedder(device):
     return _embedder # 이미 로드된 상태라면 바로 기존 모델을 돌려줍니다.
  
 def load_embedding_model():
-    """워커 시작 시 모델을 미리 로딩하기 위한 헬퍼"""
+    """설명:
+        워커 시작 시 모델을 미리 로딩하기 위한 헬퍼
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
+    """
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return get_embedder(device)
 
 def embed_chunks(chunks):
-    """
-    [함수의 역할] 잘게 쪼개진 텍스트 조각(Chunk)들을 수학적인 '벡터'로 변환합니다.
-    [존재 이유] 인공지능은 텍스트를 직접 읽지 못합니다. 텍스트를 수백 개의 숫자 리스트(벡터)로 
-               바꿔야만 수학적으로 '비슷한 의미'인지 계산할 수 있기 때문입니다.
+    """설명:
+        [함수의 역할] 잘게 쪼개진 텍스트 조각(Chunk)들을 수학적인 '벡터'로 변환합니다.
+
+        Args:
+        chunks: 파라미터 설명.
+
+        Returns:
+        반환값 정보.
+
+        생성자: ejm
+        생성일자: 2026-02-04
     """
     # 1. 장치 설정: [문법] torch.cuda.is_available()는 내 컴퓨터에 쓸만한 그래픽카드가 있는지 체크합니다.
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
