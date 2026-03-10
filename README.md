@@ -14,20 +14,23 @@
 ## � 데모 영상 (Demo Videos)
 
 ### 🎥 1. 면접 준비 (Interview Prep)
-**이력서 업로드 및 RAG 기반 질문 생성 준비**
-![면접 준비](./docs/video/interview_prep.gif)
+> **이력서 업로드 및 RAG 기반 질문 생성 준비**
+
+<img src="./docs/video/interview_prep.gif" width="100%">
 
 ---
 
 ### 🎥 2. 실시간 면접 진행 (Live Interview)
-**WebRTC 영상 스트리밍 및 실시간 감정·시선·음성 분석**
-![면접 진행](./docs/video/interview_live.gif)
+> **WebRTC 영상 스트리밍 및 실시간 감정·시선·음성 분석**
+
+<img src="./docs/video/interview_live.gif" width="100%">
 
 ---
 
 ### 🎥 3. AI 평가 결과 (Evaluation Report)
-**종합 데이터 기반 평가 리포트 및 피드백 생성**
-![면접 결과](./docs/video/interview_result.gif)
+> **종합 데이터 기반 평가 리포트 및 피드백 생성**
+
+<img src="./docs/video/interview_result.gif" width="100%">
 
 ---
 
