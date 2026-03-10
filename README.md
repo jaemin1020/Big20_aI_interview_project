@@ -15,7 +15,7 @@
 
 | 면접 준비 | 면접 진행 | 면접 결과 |
 | :---: | :---: | :---: |
-| <video src="./docs/video/면접준비.mp4" width="100%" autoplay loop muted></video> | <video src="./docs/video/면접진행.mp4" width="100%" autoplay loop muted></video> | <video src="./docs/video/면접결과.mp4" width="100%" autoplay loop muted></video> |
+| <video src="./docs/video/interview_prep.mp4" width="100%" autoplay loop muted playsinline></video> | <video src="./docs/video/interview_live.mp4" width="100%" autoplay loop muted playsinline></video> | <video src="./docs/video/interview_result.mp4" width="100%" autoplay loop muted playsinline></video> |
 | **이력서 업로드 및 환경 설정**<br>PDF 이력서 파싱 및 RAG 기반<br>맞춤형 질문 생성 준비 | **실시간 AI 면접 진행**<br>WebRTC 기반 영상 스트리밍 및<br>실시간 감정·시선·음성 분석 | **AI 종합 평가 리포트**<br>면접 데이터 기반 점수 채점 및<br>상세 피드백 리포트 생성 |
 
 ---
