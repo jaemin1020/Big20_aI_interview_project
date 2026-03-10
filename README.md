@@ -74,9 +74,9 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 ### 1. **이력서 기반 질문 생성**
 
-- PDF/DOCX 이력서 자동 파싱
+- **pdfplumber** 및 **python-docx**를 활용한 PDF 이력서 자동 파싱
 - 섹션별 임베딩 (경력, 프로젝트, 기술 스택 등)
-- RAG 기반 맞춤형 질문 생성 (KURE-v1 한국어 임베딩, 1024차원)
+- **KURE-v1** (1024차원) 기반 고성능 한국어 문장 임베딩 및 RAG 검색
 - 회사 정보 연계 질문 생성
 - 직무 전환자 감지 → 전환자 전용 시나리오 자동 적용 (`check_if_transition()`)
 - 질문 생성 fallback 로직: LLM 오류 시 템플릿 자동 사용
@@ -84,7 +84,6 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 ### 2. **실시간 면접 진행**
 
 - WebRTC 기반 영상/음성 스트리밍
-- **Deepgram STT** (`nova-2`, 한국어): `AudioWorklet` → `deepgram-processor.js` → 실시간 전사
 - **Faster-Whisper STT** (`large-v3-turbo`): Media-Server 경유 백업 경로
 - AI 질문 스트리밍: `Redis Pub/Sub` → `WebSocket` 토큰 스트리밍 (타이핑 효과)
 - Supertonic-2 TTS (질문 음성 자동 재생, Fire-and-Forget 비동기)
@@ -94,7 +93,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 ### 3. **AI 평가 시스템**
 
-- EXAONE-3.5 / Solar LLM 기반 답변 평가
+- EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf 
 - 기술적/행동적/종합 역량 분석
 - 질문별 영상(시선·자세·감정) + 음성 자신감 가중합 채점 (RMS 기반)
 - Redis 실시간 긴장도(`anxiety`) 저장 및 모니터링
@@ -154,7 +153,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 | 큐 이름 | 담당 Worker | 주요 Task |
 |---------|-------------|-----------|
 | `gpu_queue` | ai-worker-gpu | 질문 생성 (EXAONE LLM), 이력서 임베딩 (KURE-v1), 답변 평가 |
-| `cpu_queue` | ai-worker-cpu | STT (Faster-Whisper), TTS (Supertonic-2), 이력서 파싱 (PDF/DOCX) |
+| `cpu_queue` | ai-worker-cpu | STT (Faster-Whisper), TTS (Supertonic-2), 이력서 파싱 (pdfplumber, docx) |
 | `celery` (default) | ai-worker-cpu | 기타 경량 작업 |
 
 > **Redis 분산 락**: TTS 중복 생성 방지 (`lock:tts:{question_id}`, `SET NX` 원자적 획득)
@@ -198,7 +197,7 @@ Big20_aI_interview_project/
 │   ├── tasks/               # Celery Task 모음
 │   │   ├── question_generator.py  # 질문 생성 (EXAONE/Solar LLM + LangChain)
 │   │   ├── evaluator.py          # 답변 평가 + 종합 리포트 생성
-│   │   ├── parse_resume.py       # 이력서 파싱 (PDF/DOCX → 구조화 데이터)
+│   │   ├── parse_resume.py       # 이력서 파싱 (pdfplumber / python-docx)
 │   │   ├── resume_embedding.py   # 섹션별 벡터 임베딩 (KURE-v1)
 │   │   ├── resume_parser.py      # 이력서 텍스트 파서
 │   │   ├── chunking.py          # 텍스트 청킹 (RAG 전처리)
@@ -408,7 +407,8 @@ docker-compose exec backend python check_db.py
 | 구성요소 | 기술 | 용도 |
 |---------|------|------|
 | LLM | EXAONE-3.5 | 질문 생성·답변 평가 |
-| Embedding | KURE-v1 (1024차원) | 한국어 이력서 임베딩 |
+| Embedding | KURE-v1 (1024차원) | 한국어 이력서 및 기업 정보 임베딩 |
+| PDF Parsing | pdfplumber | 이력서 텍스트 및 구조 추출 |
 | STT | Faster-Whisper (`large-v3-turbo`) | 미디어 서버 → AI-Worker 위임 |
 | TTS | Supertonic-2 | 텍스트→음성 (한국어) |
 | Vision | MediaPipe FaceLandmarker | 시선·자세·감정 실시간 분석 (5FPS) |
@@ -547,7 +547,7 @@ docker-compose restart ai-worker-cpu
 
 ---
 
-## 📖 추가 문서
+## 📖 산출물
 
 | 문서 | 내용 |
 |------|------|
