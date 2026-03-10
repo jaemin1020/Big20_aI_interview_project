@@ -353,6 +353,8 @@ docker-compose exec backend python check_db.py
 
 ### Backend
 
+![Backend Stack](./docs/img/backend_stack.png)
+
 | 구성요소 | 기술 | 버전 |
 |---------|------|------|
 | Framework | FastAPI | 0.109+ |
@@ -363,19 +365,36 @@ docker-compose exec backend python check_db.py
 | Password | bcrypt | 4.0.1 |
 | Exception Handling | 커스텀 예외 클래스 12개 | - |
 
-### AI / ML
+### Media-Server
+
+![Media-Server Stack](./docs/img/media_server_stack.png)
 
 | 구성요소 | 기술 | 용도 |
 |---------|------|------|
-| LLM | EXAONE-3.5 / Solar-10.7B | 질문 생성·답변 평가 |
+| Framework | FastAPI | WebRTC 제어 및 API 엔드포인트 |
+| WebRTC | aiortc | 실시간 미디어 스트리밍 및 WebRTC 피어 연결 |
+| Video Analysis | MediaPipe FaceLandmarker | 시선, 자세, 감정 실시간 추론 (5FPS) |
+| Image Processing| OpenCV (headless) | 프레임 전처리 및 분석 보조 |
+| Real-time | WebSockets | 프론트엔드와 분석 결과 실시간 동기화 |
+| Networking | aiohttp | 내부 서비스 간 비동기 HTTP 통신 |
+
+### AI / ML
+
+![AI Stack](./docs/img/ai_stack_vfinal.png)
+
+| 구성요소 | 기술 | 용도 |
+|---------|------|------|
+| LLM | EXAONE-3.5 | 질문 생성·답변 평가 |
 | Embedding | KURE-v1 (1024차원) | 한국어 이력서 임베딩 |
-| STT (백업) | Faster-Whisper `large-v3-turbo` | Media-Server → AI-Worker 위임 |
+| STT | Faster-Whisper (`large-v3-turbo`) | 미디어 서버 → AI-Worker 위임 |
 | TTS | Supertonic-2 | 텍스트→음성 (한국어) |
 | Vision | MediaPipe FaceLandmarker | 시선·자세·감정 실시간 분석 (5FPS) |
 | RAG Framework | LangChain | 질문 생성 파이프라인 |
 | Monitoring | LangSmith | LangChain 파이프라인 트레이싱 |
 
 ### Frontend
+
+![Frontend Stack](./docs/img/frontend_stack.png)
 
 | 구성요소 | 기술 | 버전 |
 |---------|------|------|
@@ -391,6 +410,8 @@ docker-compose exec backend python check_db.py
 
 ### Infrastructure
 
+![Infrastructure Stack](./docs/img/infra_stack.png)
+
 | 구성요소 | 기술 |
 |---------|------|
 | 컨테이너 | Docker, Docker Compose |
@@ -402,85 +423,7 @@ docker-compose exec backend python check_db.py
 
 ---
 
-## 📚 API 문서
-
-### 주요 엔드포인트
-
-#### 인증 (Authentication)
-
-```http
-POST /auth/register          # 회원가입
-POST /auth/token             # 로그인 (JWT 발급)
-GET  /users/me               # 현재 사용자 정보
-PATCH /auth/password         # 비밀번호 변경
-DELETE /auth/withdraw        # 회원 탈퇴 (soft delete)
-```
-
-#### 이력서 (Resumes)
-
-```http
-POST /resumes/upload         # 이력서 업로드 (PDF/DOCX → 자동 파싱·임베딩)
-GET  /resumes/{id}           # 이력서 상태 및 파싱 결과 조회
-GET  /api/resumes/{id}/pdf   # 이력서 PDF 원본 다운로드
-```
-
-#### 면접 (Interviews)
-
-```http
-POST /interviews                             # 면접 세션 생성 (질문 자동 생성)
-GET  /interviews/{id}                        # 면접 정보 조회
-GET  /interviews                             # 전체 면접 목록 (권한별)
-POST /interviews/{id}/complete               # 면접 종료 (평가 리포트 생성 트리거)
-GET  /interviews/{id}/report                 # 평가 리포트 조회
-GET  /interviews/{id}/questions              # 면접 질문 목록 (TTS URL 포함)
-GET  /interviews/{id}/transcripts            # 전체 대화 기록
-PATCH /interviews/{id}/behavior-scores       # 영상 분석 점수 저장 (media-server 전용)
-WS   /interviews/ws/{id}                    # AI 질문 실시간 스트리밍 (Redis Pub/Sub 브릿지)
-```
-
-#### Media Server
-
-```http
-POST /offer                        # WebRTC SDP 협상
-WS   /ws/{session_id}             # WebSocket (실시간 영상 분석 결과 수신)
-GET  /status                       # Vision Analyzer 상태 확인
-POST /stt/recognize                # STT 테스트 (미디어 서버)
-```
-
-> 전체 API 명세: http://localhost:8000/docs (Swagger UI)
-
----
-
-## � DB 스키마 요약
-
-### 주요 테이블
-
-| 테이블 | 설명 |
-|--------|------|
-| `users` | 지원자·채용담당자·관리자 계정 (JWT 인증, soft delete 지원) |
-| `resumes` | 이력서 파일 및 파싱 결과 (structured_data JSONB) |
-| `resumesectionembedding` | 섹션별 벡터 (pgvector, KURE-v1 1024차원) |
-| `resumechunk` | 텍스트 청크 임베딩 (RAG 검색용) |
-| `companies` | 회사 정보 + 벡터 임베딩 (culture fit 평가용) |
-| `interviews` | 면접 세션 (SCHEDULED → LIVE → COMPLETED → CANCELLED) |
-| `questions` | AI 생성 질문 은행 (추가질문 계층 구조, 재사용 통계) |
-| `transcripts` | 면접 대화 기록 (AI 질문 + 사용자 답변 + 영상 채점 + 감정 분석) |
-| `evaluation_reports` | 종합 평가 리포트 (기술·커뮤니케이션·문화적합도 점수) |
-| `answer_bank` | 우수 답변 벡터 은행 (RAG 참고용) |
-
-### 주요 Enum
-
-| Enum | 값 |
-|------|-----|
-| `UserRole` | candidate / recruiter / admin |
-| `InterviewStatus` | SCHEDULED / LIVE / COMPLETED / CANCELLED |
-| `QuestionCategory` | technical / behavioral / situational / cultural_fit |
-| `QuestionDifficulty` | easy / medium / hard |
-| `Speaker` | AI / USER |
-
----
-
-## �👨‍💻 개발 가이드
+## 👨‍💻 개발 가이드
 
 ### 로컬 개발 환경 설정
 
@@ -551,42 +494,16 @@ docker-compose restart ai-worker-cpu
 
 > **최종 검사일**: 2026-03-09 | **다음 검사 예정**: 2026-04-09
 
-### 종합 점수: 87/100 (A-)
-
-| 카테고리 | 점수 | 상태 |
-|---------|------|------|
-| 아키텍처 설계 | 91/100 | ✅ Excellent |
-| 코드 품질 | 83/100 | ✅ Good |
-| 보안 | 83/100 | ✅ Good |
-| 성능 최적화 | 80/100 | ✅ Good |
-| 문서화 | 88/100 | ✅ Very Good |
-| 테스트 커버리지 | 68/100 | ⚠️ Fair |
-| DevOps/배포 | 88/100 | ✅ Very Good |
-
-### 최근 주요 개선 사항 (2026-02-04 → 2026-03-09)
-
-| 항목 | 변화 |
-|------|------|
-| 테스트 코드 | ❌ 전무 → ✅ **15개 테스트 케이스** (auth + interview) |
-| 커스텀 예외 클래스 | ❌ 없음 → ✅ **12개 도메인별 예외 클래스** (`exceptions.py`) |
-| AI Worker 분리 | 단일 워커 → ✅ **GPU/CPU 큐 완전 분리** |
-| STT 버그 수정 | ❌ transcript 오염 → ✅ **완전 수정** |
-| 이력서 라우터 | main.py 혼재 → ✅ **routes/resumes.py 모듈화** |
-| Redis 분산 락 | 없음 → ✅ **TTS 중복 생성 방지 (`lock:tts`)** |
-
-### 알려진 기술 부채
-
-| 우선순위 | 항목 | 상태 |
-|---------|------|------|
-| 🔴 Critical | `save_behavior_scores` 엔드포인트 인증 누락 | 미해결 |
-| 🔴 Critical | 테스트 케이스 4개 현행 API와 불일치 | 미해결 |
-| 🟡 High | Rate Limiting 미적용 (`slowapi` 권장) | 미해결 |
-| 🟡 High | `@app.on_event("startup")` Deprecated API 사용 | 미해결 |
-| 🟡 High | `frontend/src/api/interview.js` URL 하드코딩 | 미해결 |
-| 🟢 Medium | `App.jsx` 비대화 (~1,400줄) → 커스텀 훅 분리 필요 | 계획 중 |
-| 🟢 Medium | N+1 쿼리 문제 (`interviews.py`) | 계획 중 |
-| 🔵 Low | CI/CD 파이프라인 (GitHub Actions) | 장기 목표 |
-| 🔵 Low | Frontend E2E 테스트 (Playwright) | 장기 목표 |
+| 테이블 | 설명 |
+|--------|------|
+| `users` | 지원자·채용담당자·관리자 계정 및 프로필 (JWT 인증) |
+| `resumes` | 이력서 파일 정보, 파싱 결과(JSONB) 및 대표 벡터(1024차원) |
+| `companies` | 기업 정보, 인재상 및 기업 특징 벡터(1024차원) |
+| `interviews` | 면접 세션 정보 및 상태 관리 (SCHEDULED → LIVE → COMPLETED) |
+| `questions` | AI 생성 질문 은행 및 평가 루브릭(JSONB) |
+| `transcripts` | 면접 대화 기록 (STT 전사, 감정 분석, 질문별 점수) |
+| `evaluation_reports` | 종합 평가 리포트 (역량별 점수, 상세 피드백, LLM 요약) |
+| `answer_bank` | 우수 답변 모음 및 전문가 피드백 (벡터 검색용) |
 
 ---
 
