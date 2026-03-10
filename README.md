@@ -7,6 +7,7 @@
 [![React](https://img.shields.io/badge/React-18.2-61DAFB.svg)](https://reactjs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%20+%20pgvector-336791.svg)](https://www.postgresql.org/)
+[![Quality](https://img.shields.io/badge/Quality-87%2F100%20(A--)-brightgreen.svg)](#-품질-현황)
 
 ---
 
@@ -14,12 +15,16 @@
 
 1. [프로젝트 개요](#-프로젝트-개요)
 2. [주요 기능](#-주요-기능)
-3. [시스템 아키텍처](#-시스템-아키텍처)
+3. [시스템 아키텍처](#️-시스템-아키텍처)
 4. [프로젝트 구조](#-프로젝트-구조)
 5. [빠른 시작](#-빠른-시작)
-6. [기술 스택](#-기술-스택)
+6. [기술 스택](#️-기술-스택)
 7. [API 문서](#-api-문서)
-8. [개발 가이드](#-개발-가이드)
+8. [DB 스키마 요약](#-db-스키마-요약)
+9. [개발 가이드](#-개발-가이드)
+10. [품질 현황](#-품질-현황)
+11. [보안](#-보안)
+12. [추가 문서](#-추가-문서)
 
 ---
 
@@ -32,12 +37,13 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 ### 핵심 가치
 
 - ✅ **맞춤형 질문 생성**: 이력서·직무·회사 데이터를 종합한 RAG 기반 개인화 질문
-- ✅ **실시간 STT**: Whisper 모델 기반 한국어 음성 실시간 전사 (브라우저 직접 연동)
+- ✅ **실시간 STT**: Whisper 모델 기반 한국어 실시간 전사
 - ✅ **AI 질문 음성 안내**: Supertonic-2 TTS를 통한 면접관 음성 합성
-- ✅ **영상 분석**: MediaPipe FaceLandmarker를 이용한 시선·자세·감정 실시간 분석
-- ✅ **AI 평가**: EXAONE-3.5 / Solar LLM 기반 답변 평가 및 종합 리포트
+- ✅ **영상 분석**: MediaPipe FaceLandmarker를 이용한 시선·자세·감정 실시간 분석 (5FPS)
+- ✅ **AI 평가**: EXAONE-3.5 LLM 기반 답변 평가 및 종합 리포트
 - ✅ **확장 가능한 구조**: GPU/CPU 이중 워커 기반 마이크로서비스 아키텍처
 - ✅ **직무 전환자 지원**: 경력 전환 감지 및 맞춤형 면접 시나리오 자동 분기
+- ✅ **세션 복구**: 새로고침 시 `sessionStorage`로 진행 상태 자동 복구
 
 ---
 
@@ -47,29 +53,33 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 - PDF/DOCX 이력서 자동 파싱
 - 섹션별 임베딩 (경력, 프로젝트, 기술 스택 등)
-- RAG 기반 맞춤형 질문 생성 (KURE-v1 한국어 임베딩)
+- RAG 기반 맞춤형 질문 생성 (KURE-v1 한국어 임베딩, 1024차원)
 - 회사 정보 연계 질문 생성
-- 직무 전환자 감지 → 전환자 전용 시나리오 자동 적용
+- 직무 전환자 감지 → 전환자 전용 시나리오 자동 적용 (`check_if_transition()`)
+- 질문 생성 fallback 로직: LLM 오류 시 템플릿 자동 사용
 
 ### 2. **실시간 면접 진행**
 
 - WebRTC 기반 영상/음성 스트리밍
-- Whisper STT: 브라우저 AudioWorklet → 실시간 전사
-- AI 질문 스트리밍: Redis Pub/Sub → WebSocket 토큰 스트리밍 (타이핑 효과)
+- **Deepgram STT** (`nova-2`, 한국어): `AudioWorklet` → `deepgram-processor.js` → 실시간 전사
+- **Faster-Whisper STT** (`large-v3-turbo`): Media-Server 경유 백업 경로
+- AI 질문 스트리밍: `Redis Pub/Sub` → `WebSocket` 토큰 스트리밍 (타이핑 효과)
 - Supertonic-2 TTS (질문 음성 자동 재생, Fire-and-Forget 비동기)
 - 실시간 시선·자세·감정 분석 (MediaPipe FaceLandmarker, 5FPS)
+- STT 다중 가드 로직: `isAcceptingSTTRef`, `isTranscriptLockedRef`, `isSttProcessingRef`
 - 세션 복구: 새로고침 시 `sessionStorage`로 진행 상태 자동 복구
 
 ### 3. **AI 평가 시스템**
 
 - EXAONE-3.5 / Solar LLM 기반 답변 평가
 - 기술적/행동적/종합 역량 분석
-- 질문별 영상(시선·자세·감정) + 음성 자신감 가중합 채점
-- PDF 다운로드 가능한 종합 평가 리포트 생성
+- 질문별 영상(시선·자세·감정) + 음성 자신감 가중합 채점 (RMS 기반)
+- Redis 실시간 긴장도(`anxiety`) 저장 및 모니터링
+- PDF 다운로드 가능한 종합 평가 리포트 생성 (jsPDF + html2canvas)
 
 ### 4. **채용 담당자 / 관리자 기능**
 
-- 지원자 이력서 벡터 유사도 검색
+- 지원자 이력서 벡터 유사도 검색 (pgvector)
 - 면접 진행 상황 모니터링
 - 평가 결과 열람 및 관리
 
@@ -84,23 +94,23 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 │  Port:3000  │                │  Port:8080       │
 └──────┬──────┘                └────────┬─────────┘
        │ REST/HTTP                      │ Celery Task
-       │ Deepgram SDK (STT)             │ (STT 위임)
+       │ Deepgram SDK (STT 주경로)       │ (STT 백업, 영상분석)
        ▼                                ▼
 ┌──────────────┐    Celery     ┌─────────────────────────────┐
 │ Backend-Core │──────────────▶│       AI-Worker             │
 │  (FastAPI)   │               │  ┌──────────┐ ┌──────────┐ │
-│  Port:8000   │               │  │ GPU Worker│ │ CPU Worker│ │
+│  Port:8000   │               │  │ GPU Worker│ │CPU Worker│ │
 └──────┬───────┘               │  │(질문생성) │ │(STT/TTS) │ │
        │  Redis Pub/Sub        │  └──────────┘ └──────────┘ │
        │  (AI 질문 스트리밍)    └─────────────────────────────┘
        ▼                                  │
 ┌──────────────┐◀─────────────────────────┘
 │  PostgreSQL  │   (평가 결과, 영상 분석 점수 저장)
-│  18 + pgvector│
+│  18+pgvector │
 └──────────────┘
        ▲
 ┌──────┴───────┐
-│    Redis 7   │  (Task Broker + Result Backend + AI 스트리밍 Pub/Sub)
+│    Redis 7   │  (Task Broker + Result Backend + AI 스트리밍 Pub/Sub + 분산 락)
 └──────────────┘
 ```
 
@@ -110,19 +120,21 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 |--------|------|-----------|------|
 | **Frontend** | 사용자 인터페이스 | React 18, Vite, WebRTC, Deepgram SDK | 3000 |
 | **Backend-Core** | API 서버, 인증, 라우팅 | FastAPI, SQLModel, JWT | 8000 |
-| **AI-Worker (GPU)** | 질문 생성, 이력서 파싱·임베딩, 평가 | Celery, LangChain, EXAONE-3.5, KURE-v1 | - |
-| **AI-Worker (CPU)** | STT, TTS, 청킹 | Celery, Faster-Whisper, Supertonic-2 | - |
+| **AI-Worker (GPU)** | 질문 생성, 이력서 임베딩, 평가 | Celery, LangChain, EXAONE-3.5, KURE-v1 | - |
+| **AI-Worker (CPU)** | STT, TTS, 이력서 파싱 | Celery, Faster-Whisper, Supertonic-2 | - |
 | **Media-Server** | WebRTC 중계, 영상 분석, STT 위임 | aiortc, MediaPipe FaceLandmarker | 8080 |
 | **PostgreSQL** | 데이터베이스 + 벡터 검색 | PostgreSQL 18 + pgvector | 5432 |
-| **Redis** | 메시지 브로커, 결과 백엔드, AI 스트리밍 | Redis 7 | 6379 |
+| **Redis** | 메시지 브로커, 결과 백엔드, AI 스트리밍, 분산 락 | Redis 7-alpine | 6379 |
 
 ### AI-Worker 큐 분리 구조
 
 | 큐 이름 | 담당 Worker | 주요 Task |
-|---------|-------------|-----------| 
-| `gpu_queue` | ai-worker-gpu | 질문 생성, 이력서 파싱/임베딩, 답변 평가 |
-| `cpu_queue` | ai-worker-cpu | STT (Faster-Whisper), TTS (Supertonic), 청킹 |
+|---------|-------------|-----------|
+| `gpu_queue` | ai-worker-gpu | 질문 생성 (EXAONE LLM), 이력서 임베딩 (KURE-v1), 답변 평가 |
+| `cpu_queue` | ai-worker-cpu | STT (Faster-Whisper), TTS (Supertonic-2), 이력서 파싱 (PDF/DOCX) |
 | `celery` (default) | ai-worker-cpu | 기타 경량 작업 |
+
+> **Redis 분산 락**: TTS 중복 생성 방지 (`lock:tts:{question_id}`, `SET NX` 원자적 획득)
 
 ---
 
@@ -131,40 +143,49 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 ```
 Big20_aI_interview_project/
 ├── backend-core/              # FastAPI 메인 API 서버
-│   ├── main.py               # 앱 진입점, 라우터 등록
-│   ├── db_models.py          # DB 모델 (SQLModel)
+│   ├── main.py               # 앱 진입점, 라우터 등록, CORS 설정
+│   ├── db_models.py          # DB 모델 (SQLModel + pgvector)
 │   ├── database.py           # DB 연결 설정 + 초기 계정 시딩
 │   ├── celery_app.py         # Celery 중앙 설정
-│   ├── exceptions.py         # 커스텀 예외 처리
+│   ├── exceptions.py         # 커스텀 예외 처리 (12개 도메인별 클래스)
 │   ├── routes/               # API 라우터
-│   │   ├── auth.py          # 인증 (JWT 토큰 발급)
-│   │   ├── users.py         # 사용자 정보
+│   │   ├── auth.py          # 인증 (JWT 토큰 발급, 회원가입/탈퇴)
+│   │   ├── users.py         # 사용자 정보 (프로필, 비밀번호 변경)
 │   │   ├── interviews.py    # 면접 생성·진행·평가 (AI 스트리밍 WS 포함)
-│   │   ├── resumes.py       # 이력서 관련
-│   │   ├── transcripts.py   # 대화 기록
+│   │   ├── resumes.py       # 이력서 업로드·파싱·임베딩
+│   │   ├── transcripts.py   # 대화 기록 (STT 결과 저장)
 │   │   ├── companies.py     # 회사 정보
 │   │   └── stt.py          # STT 위임 엔드포인트
 │   ├── config/              # 면접 시나리오 설정
-│   │   ├── interview_scenario.py           # 표준 시나리오
+│   │   ├── interview_scenario.py           # 표준 경력자 시나리오
 │   │   └── interview_scenario_transition.py # 직무 전환자 시나리오
 │   ├── utils/               # 유틸리티
-│   │   ├── auth_utils.py    # JWT, 비밀번호 해싱
+│   │   ├── auth_utils.py    # JWT 발급, bcrypt 비밀번호 해싱
 │   │   ├── interview_helpers.py # 면접 보조 함수
-│   │   └── rubric_generator.py  # 평가 루브릭
-│   ├── data/                # 초기 데이터 (기업·직무 정보)
-│   └── tests/               # 테스트 코드
+│   │   └── rubric_generator.py  # 평가 루브릭 생성
+│   ├── data/                # 초기 데이터 (기업·직무 정보 JSON)
+│   └── tests/               # 테스트 코드 (15개 테스트 케이스)
+│       ├── conftest.py      # SQLite In-Memory + 의존성 오버라이드
+│       ├── test_auth.py     # 인증 테스트 (8개)
+│       └── test_interview.py # 면접 테스트 (7개)
 │
 ├── ai-worker/                # Celery Worker (GPU + CPU 이중 구조)
-│   ├── main.py              # Worker 실행부
+│   ├── main.py              # Worker 실행부 + 큐 라우팅 설정
 │   ├── db.py                # DB 연결 + 헬퍼 함수
 │   ├── tasks/               # Celery Task 모음
-│   │   ├── question_generator.py  # 질문 생성 (EXAONE/Solar LLM)
-│   │   ├── evaluator.py          # 답변 평가
-│   │   ├── parse_resume.py       # 이력서 파싱 (PDF/DOCX)
-│   │   ├── resume_embedding.py   # 섹션별 임베딩
+│   │   ├── question_generator.py  # 질문 생성 (EXAONE/Solar LLM + LangChain)
+│   │   ├── evaluator.py          # 답변 평가 + 종합 리포트 생성
+│   │   ├── parse_resume.py       # 이력서 파싱 (PDF/DOCX → 구조화 데이터)
+│   │   ├── resume_embedding.py   # 섹션별 벡터 임베딩 (KURE-v1)
+│   │   ├── resume_parser.py      # 이력서 텍스트 파서
+│   │   ├── chunking.py          # 텍스트 청킹 (RAG 전처리)
+│   │   ├── embedding.py         # 임베딩 유틸리티
+│   │   ├── pgvector_store.py    # 벡터 DB 저장/검색
+│   │   ├── rag_retrieval.py     # RAG 검색 로직
 │   │   ├── stt.py               # STT (Faster-Whisper large-v3-turbo)
-│   │   ├── tts.py               # TTS (Supertonic-2)
+│   │   ├── tts.py               # TTS (Supertonic-2, Redis 분산 락)
 │   │   └── vision.py            # 감정 분석 위임
+│   ├── config/              # AI Worker 설정
 │   ├── utils/               # 유틸리티
 │   │   └── vector_utils.py       # 벡터 임베딩 (KURE-v1)
 │   └── tools/               # LangChain 도구
@@ -179,10 +200,11 @@ Big20_aI_interview_project/
 │
 ├── frontend/                # React 18 프론트엔드 (Vite)
 │   ├── src/
-│   │   ├── App.jsx         # 메인 앱 (라우팅, WebRTC, Deepgram STT 통합)
+│   │   ├── App.jsx         # 메인 앱 (라우팅, WebRTC, Deepgram STT 통합, ~1,400줄)
 │   │   ├── index.css       # 글로벌 스타일 (Glassmorphism)
 │   │   ├── components/     # 공통 UI 컴포넌트
-│   │   ├── api/            # API 클라이언트 (환경 변수 기반 URL)
+│   │   ├── api/            # API 클라이언트
+│   │   │   └── interview.js # 면접 API 클라이언트
 │   │   └── pages/          # 페이지 컴포넌트
 │   │       ├── landing/    # 랜딩 페이지
 │   │       ├── auth/       # 로그인·회원가입
@@ -195,24 +217,29 @@ Big20_aI_interview_project/
 │   │       ├── profile/    # 사용자 프로필
 │   │       ├── settings/   # 설정
 │   │       └── about/      # 서비스 소개
-│   ├── public/
-│   │   └── deepgram-processor.js  # AudioWorklet (실시간 STT 오디오 처리)
-│   └── package.json
+│   └── public/
+│       └── deepgram-processor.js  # AudioWorklet (실시간 STT 오디오 처리)
 │
 ├── docs/                    # 프로젝트 문서
-│   ├── SYSTEM_SPECIFICATION.md    # 시스템 명세
-│   ├── RESUME_EMBEDDING_GUIDE.md  # 이력서 임베딩 가이드
-│   ├── SECURITY_GUIDE.md          # 보안 가이드
-│   ├── DB_INSERT_GUIDE.md         # DB 데이터 삽입 가이드
-│   ├── STT_IMPLEMENTATION_COMPLETE.md  # STT 구현 가이드
-│   ├── LangChain_Architecture_Guide.md # LangChain 아키텍처
-│   └── TROUBLESHOOTING.md         # 문제 해결 가이드
+│   └── 개발문서/
+│       ├── SYSTEM_SPECIFICATION.md       # 시스템 명세
+│       ├── RESUME_EMBEDDING_GUIDE.md     # 이력서 임베딩 가이드
+│       ├── SECURITY_GUIDE.md             # 보안 가이드
+│       ├── DB_INSERT_GUIDE.md            # DB 데이터 삽입 가이드
+│       ├── DB_CONNECTION_STANDARD.md     # DB 연결 표준 가이드
+│       ├── STT_IMPLEMENTATION_COMPLETE.md # STT 구현 가이드 (Deepgram)
+│       ├── LangChain_Architecture_Guide.md # LangChain 아키텍처
+│       ├── TROUBLESHOOTING.md            # 문제 해결 가이드
+│       ├── QUALITY_SUMMARY.md            # 코드 품질 분석 결과
+│       └── QUALITY_INSPECTION_REPORT.md  # 상세 품질 검사 리포트
 │
 ├── infra/                   # 인프라 설정
-│   └── postgres/init.sql    # DB 초기화 스크립트
-├── docker-compose.yml       # 서비스 오케스트레이션
+│   └── postgres/init.sql    # DB 초기화 스크립트 (pgvector extension 활성화)
+├── scripts/                 # 유틸리티 스크립트
+├── docker-compose.yml       # 서비스 오케스트레이션 (7개 서비스)
 ├── .env                     # 환경 변수 (Git 제외 ← .gitignore)
 ├── .env.example             # 환경 변수 예시 (Git 포함)
+├── commit_convention.md     # 커밋 메시지 컨벤션
 └── README.md                # 프로젝트 문서 (이 파일)
 ```
 
@@ -227,7 +254,7 @@ Big20_aI_interview_project/
 - **최소 시스템 사양**:
   - RAM: 16GB 이상
   - GPU: NVIDIA GPU (VRAM 8GB+) 권장 — GPU 없이도 CPU 모드로 동작 가능
-  - 디스크: 30GB 이상 여유 공간 (LLM 모델 포함)
+  - 디스크: 최소 50GB 이상 여유 공간 (LLM 모델 포함)
 
 ### 2️⃣ 환경 설정
 
@@ -254,21 +281,26 @@ REDIS_URL=redis://redis:6379/0
 
 # AI API Keys
 HUGGINGFACE_HUB_TOKEN=hf_xxxxxxxxxxxx   # HuggingFace 모델 다운로드
-DEEPGRAM_API_KEY=xxxxxxxxxxxx            # Deepgram STT
-VITE_DEEPGRAM_API_KEY=xxxxxxxxxxxx       # Deepgram STT (프론트엔드용)
+DEEPGRAM_API_KEY=xxxxxxxxxxxx            # Deepgram STT (백엔드 + 미디어서버용)
 
 # LangSmith (선택, 모니터링용)
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 LANGCHAIN_API_KEY=ls_xxxxxxxxxxxx
 LANGCHAIN_PROJECT=Big20-AI-Interview
 
 # JWT
 SECRET_KEY=your_random_secret_key       # openssl rand -hex 32 로 생성
+ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
 # Frontend API URLs
 VITE_API_URL=http://localhost:8000
 VITE_WS_URL=ws://localhost:8080
 VITE_WEBRTC_URL=http://localhost:8080
+
+# Backend Public URL (미디어 서버 → 백엔드 통신용)
+BACKEND_PUBLIC_URL=http://localhost:8000
 ```
 
 > ⚠️ **보안 주의**: `.env` 파일은 Git에 절대 커밋하지 마세요. `.gitignore`에 이미 포함되어 있습니다.
@@ -329,6 +361,7 @@ docker-compose exec backend python check_db.py
 | Task Queue | Celery + Redis | 5.4+ |
 | Authentication | JWT (python-jose) | 3.3+ |
 | Password | bcrypt | 4.0.1 |
+| Exception Handling | 커스텀 예외 클래스 12개 | - |
 
 ### AI / ML
 
@@ -336,11 +369,11 @@ docker-compose exec backend python check_db.py
 |---------|------|------|
 | LLM | EXAONE-3.5 / Solar-10.7B | 질문 생성·답변 평가 |
 | Embedding | KURE-v1 (1024차원) | 한국어 이력서 임베딩 |
-| STT | Deepgram `nova-2` (실시간) | 브라우저 직접 연동 실시간 전사 |
-| STT (백업) | Faster-Whisper (`large-v3-turbo`) | 미디어 서버 → AI-Worker 위임 |
+| STT (백업) | Faster-Whisper `large-v3-turbo` | Media-Server → AI-Worker 위임 |
 | TTS | Supertonic-2 | 텍스트→음성 (한국어) |
 | Vision | MediaPipe FaceLandmarker | 시선·자세·감정 실시간 분석 (5FPS) |
 | RAG Framework | LangChain | 질문 생성 파이프라인 |
+| Monitoring | LangSmith | LangChain 파이프라인 트레이싱 |
 
 ### Frontend
 
@@ -353,7 +386,6 @@ docker-compose exec backend python check_db.py
 | Charts | Recharts | 2.15 |
 | PDF 출력 | jsPDF + html2canvas | - |
 | Real-time | WebRTC, WebSocket | - |
-| STT SDK | @deepgram/sdk | 3.11 |
 | Audio | AudioWorklet API | - |
 | Styling | Vanilla CSS (Glassmorphism) | - |
 
@@ -362,8 +394,9 @@ docker-compose exec backend python check_db.py
 | 구성요소 | 기술 |
 |---------|------|
 | 컨테이너 | Docker, Docker Compose |
-| 메시지 브로커 | Redis 7 |
+| 메시지 브로커 | Redis 7-alpine |
 | AI 스트리밍 | Redis Pub/Sub |
+| 분산 락 | Redis SET NX (TTS 중복 방지) |
 | 벡터 DB | pgvector (PostgreSQL extension) |
 | WebRTC | aiortc 1.14 |
 
@@ -380,7 +413,7 @@ POST /auth/register          # 회원가입
 POST /auth/token             # 로그인 (JWT 발급)
 GET  /users/me               # 현재 사용자 정보
 PATCH /auth/password         # 비밀번호 변경
-DELETE /auth/withdraw        # 회원 탈퇴
+DELETE /auth/withdraw        # 회원 탈퇴 (soft delete)
 ```
 
 #### 이력서 (Resumes)
@@ -394,15 +427,15 @@ GET  /api/resumes/{id}/pdf   # 이력서 PDF 원본 다운로드
 #### 면접 (Interviews)
 
 ```http
-POST /interviews             # 면접 세션 생성 (질문 자동 생성)
-GET  /interviews/{id}        # 면접 정보 조회
-GET  /interviews             # 전체 면접 목록 (권한별)
-POST /interviews/{id}/complete   # 면접 종료 (평가 리포트 생성 트리거)
-GET  /interviews/{id}/report     # 평가 리포트 조회
-GET  /interviews/{id}/questions  # 면접 질문 목록 (TTS URL 포함)
-GET  /interviews/{id}/transcripts # 전체 대화 기록
-PATCH /interviews/{id}/behavior-scores  # 영상 분석 점수 저장 (media-server 전용)
-WS   /interviews/ws/{id}    # AI 질문 실시간 스트리밍 (Redis Pub/Sub 브릿지)
+POST /interviews                             # 면접 세션 생성 (질문 자동 생성)
+GET  /interviews/{id}                        # 면접 정보 조회
+GET  /interviews                             # 전체 면접 목록 (권한별)
+POST /interviews/{id}/complete               # 면접 종료 (평가 리포트 생성 트리거)
+GET  /interviews/{id}/report                 # 평가 리포트 조회
+GET  /interviews/{id}/questions              # 면접 질문 목록 (TTS URL 포함)
+GET  /interviews/{id}/transcripts            # 전체 대화 기록
+PATCH /interviews/{id}/behavior-scores       # 영상 분석 점수 저장 (media-server 전용)
+WS   /interviews/ws/{id}                    # AI 질문 실시간 스트리밍 (Redis Pub/Sub 브릿지)
 ```
 
 #### Media Server
@@ -418,7 +451,36 @@ POST /stt/recognize                # STT 테스트 (미디어 서버)
 
 ---
 
-## 👨‍💻 개발 가이드
+## � DB 스키마 요약
+
+### 주요 테이블
+
+| 테이블 | 설명 |
+|--------|------|
+| `users` | 지원자·채용담당자·관리자 계정 (JWT 인증, soft delete 지원) |
+| `resumes` | 이력서 파일 및 파싱 결과 (structured_data JSONB) |
+| `resumesectionembedding` | 섹션별 벡터 (pgvector, KURE-v1 1024차원) |
+| `resumechunk` | 텍스트 청크 임베딩 (RAG 검색용) |
+| `companies` | 회사 정보 + 벡터 임베딩 (culture fit 평가용) |
+| `interviews` | 면접 세션 (SCHEDULED → LIVE → COMPLETED → CANCELLED) |
+| `questions` | AI 생성 질문 은행 (추가질문 계층 구조, 재사용 통계) |
+| `transcripts` | 면접 대화 기록 (AI 질문 + 사용자 답변 + 영상 채점 + 감정 분석) |
+| `evaluation_reports` | 종합 평가 리포트 (기술·커뮤니케이션·문화적합도 점수) |
+| `answer_bank` | 우수 답변 벡터 은행 (RAG 참고용) |
+
+### 주요 Enum
+
+| Enum | 값 |
+|------|-----|
+| `UserRole` | candidate / recruiter / admin |
+| `InterviewStatus` | SCHEDULED / LIVE / COMPLETED / CANCELLED |
+| `QuestionCategory` | technical / behavioral / situational / cultural_fit |
+| `QuestionDifficulty` | easy / medium / hard |
+| `Speaker` | AI / USER |
+
+---
+
+## �👨‍💻 개발 가이드
 
 ### 로컬 개발 환경 설정
 
@@ -465,7 +527,7 @@ celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --c
 ### 테스트 실행
 
 ```bash
-# Backend 테스트
+# Backend 테스트 (15개 케이스: auth 8개, interview 7개)
 cd backend-core
 pytest tests/ -v
 
@@ -485,27 +547,52 @@ docker-compose restart ai-worker-cpu
 
 ---
 
-## 📊 DB 스키마 요약
+## � 품질 현황
 
-### 주요 테이블
+> **최종 검사일**: 2026-03-09 | **다음 검사 예정**: 2026-04-09
 
-| 테이블 | 설명 |
-|--------|------|
-| `users` | 지원자·채용담당자·관리자 계정 (JWT 인증) |
-| `resumes` | 이력서 파일 및 파싱 결과 (structured_data JSONB) |
-| `resumesectionembedding` | 섹션별 벡터 (pgvector, KURE-v1 1024차원) |
-| `resumechunk` | 텍스트 청크 임베딩 (RAG 검색용) |
-| `interviews` | 면접 세션 (scheduled → live → completed) |
-| `questions` | AI 생성 질문 (재사용 통계 포함) |
-| `transcripts` | 면접 대화 기록 (AI 질문 + 사용자 답변 + 영상 채점) |
-| `evaluationreport` | 종합 평가 리포트 (기술·행동·영상 분석 점수) |
-| `companies` | 회사 정보 |
+### 종합 점수: 87/100 (A-)
+
+| 카테고리 | 점수 | 상태 |
+|---------|------|------|
+| 아키텍처 설계 | 91/100 | ✅ Excellent |
+| 코드 품질 | 83/100 | ✅ Good |
+| 보안 | 83/100 | ✅ Good |
+| 성능 최적화 | 80/100 | ✅ Good |
+| 문서화 | 88/100 | ✅ Very Good |
+| 테스트 커버리지 | 68/100 | ⚠️ Fair |
+| DevOps/배포 | 88/100 | ✅ Very Good |
+
+### 최근 주요 개선 사항 (2026-02-04 → 2026-03-09)
+
+| 항목 | 변화 |
+|------|------|
+| 테스트 코드 | ❌ 전무 → ✅ **15개 테스트 케이스** (auth + interview) |
+| 커스텀 예외 클래스 | ❌ 없음 → ✅ **12개 도메인별 예외 클래스** (`exceptions.py`) |
+| AI Worker 분리 | 단일 워커 → ✅ **GPU/CPU 큐 완전 분리** |
+| STT 버그 수정 | ❌ transcript 오염 → ✅ **완전 수정** |
+| 이력서 라우터 | main.py 혼재 → ✅ **routes/resumes.py 모듈화** |
+| Redis 분산 락 | 없음 → ✅ **TTS 중복 생성 방지 (`lock:tts`)** |
+
+### 알려진 기술 부채
+
+| 우선순위 | 항목 | 상태 |
+|---------|------|------|
+| 🔴 Critical | `save_behavior_scores` 엔드포인트 인증 누락 | 미해결 |
+| 🔴 Critical | 테스트 케이스 4개 현행 API와 불일치 | 미해결 |
+| 🟡 High | Rate Limiting 미적용 (`slowapi` 권장) | 미해결 |
+| 🟡 High | `@app.on_event("startup")` Deprecated API 사용 | 미해결 |
+| 🟡 High | `frontend/src/api/interview.js` URL 하드코딩 | 미해결 |
+| 🟢 Medium | `App.jsx` 비대화 (~1,400줄) → 커스텀 훅 분리 필요 | 계획 중 |
+| 🟢 Medium | N+1 쿼리 문제 (`interviews.py`) | 계획 중 |
+| 🔵 Low | CI/CD 파이프라인 (GitHub Actions) | 장기 목표 |
+| 🔵 Low | Frontend E2E 테스트 (Playwright) | 장기 목표 |
 
 ---
 
 ## 🔒 보안
 
-자세한 보안 가이드: [`docs/SECURITY_GUIDE.md`](docs/SECURITY_GUIDE.md)
+자세한 보안 가이드: [`docs/개발문서/SECURITY_GUIDE.md`](docs/개발문서/SECURITY_GUIDE.md)
 
 ### 핵심 보안 사항
 
@@ -516,6 +603,7 @@ docker-compose restart ai-worker-cpu
 - ✅ 비밀번호는 bcrypt로 해싱
 - ✅ Frontend 환경 변수는 반드시 `VITE_` 접두사 사용 (Vite 보안 정책)
 - ✅ 초기 계정 비밀번호(`admin1234`, `recruiter1234`)는 프로덕션 배포 전 반드시 변경
+- ⚠️ `save_behavior_scores` 엔드포인트 인증 미적용 — 추후 수정 예정
 
 ---
 
@@ -523,14 +611,16 @@ docker-compose restart ai-worker-cpu
 
 | 문서 | 내용 |
 |------|------|
-| [시스템 명세서](docs/SYSTEM_SPECIFICATION.md) | 전체 시스템 설계 명세 |
-| [이력서 임베딩 가이드](docs/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 파이프라인 |
-| [LangChain 아키텍처](docs/LangChain_Architecture_Guide.md) | 질문 생성 LangChain 구조 |
-| [STT 구현 가이드](docs/STT_IMPLEMENTATION_COMPLETE.md) | Deepgram STT 설정 가이드 |
-| [DB 데이터 삽입 가이드](docs/DB_INSERT_GUIDE.md) | 초기 데이터 설정 |
-| [보안 가이드](docs/SECURITY_GUIDE.md) | 보안 설정 가이드 |
-| [문제 해결 가이드](docs/TROUBLESHOOTING.md) | 주요 이슈 및 해결 방법 |
-| [품질 검사 보고서](QUALITY_SUMMARY.md) | 코드 품질 분석 결과 |
+| [시스템 명세서](docs/개발문서/SYSTEM_SPECIFICATION.md) | 전체 시스템 설계 명세 |
+| [이력서 임베딩 가이드](docs/개발문서/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 파이프라인 |
+| [LangChain 아키텍처](docs/개발문서/LangChain_Architecture_Guide.md) | 질문 생성 LangChain 구조 |
+| [STT 구현 가이드](docs/개발문서/STT_IMPLEMENTATION_COMPLETE.md) | Deepgram STT 설정 가이드 |
+| [DB 데이터 삽입 가이드](docs/개발문서/DB_INSERT_GUIDE.md) | 초기 데이터 설정 |
+| [DB 연결 표준](docs/개발문서/DB_CONNECTION_STANDARD.md) | DB 연결 코드 표준 |
+| [보안 가이드](docs/개발문서/SECURITY_GUIDE.md) | 보안 설정 가이드 |
+| [문제 해결 가이드](docs/개발문서/TROUBLESHOOTING.md) | 주요 이슈 및 해결 방법 |
+| [품질 검사 요약](docs/개발문서/QUALITY_SUMMARY.md) | 코드 품질 분석 결과 |
+| [품질 검사 상세](docs/개발문서/QUALITY_INSPECTION_REPORT.md) | 상세 품질 검사 리포트 |
 
 ---
 
@@ -558,4 +648,4 @@ This project is licensed under the MIT License
 
 ---
 
-**Last Updated**: 2026-02-28
+**Last Updated**: 2026-03-10
