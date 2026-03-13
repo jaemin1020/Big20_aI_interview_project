@@ -32,25 +32,17 @@
 ### 2. API 키 관리
 
 #### 현재 사용 중인 API 키
-- **Huggingface API Key**: LLM 모델 다운로드 및 추론
-- **Deepgram API Key**: 음성-텍스트 변환 (STT)
+- **Huggingface API Key**: LLM 모델(EXAONE-3.5) 가중치 접근 및 임베딩 모델 로드
 
 #### 키 발급 방법
 1. **Huggingface**
    - https://huggingface.co/settings/tokens
    - "New token" → Read 권한 선택
 
-2. **Deepgram**
-   - https://console.deepgram.com/
-   - "Create API Key" → 프로젝트 선택
-
 #### 키 보안
 ```bash
-# ❌ 잘못된 예
-export DEEPGRAM_API_KEY=f9ea579fb6ea6a2d98781077b1821bc3d79f6600
-
 # ✅ 올바른 예 (.env 파일 사용)
-echo "DEEPGRAM_API_KEY=your_key_here" >> .env
+echo "HUGGINGFACE_API_KEY=your_key_here" >> .env
 ```
 
 ### 3. 데이터베이스 보안
@@ -218,7 +210,6 @@ updates:
 ### API 키 유출 시
 1. **즉시 키 비활성화**
    - Huggingface: https://huggingface.co/settings/tokens
-   - Deepgram: https://console.deepgram.com/
 
 2. **새 키 발급 및 교체**
    ```bash
@@ -260,5 +251,5 @@ updates:
 
 ---
 
-**마지막 업데이트**: 2026-02-05  
+**마지막 업데이트**: 2026-03-13  
 **담당자**: DevOps Team

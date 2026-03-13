@@ -91,7 +91,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 ### 2. **실시간 면접 진행**
 
 - WebRTC 기반 영상/음성 스트리밍
-- **Faster-Whisper STT** (`large-v3-turbo`): Media-Server 경유 백업 경로
+- **Faster-Whisper STT** (`large-v3-turbo`): 메인 음성 인식 경로 (Media-Server → AI-Worker)
 - AI 질문 스트리밍: `Redis Pub/Sub` → `WebSocket` 토큰 스트리밍 (타이핑 효과)
 - Supertonic-2 TTS (질문 음성 자동 재생, Fire-and-Forget 비동기)
 - 실시간 시선·자세·감정 분석 (MediaPipe FaceLandmarker, 5FPS)
@@ -122,8 +122,8 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 │  (React 18) │                │  (aiortc/FastAPI)│
 │  Port:3000  │                │  Port:8080       │
 └──────┬──────┘                └────────┬─────────┘
-       │ REST/HTTP                      │ Celery Task
-       │ Deepgram SDK (STT 주경로)       │ (STT 백업, 영상분석)
+       │ WebRTC/WebSocket                │ Celery Task
+       │ (Media-Server 위임)              │ (STT, 영상분석)
        ▼                                ▼
 ┌──────────────┐    Celery     ┌─────────────────────────────┐
 │ Backend-Core │──────────────▶│       AI-Worker             │
@@ -147,7 +147,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 | 서비스 | 역할 | 기술 스택 | 포트 |
 |--------|------|-----------|------|
-| **Frontend** | 사용자 인터페이스 | React 18, Vite, WebRTC, Deepgram SDK | 3000 |
+| **Frontend** | 사용자 인터페이스 | React 18, Vite, WebRTC | 3000 |
 | **Backend-Core** | API 서버, 인증, 라우팅 | FastAPI, SQLModel, JWT | 8000 |
 | **AI-Worker (GPU)** | 질문 생성, 이력서 임베딩, 평가 | Celery, LangChain, EXAONE-3.5, KURE-v1 | - |
 | **AI-Worker (CPU)** | STT, TTS, 이력서 파싱 | Celery, Faster-Whisper, Supertonic-2 | - |
@@ -193,10 +193,10 @@ Big20_aI_interview_project/
 │   │   ├── interview_helpers.py # 면접 보조 함수
 │   │   └── rubric_generator.py  # 평가 루브릭 생성
 │   ├── data/                # 초기 데이터 (기업·직무 정보 JSON)
-│   └── tests/               # 테스트 코드 (15개 테스트 케이스)
+│   └── tests/               # 테스트 코드 (18개 테스트 케이스)
 │       ├── conftest.py      # SQLite In-Memory + 의존성 오버라이드
-│       ├── test_auth.py     # 인증 테스트 (8개)
-│       └── test_interview.py # 면접 테스트 (7개)
+│       ├── test_auth.py     # 인증 테스트 (9개)
+│       └── test_interview.py # 면접 테스트 (9개)
 │
 ├── ai-worker/                # Celery Worker (GPU + CPU 이중 구조)
 │   ├── main.py              # Worker 실행부 + 큐 라우팅 설정
@@ -229,7 +229,7 @@ Big20_aI_interview_project/
 │
 ├── frontend/                # React 18 프론트엔드 (Vite)
 │   ├── src/
-│   │   ├── App.jsx         # 메인 앱 (라우팅, WebRTC, Deepgram STT 통합, ~1,400줄)
+│   │   ├── App.jsx         # 메인 앱 (라우팅, WebRTC, 상태 관리 통합, ~1,400줄)
 │   │   ├── index.css       # 글로벌 스타일 (Glassmorphism)
 │   │   ├── components/     # 공통 UI 컴포넌트
 │   │   ├── api/            # API 클라이언트
@@ -238,7 +238,7 @@ Big20_aI_interview_project/
 │   │       ├── landing/    # 랜딩 페이지
 │   │       ├── auth/       # 로그인·회원가입
 │   │       ├── main/       # 메인 대시보드
-│   │       ├── interview/  # 면접 진행 (WebRTC + Deepgram STT)
+│   │       ├── interview/  # 면접 진행 (WebRTC + 실시간 분석)
 │   │       ├── setup/      # 면접 환경 테스트
 │   │       ├── result/     # 면접 결과·평가 리포트
 │   │       ├── history/    # 면접 이력
@@ -256,7 +256,7 @@ Big20_aI_interview_project/
 │       ├── SECURITY_GUIDE.md             # 보안 가이드
 │       ├── DB_INSERT_GUIDE.md            # DB 데이터 삽입 가이드
 │       ├── DB_CONNECTION_STANDARD.md     # DB 연결 표준 가이드
-│       ├── STT_IMPLEMENTATION_COMPLETE.md # STT 구현 가이드 (Deepgram)
+│       ├── STT_IMPLEMENTATION_COMPLETE.md # STT 구현 가이드 (Whisper)
 │       ├── LangChain_Architecture_Guide.md # LangChain 아키텍처
 │       ├── TROUBLESHOOTING.md            # 문제 해결 가이드
 │       ├── QUALITY_SUMMARY.md            # 코드 품질 분석 결과
@@ -310,7 +310,7 @@ REDIS_URL=redis://redis:6379/0
 
 # AI API Keys
 HUGGINGFACE_HUB_TOKEN=hf_xxxxxxxxxxxx   # HuggingFace 모델 다운로드
-DEEPGRAM_API_KEY=xxxxxxxxxxxx            # Deepgram STT (백엔드 + 미디어서버용)
+DEEPGRAM_API_KEY=xxxxxxxxxxxx            # Deepgram STT (선택사항, 대기용)
 
 # LangSmith (선택, 모니터링용)
 LANGCHAIN_TRACING_V2=true
@@ -500,7 +500,7 @@ celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --c
 ### 테스트 실행
 
 ```bash
-# Backend 테스트 (15개 케이스: auth 8개, interview 7개)
+# Backend 테스트 (18개 케이스: auth 9개, interview 9개)
 cd backend-core
 pytest tests/ -v
 
@@ -522,7 +522,7 @@ docker-compose restart ai-worker-cpu
 
 ## � 품질 현황
 
-> **최종 검사일**: 2026-03-09 | **다음 검사 예정**: 2026-04-09
+> **최종 검사일**: 2026-03-13 | **다음 검사 예정**: 2026-04-13
 
 | 테이블 | 설명 |
 |--------|------|
@@ -554,20 +554,26 @@ docker-compose restart ai-worker-cpu
 
 ---
 
-## 📖 산출물
+## 📖 산출물 (Deliverables)
 
-| 문서 | 내용 |
-|------|------|
-| [시스템 명세서](docs/개발문서/SYSTEM_SPECIFICATION.md) | 전체 시스템 설계 명세 |
-| [이력서 임베딩 가이드](docs/개발문서/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 파이프라인 |
-| [LangChain 아키텍처](docs/개발문서/LangChain_Architecture_Guide.md) | 질문 생성 LangChain 구조 |
-| [STT 구현 가이드](docs/개발문서/STT_IMPLEMENTATION_COMPLETE.md) | Deepgram STT 설정 가이드 |
-| [DB 데이터 삽입 가이드](docs/개발문서/DB_INSERT_GUIDE.md) | 초기 데이터 설정 |
-| [DB 연결 표준](docs/개발문서/DB_CONNECTION_STANDARD.md) | DB 연결 코드 표준 |
-| [보안 가이드](docs/개발문서/SECURITY_GUIDE.md) | 보안 설정 가이드 |
-| [문제 해결 가이드](docs/개발문서/TROUBLESHOOTING.md) | 주요 이슈 및 해결 방법 |
-| [품질 검사 요약](docs/개발문서/QUALITY_SUMMARY.md) | 코드 품질 분석 결과 |
-| [품질 검사 상세](docs/개발문서/QUALITY_INSPECTION_REPORT.md) | 상세 품질 검사 리포트 |
+| 구분 | 주요 문서 | 설명 |
+|------|------|------|
+| **Total** | [파트별 통합 진행 보고서](docs/readmelist/SERVICE_PROGRESS.md) | **PA/SA/DA/LA/MA/SD 6대 파트 통합 진행 현황 (최종)** |
+| **Results** | [최종 결과 보고서](docs/readmelist/FINAL_RESULTS.md) | 프로젝트 최종 성과물 및 핵심 성능 지표(KPI) 요약 |
+| **Manual** | [사용자 메뉴얼](docs/readmelist/USER_MANUAL.md) | 서비스 이용 단계별 상세 가이드 |
+| **Architecture** | [시스템 아키텍처 (SA)](docs/readmelist/SYSTEM_ARCHITECTURE.md) | 전체 시스템 설계 및 마이크로서비스 모듈 구성 |
+| **AI Engine** | [AI 코어 엔진 & RAG (LA)](docs/readmelist/AI_CORE_SYSTEM.md) | EXAONE LLM 및 KURE-v1 기반 질문/평가 엔진 |
+| **Streaming** | [미디어 서버 & 비전 (MA)](docs/readmelist/SIGNALING_MEDIA_SERVER.md) | WebRTC 스트리밍 및 MediaPipe 행동 분석 상세 |
+| **Voice** | [음성 지능 (STT/TTS)](docs/readmelist/STT_TTS_GUIDE.md) | Faster-Whisper 및 Supertonic-2 연동 가이드 |
+| **Testing** | [통합 테스트 보고서 (SD)](docs/readmelist/INTEGRATED_TEST_REPORT.md) | 18개 테스트 케이스 및 기능 검증 결과 |
+| **Quality** | [코드 품질 분석 요약](docs/개발문서/QUALITY_SUMMARY.md) | 프로젝트 전체 코드 품질 및 리팩토링 현황 |
+| **Quality** | [상세 품질 검사 리포트](docs/개발문서/QUALITY_INSPECTION_REPORT.md) | 단계별 정밀 품질 검사 결과 보고서 |
+| **Reference** | [문제 해결 가이드](docs/개발문서/TROUBLESHOOTING.md) | 주요 이슈 및 트러블슈팅 사례 아카이브 |
+| **Reference** | [보안 가이드](docs/개발문서/SECURITY_GUIDE.md) | 시스템 보안 설정 및 JWT 인증 표준 가이드 |
+| **Standard** | [이력서 임베딩 가이드](docs/개발문서/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 생성 및 파이프라인 관리 |
+| **Standard** | [DB 연결 표준 가이드](docs/개발문서/DB_CONNECTION_STANDARD.md) | 데이터베이스 연결 코드 및 트랜잭션 표준 |
+
+---
 
 ---
 
@@ -591,8 +597,8 @@ This project is licensed under the MIT License
 
 ## 👥 팀
 
-**Big20 Team** - AI Interview System Development
+**2AI1* - AI Interview System Development
 
 ---
 
-**Last Updated**: 2026-03-10
+**Last Updated**: 2026-03-13
