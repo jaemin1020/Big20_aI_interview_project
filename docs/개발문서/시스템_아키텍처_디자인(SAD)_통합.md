@@ -89,7 +89,7 @@ graph TD
 1. **시그널링**: Frontend가 SDP 정보 송신 -> Media-Server 8080 포트와 P2P 연결 시도. (로컬 환경 지원을 위해 NAT 우회 / Host IP 마스킹 적용).
 2. **시각 분석 흐름 (Vision)**: Media-Server 내 `Start_video_analysis` 태스크가 활성화되어 백그라운드로 5FPS 마다 VideoTrack에서 프레임 추출. MediaPipe 모델을 통한 랜드마크 분석 및 정서 스코어링 진행.
 3. **음성 인식 흐름 (STT)**: Frontend 사용자 발화 발생 시, Media-Server에서 이를 NumPy로 분석하여 '자신감(성량/속도)'을 판별해 점수화하고 3초 버퍼로 조각내어 AI-Worker-CPU에 Celery Task 형태로 원격 STT 변환 지시.
-4. **꼬리 질문 흐름 (Dynamics)**: STT 결과 생성 시 Backend-Core를 경유하여 AI-Worker-GPU(LLM)에 꼬리 질문 생성 트리거 발동. 도출된 텍스트가 Frontend 로 소켓 송신됨.
+4. **꼬리 질문 흐름 (Dynamics)**: STT 결과 생성 시 Backend-Core를 경유하여 AI-Worker-GPU(LLM)에 꼬리 질문 생성 트리거 발동. 생성된 질문은 DB에 저장되며 Frontend가 API 폴링(5초 간격)을 통해 이를 수신함.
 
 ### 5.2 종합 채점 파이프라인 (Evaluation Pipeline)
 1. 세션 종료(`completed` 상태 전환) 트리거 작동.

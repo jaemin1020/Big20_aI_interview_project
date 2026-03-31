@@ -93,7 +93,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 
 - WebRTC 기반 영상/음성 스트리밍
 - **Faster-Whisper STT** (`large-v3-turbo`): 메인 음성 인식 경로 (Media-Server → AI-Worker)
-- AI 질문 스트리밍: `Redis Pub/Sub` → `WebSocket` 토큰 스트리밍 (타이핑 효과)
+- AI 질문 생성: 백엔드 API 폴링을 통한 전체 문장 수신 (질문 생성 완료 후 표시)
 - Supertonic-2 TTS (질문 음성 자동 재생, Fire-and-Forget 비동기)
 - 실시간 시선·자세·감정 분석 (MediaPipe FaceLandmarker, 5FPS)
 - STT 다중 가드 로직: `isAcceptingSTTRef`, `isTranscriptLockedRef`, `isSttProcessingRef`
@@ -131,8 +131,8 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 │  (FastAPI)   │               │  ┌──────────┐ ┌──────────┐ │
 │  Port:8000   │               │  │ GPU Worker│ │CPU Worker│ │
 └──────┬───────┘               │  │(질문생성) │ │(STT/TTS) │ │
-       │  Redis Pub/Sub        │  └──────────┘ └──────────┘ │
-       │  (AI 질문 스트리밍)    └─────────────────────────────┘
+       │  Polling              │  └──────────┘ └──────────┘ │
+       │  (AI 질문 수신)        └─────────────────────────────┘
        ▼                                  │
 ┌──────────────┐◀─────────────────────────┘
 │  PostgreSQL  │   (평가 결과, 영상 분석 점수 저장)
@@ -140,7 +140,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 └──────────────┘
        ▲
 ┌──────┴───────┐
-│    Redis 7   │  (Task Broker + Result Backend + AI 스트리밍 Pub/Sub + 분산 락)
+│    Redis 7   │  (Task Broker + Result Backend + 분산 락)
 └──────────────┘
 ```
 
@@ -154,7 +154,7 @@ Big20 AI Interview Project는 **AI 기술을 활용한 차세대 면접 시스�
 | **AI-Worker (CPU)** | STT, TTS, 이력서 파싱 | Celery, Faster-Whisper, Supertonic-2 | - |
 | **Media-Server** | WebRTC 중계, 영상 분석, STT 위임 | aiortc, MediaPipe FaceLandmarker | 8080 |
 | **PostgreSQL** | 데이터베이스 + 벡터 검색 | PostgreSQL 18 + pgvector | 5432 |
-| **Redis** | 메시지 브로커, 결과 백엔드, AI 스트리밍, 분산 락 | Redis 7-alpine | 6379 |
+| **Redis** | 메시지 브로커, 결과 백엔드, 분산 락 | Redis 7-alpine | 6379 |
 
 ### AI-Worker 큐 분리 구조
 
@@ -181,7 +181,7 @@ Big20_aI_interview_project/
 │   ├── routes/               # API 라우터
 │   │   ├── auth.py          # 인증 (JWT 토큰 발급, 회원가입/탈퇴)
 │   │   ├── users.py         # 사용자 정보 (프로필, 비밀번호 변경)
-│   │   ├── interviews.py    # 면접 생성·진행·평가 (AI 스트리밍 WS 포함)
+│   │   ├── interviews.py    # 면접 생성·진행·평가 (질문 폴링 API 포함)
 │   │   ├── resumes.py       # 이력서 업로드·파싱·임베딩
 │   │   ├── transcripts.py   # 대화 기록 (STT 결과 저장)
 │   │   ├── companies.py     # 회사 정보
