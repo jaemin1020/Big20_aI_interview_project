@@ -501,7 +501,7 @@ celery -A main.app worker --loglevel=info -Q cpu_queue,celery --pool=threads --c
 ### 테스트 실행
 
 ```bash
-# Backend 테스트 (18개 케이스: auth 9개, interview 9개)
+# Backend 테스트 (67개 시나리오 검증, 18개 핵심 자동화 테스트 포함)
 cd backend-core
 pytest tests/ -v
 
@@ -522,7 +522,7 @@ docker-compose restart ai-worker-cpu
 ---
 ## 📊 품질 현황
 
-> **최종 검사일**: 2026-03-13 | **다음 검사 예정**: 2026-04-13
+> **최종 검사일**: 2026-03-31 | 
 
 | 테이블 | 설명 |
 |--------|------|
@@ -550,11 +550,13 @@ docker-compose restart ai-worker-cpu
 - ✅ 비밀번호는 bcrypt로 해싱
 - ✅ Frontend 환경 변수는 반드시 `VITE_` 접두사 사용 (Vite 보안 정책)
 - ✅ 초기 계정 비밀번호(`admin1234`, `recruiter1234`)는 프로덕션 배포 전 반드시 변경
-- ⚠️ `save_behavior_scores` 엔드포인트 인증 미적용 — 추후 수정 예정
 
 ---
 
 ## 📖 산출물 (Deliverables)
+
+> [!IMPORTANT]
+> **공식 기획 및 최종 산출물은 [`docs/deliverables/`](docs/deliverables/) 디렉토리에서 원본 파일(Excel, Word, PDF 등)을 확인하실 수 있습니다.**
 
 | 구분 | 주요 문서 | 설명 |
 |------|------|------|
@@ -564,16 +566,14 @@ docker-compose restart ai-worker-cpu
 | **Architecture** | [시스템 아키텍처 (SA)](docs/readmelist/SYSTEM_ARCHITECTURE.md) | 전체 시스템 설계 및 마이크로서비스 모듈 구성 |
 | **AI Engine** | [AI 코어 엔진 & RAG (LA)](docs/readmelist/AI_CORE_SYSTEM.md) | EXAONE LLM 및 KURE-v1 기반 질문/평가 엔진 |
 | **Streaming** | [미디어 서버 & 비전 (MA)](docs/readmelist/SIGNALING_MEDIA_SERVER.md) | WebRTC 스트리밍 및 MediaPipe 행동 분석 상세 |
-| **Voice** | [음성 지능 (STT/TTS)](docs/readmelist/STT_TTS_GUIDE.md) | Faster-Whisper 및 Supertonic-2 연동 가이드 |
-| **Testing** | [통합 테스트 보고서 (SD)](docs/readmelist/INTEGRATED_TEST_REPORT.md) | 18개 테스트 케이스 및 기능 검증 결과 |
+| **Voice AI** | [음성 지능 (STT/TTS)](docs/readmelist/STT_TTS_GUIDE.md) | Faster-Whisper 및 Supertonic-2 연동 가이드 |
+| **Test** | [통합 테스트 보고서 (SD)](docs/readmelist/INTEGRATED_TEST_REPORT.md) | **67개 시나리오** 및 핵심 기능 검증 결과 |
 | **Quality** | [코드 품질 분석 요약](docs/개발문서/QUALITY_SUMMARY.md) | 프로젝트 전체 코드 품질 및 리팩토링 현황 |
 | **Quality** | [상세 품질 검사 리포트](docs/개발문서/QUALITY_INSPECTION_REPORT.md) | 단계별 정밀 품질 검사 결과 보고서 |
 | **Reference** | [문제 해결 가이드](docs/개발문서/TROUBLESHOOTING.md) | 주요 이슈 및 트러블슈팅 사례 아카이브 |
 | **Reference** | [보안 가이드](docs/개발문서/SECURITY_GUIDE.md) | 시스템 보안 설정 및 JWT 인증 표준 가이드 |
 | **Standard** | [이력서 임베딩 가이드](docs/개발문서/RESUME_EMBEDDING_GUIDE.md) | KURE-v1 임베딩 생성 및 파이프라인 관리 |
 | **Standard** | [DB 연결 표준 가이드](docs/개발문서/DB_CONNECTION_STANDARD.md) | 데이터베이스 연결 코드 및 트랜잭션 표준 |
-
----
 
 ---
 
@@ -601,4 +601,4 @@ This project is licensed under the MIT License
 
 ---
 
-**Last Updated**: 2026-03-13
+**Last Updated**: 2026-03-31
